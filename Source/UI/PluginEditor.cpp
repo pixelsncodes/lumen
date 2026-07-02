@@ -87,7 +87,7 @@ void LumenAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setColour (colours::textMuted);
     g.setFont (juce::Font (juce::FontOptions ((float) juce::roundToInt (13.0f * scale))));
-    g.drawText ("wavetable synthesizer - phase 1 skeleton", headerText, juce::Justification::centredRight);
+    g.drawText ("wavetable synthesizer - phase 2 core engine", headerText, juce::Justification::centredRight);
 
     g.setColour (colours::textMuted);
     g.setFont (juce::Font (juce::FontOptions ((float) juce::roundToInt (12.0f * scale))));

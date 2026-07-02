@@ -1,0 +1,123 @@
+#pragma once
+
+#include "Engine/EngineParams.h"
+#include "Engine/Envelope.h"
+#include "Engine/SVF.h"
+#include "Engine/Wavetable.h"
+
+#include <cstdint>
+
+namespace lumen
+{
+// Per-sample parameter buffers filled by SynthEngine (20 ms smoothed),
+// shared by all voices in a block.
+struct BlockBuffers
+{
+    const float* morphA;
+    const float* levelA;
+    const float* morphB;
+    const float* levelB;
+    const float* subLevel;
+    const float* noiseLin;
+    const float* cutoffHz;
+    const float* res;
+    const float* driveDb;
+    const float* envAmount;
+    const float* driveComp; // 25-entry gain-compensation table, indexed by drive dB
+};
+
+// Block-rate values a voice needs to configure its oscillators: smoothed
+// params are given as start/end pairs and lerped per sample inside the voice
+// (pitch and pan ramps), discrete params as plain values.
+struct OscBlockGlobals
+{
+    const Wavetable* table = nullptr;
+    bool  enabled = false;
+    int   unison = 1;
+    int   semitones = 0;
+    float fineStart = 0.0f,   fineEnd = 0.0f;    // cents
+    float detuneStart = 0.0f, detuneEnd = 0.0f;  // cents, +- spread
+    float widthStart = 0.0f,  widthEnd = 0.0f;
+    float blendStart = 0.5f,  blendEnd = 0.5f;
+    float panStart = 0.0f,    panEnd = 0.0f;
+};
+
+struct VoiceBlockGlobals
+{
+    OscBlockGlobals oscA, oscB;
+    int   subWave = 0;
+    int   subOctave = 1;
+    int   noiseType = 0;
+    int   filterMode = 1;
+    float keytrack = 0.0f;
+    EnvParams env1, env2, env3;
+};
+
+class Voice
+{
+public:
+    static constexpr int kMaxUnison = 8;
+
+    void prepare (double sampleRate, uint32_t noiseSeed);
+    void startNote (int midiNote, float velocity, uint64_t& rngState,
+                    bool phaseRandomA, bool phaseRandomB);
+    void noteOff();
+    void kill();
+
+    bool isActive() const noexcept    { return active; }
+    bool isReleasing() const noexcept { return active && env1.isReleasing(); }
+    float envLevel() const noexcept   { return env1.value(); }
+    int currentNote() const noexcept  { return note; }
+    uint64_t age() const noexcept     { return noteOnOrder; }
+    void setAge (uint64_t order) noexcept { noteOnOrder = order; }
+
+    // Configure per-block ramps, then add numSamples into outL/outR.
+    void startBlock (const VoiceBlockGlobals& globals, int numSamples);
+    void render (float* outL, float* outR, int numSamples, const BlockBuffers& buffers);
+
+private:
+    struct UnisonLane
+    {
+        double phase = 0.0;
+        double inc = 0.0, incStep = 0.0;
+        float gainL = 0.0f, gainLStep = 0.0f;
+        float gainR = 0.0f, gainRStep = 0.0f;
+        int mip = 0;
+    };
+
+    struct OscState
+    {
+        UnisonLane lanes[kMaxUnison];
+        const Wavetable* table = nullptr;
+        int unison = 1;
+        bool enabled = false;
+    };
+
+    void configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples);
+    float renderOscSample (OscState& osc, float morph, float& outR) noexcept;
+
+    double sampleRate = 48000.0;
+    bool active = false;
+    int note = 60;
+    float velocityGain = 0.0f;
+    float noteHz = 261.63f;
+    float keytrackFactor = 1.0f;
+    uint64_t noteOnOrder = 0;
+
+    OscState oscA, oscB;
+    int filterMode = 1;
+
+    // Sub oscillator (tracks Osc A pitch pre-detune, SPEC section 5)
+    double subPhase = 0.0;
+    double subInc = 0.0, subIncStep = 0.0;
+    int subWave = 0;
+
+    // Noise (free-running, deterministic per-voice seed)
+    uint32_t noiseState = 1;
+    int noiseType = 0;
+    float pinkB0 = 0.0f, pinkB1 = 0.0f, pinkB2 = 0.0f;
+
+    Envelope env1, env2, env3;
+    SVF filter;
+};
+} // namespace lumen

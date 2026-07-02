@@ -44,17 +44,37 @@ juce_add_plugin(Lumen
     COPY_PLUGIN_AFTER_BUILD     FALSE   # done by cmake/CopyVST3.cmake, best effort
 )
 
+# Engine + state sources shared by the plugin, render harness, and tests.
+set(LUMEN_ENGINE_SOURCES
+    Source/Engine/Wavetable.cpp
+    Source/Engine/FactoryTables.cpp
+    Source/Engine/Voice.cpp
+    Source/Engine/SynthEngine.cpp
+    Source/State/Parameters.cpp
+    Source/State/EngineBindings.cpp
+)
+set(LUMEN_ENGINE_HEADERS
+    Source/Engine/EngineParams.h
+    Source/Engine/Envelope.h
+    Source/Engine/FactoryTables.h
+    Source/Engine/SVF.h
+    Source/Engine/SynthEngine.h
+    Source/Engine/Voice.h
+    Source/Engine/Wavetable.h
+    Source/State/EngineBindings.h
+    Source/State/Parameters.h
+)
+
 set(LUMEN_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
-    Source/State/Parameters.cpp
     Source/UI/PluginEditor.cpp
+    ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
     Source/PluginProcessor.h
-    Source/Engine/TestVoice.h
-    Source/State/Parameters.h
     Source/UI/PluginEditor.h
+    ${LUMEN_ENGINE_HEADERS}
 )
 lumen_strict_sources(${LUMEN_PLUGIN_SOURCES})
 
@@ -64,7 +84,7 @@ target_compile_definitions(Lumen PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
 target_link_libraries(Lumen
-    PRIVATE juce::juce_audio_utils
+    PRIVATE juce::juce_audio_utils juce::juce_dsp
     PUBLIC  juce::juce_recommended_config_flags
 )
 
@@ -91,14 +111,17 @@ juce_add_console_app(lumen_render PRODUCT_NAME "lumen_render")
 
 set(LUMEN_RENDER_SOURCES
     Tools/Render/RenderMain.cpp
+    ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(lumen_render PRIVATE ${LUMEN_RENDER_SOURCES})
-lumen_strict_sources(${LUMEN_RENDER_SOURCES})
+lumen_strict_sources(Tools/Render/RenderMain.cpp)
 
 target_include_directories(lumen_render PRIVATE Source)
 target_compile_definitions(lumen_render PRIVATE ${LUMEN_COMMON_DEFS})
 target_link_libraries(lumen_render PRIVATE
     juce::juce_audio_formats
+    juce::juce_audio_processors
+    juce::juce_dsp
     juce::juce_recommended_config_flags
 )
 
@@ -109,7 +132,7 @@ juce_add_console_app(lumen_tests PRODUCT_NAME "lumen_tests")
 
 set(LUMEN_TESTS_SOURCES
     Tools/Tests/TestsMain.cpp
-    Source/State/Parameters.cpp
+    ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})
 lumen_strict_sources(Tools/Tests/TestsMain.cpp)
@@ -118,5 +141,6 @@ target_include_directories(lumen_tests PRIVATE Source)
 target_compile_definitions(lumen_tests PRIVATE ${LUMEN_COMMON_DEFS})
 target_link_libraries(lumen_tests PRIVATE
     juce::juce_audio_processors
+    juce::juce_dsp
     juce::juce_recommended_config_flags
 )

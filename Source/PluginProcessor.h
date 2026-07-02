@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include "Engine/TestVoice.h"
+#include "Engine/SynthEngine.h"
 #include "State/Parameters.h"
 
 class LumenAudioProcessor final : public juce::AudioProcessor
@@ -12,6 +12,7 @@ public:
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
+    void reset() override;
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
@@ -22,7 +23,7 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.25; }
+    double getTailLengthSeconds() const override { return 15.0; } // max env release
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -36,7 +37,13 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
 private:
-    juce::Synthesiser synth;
+    void renderSegment (juce::AudioBuffer<float>& buffer, int start, int numSamples);
+
+    lumen::SynthEngine engine;
+
+    // One atomic per engine binding, same order as lumen::bindings::all().
+    std::vector<std::atomic<float>*> bindingValues;
+
     juce::SmoothedValue<float> masterGainLinear;
     std::atomic<float>* masterGainDb = nullptr;
 

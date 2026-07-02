@@ -20,5 +20,60 @@ inline constexpr const char* reverbMix    = "reverbMix";
 // Parameters after the frozen block are append-only.
 inline constexpr const char* masterGain   = "masterGain";
 
+// --- Phase 2: core engine ---------------------------------------------
+// Osc A/B ids are "oscA"/"oscB" + suffix (see EngineBindings.cpp).
+inline constexpr const char* oscAEnabled   = "oscAEnabled";
+inline constexpr const char* oscATable     = "oscATable";
+inline constexpr const char* oscAMorph     = "oscAMorph";
+inline constexpr const char* oscALevel     = "oscALevel";
+inline constexpr const char* oscAPan       = "oscAPan";
+inline constexpr const char* oscASemi      = "oscASemi";
+inline constexpr const char* oscAFine      = "oscAFine";
+inline constexpr const char* oscAUnison    = "oscAUnison";
+inline constexpr const char* oscADetune    = "oscADetune";
+inline constexpr const char* oscAWidth     = "oscAWidth";
+inline constexpr const char* oscABlend     = "oscABlend";
+inline constexpr const char* oscAPhaseRand = "oscAPhaseRand";
+
+inline constexpr const char* oscBEnabled   = "oscBEnabled";
+inline constexpr const char* oscBTable     = "oscBTable";
+inline constexpr const char* oscBMorph     = "oscBMorph";
+inline constexpr const char* oscBLevel     = "oscBLevel";
+inline constexpr const char* oscBPan       = "oscBPan";
+inline constexpr const char* oscBSemi      = "oscBSemi";
+inline constexpr const char* oscBFine      = "oscBFine";
+inline constexpr const char* oscBUnison    = "oscBUnison";
+inline constexpr const char* oscBDetune    = "oscBDetune";
+inline constexpr const char* oscBWidth     = "oscBWidth";
+inline constexpr const char* oscBBlend     = "oscBBlend";
+inline constexpr const char* oscBPhaseRand = "oscBPhaseRand";
+
+inline constexpr const char* subWave       = "subWave";
+inline constexpr const char* subOctave     = "subOctave";
+inline constexpr const char* subLevel      = "subLevel";
+inline constexpr const char* noiseType     = "noiseType";
+inline constexpr const char* noiseLevel    = "noiseLevel";
+
+inline constexpr const char* filterMode      = "filterMode";
+inline constexpr const char* filterDrive     = "filterDrive";
+inline constexpr const char* filterKeytrack  = "filterKeytrack";
+inline constexpr const char* filterEnvAmount = "filterEnvAmount";
+
+inline constexpr const char* env1Attack  = "env1Attack";
+inline constexpr const char* env1Decay   = "env1Decay";
+inline constexpr const char* env1Sustain = "env1Sustain";
+inline constexpr const char* env1Release = "env1Release";
+inline constexpr const char* env1Curve   = "env1Curve";
+inline constexpr const char* env2Attack  = "env2Attack";
+inline constexpr const char* env2Decay   = "env2Decay";
+inline constexpr const char* env2Sustain = "env2Sustain";
+inline constexpr const char* env2Release = "env2Release";
+inline constexpr const char* env2Curve   = "env2Curve";
+inline constexpr const char* env3Attack  = "env3Attack";
+inline constexpr const char* env3Decay   = "env3Decay";
+inline constexpr const char* env3Sustain = "env3Sustain";
+inline constexpr const char* env3Release = "env3Release";
+inline constexpr const char* env3Curve   = "env3Curve";
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params
