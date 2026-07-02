@@ -49,6 +49,7 @@ set(LUMEN_ENGINE_SOURCES
     Source/Engine/Wavetable.cpp
     Source/Engine/FactoryTables.cpp
     Source/Engine/Voice.cpp
+    Source/Engine/FxChain.cpp
     Source/Engine/SynthEngine.cpp
     Source/State/Parameters.cpp
     Source/State/EngineBindings.cpp
@@ -58,6 +59,7 @@ set(LUMEN_ENGINE_HEADERS
     Source/Engine/EngineParams.h
     Source/Engine/Envelope.h
     Source/Engine/FactoryTables.h
+    Source/Engine/FxChain.h
     Source/Engine/Lfo.h
     Source/Engine/ModDestinations.h
     Source/Engine/ModMatrix.h

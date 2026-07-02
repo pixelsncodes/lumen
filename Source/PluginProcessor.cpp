@@ -18,8 +18,6 @@ LumenAudioProcessor::LumenAudioProcessor()
         bindingValues.push_back (value);
     }
 
-    masterGainDb = apvts.getRawParameterValue (lumen::params::masterGain);
-
     initializeModState();
 }
 
@@ -71,9 +69,7 @@ const juce::String LumenAudioProcessor::getName() const
 void LumenAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare (sampleRate, samplesPerBlock);
-
-    masterGainLinear.reset (sampleRate, 0.02); // ~20 ms smoothing (SPEC section 12)
-    masterGainLinear.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterGainDb->load(), -60.0f));
+    setLatencySamples (engine.latencySamples()); // limiter lookahead (~1.5 ms)
 }
 
 void LumenAudioProcessor::reset()
@@ -141,9 +137,6 @@ void LumenAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         handleMidiMessage (metadata.getMessage());
     }
     renderSegment (buffer, segmentStart, buffer.getNumSamples() - segmentStart);
-
-    masterGainLinear.setTargetValue (juce::Decibels::decibelsToGain (masterGainDb->load(), -60.0f));
-    masterGainLinear.applyGain (buffer, buffer.getNumSamples());
 }
 
 juce::AudioProcessorEditor* LumenAudioProcessor::createEditor()

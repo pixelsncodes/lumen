@@ -94,6 +94,28 @@ const std::vector<Binding>& all()
         { params::lfo3Phase,   [] (EngineParams& p, float v) { p.lfo[2].phaseDeg = v; } },
         { params::lfo3Fade,    [] (EngineParams& p, float v) { p.lfo[2].fadeSeconds = v; } },
         { params::lfo3Mode,    [] (EngineParams& p, float v) { p.lfo[2].mono = toInt (v) == 1; } },
+
+        { params::masterGain,    [] (EngineParams& p, float v) { p.fx.masterGainDb = v; } },
+        { params::delayMix,      [] (EngineParams& p, float v) { p.fx.delayMix = v; } },
+        { params::reverbMix,     [] (EngineParams& p, float v) { p.fx.reverbMix = v; } },
+        { params::driveEnabled,  [] (EngineParams& p, float v) { p.fx.driveEnabled = toBool (v); } },
+        { params::driveAmount,   [] (EngineParams& p, float v) { p.fx.driveDb = v; } },
+        { params::driveTone,     [] (EngineParams& p, float v) { p.fx.driveTone = v; } },
+        { params::chorusEnabled, [] (EngineParams& p, float v) { p.fx.chorusEnabled = toBool (v); } },
+        { params::chorusRate,    [] (EngineParams& p, float v) { p.fx.chorusRateHz = v; } },
+        { params::chorusDepth,   [] (EngineParams& p, float v) { p.fx.chorusDepth = v; } },
+        { params::chorusMix,     [] (EngineParams& p, float v) { p.fx.chorusMix = v; } },
+        { params::delayEnabled,  [] (EngineParams& p, float v) { p.fx.delayEnabled = toBool (v); } },
+        { params::delaySync,     [] (EngineParams& p, float v) { p.fx.delaySync = toBool (v); } },
+        { params::delayTime,     [] (EngineParams& p, float v) { p.fx.delayTimeMs = v; } },
+        { params::delayDiv,      [] (EngineParams& p, float v) { p.fx.delayDiv = toInt (v); } },
+        { params::delayFeedback, [] (EngineParams& p, float v) { p.fx.delayFeedback = v; } },
+        { params::delayDamp,     [] (EngineParams& p, float v) { p.fx.delayDampHz = v; } },
+        { params::delayPingPong, [] (EngineParams& p, float v) { p.fx.delayPingPong = toBool (v); } },
+        { params::reverbEnabled, [] (EngineParams& p, float v) { p.fx.reverbEnabled = toBool (v); } },
+        { params::reverbSize,    [] (EngineParams& p, float v) { p.fx.reverbSize = v; } },
+        { params::reverbDamp,    [] (EngineParams& p, float v) { p.fx.reverbDamp = v; } },
+        { params::reverbWidth,   [] (EngineParams& p, float v) { p.fx.reverbWidth = v; } },
     };
     return table;
 }

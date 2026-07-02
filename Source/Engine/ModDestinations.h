@@ -21,6 +21,13 @@ enum class Dest
     env1Attack, env1Decay, env1Sustain, env1Release, env1Curve,
     env2Attack, env2Decay, env2Sustain, env2Release, env2Curve,
     env3Attack, env3Decay, env3Sustain, env3Release, env3Curve,
+    // Phase 4 (append-only): FX destinations. Global-only — poly-source
+    // routings to these are inactive (the FX bus has no per-voice identity).
+    delayMix, reverbMix, masterGain,
+    driveAmount, driveTone,
+    chorusRate, chorusDepth, chorusMix,
+    delayTime, delayFeedback, delayDamp,
+    reverbSize, reverbDamp, reverbWidth,
     count
 };
 
@@ -71,6 +78,20 @@ inline constexpr DestRange kRanges[kNumDests] = {
     { 0.0f, 1.0f, 0.0f },          // env3Sustain
     { 0.005f, 15.0f, 0.27386128f },// env3Release
     { -1.0f, 1.0f, 0.0f },         // env3Curve
+    { 0.0f, 1.0f, 0.0f },          // delayMix
+    { 0.0f, 1.0f, 0.0f },          // reverbMix
+    { -60.0f, 6.0f, 0.0f },        // masterGain (dB)
+    { 0.0f, 24.0f, 0.0f },         // driveAmount (dB)
+    { -1.0f, 1.0f, 0.0f },         // driveTone
+    { 0.05f, 5.0f, 0.5f },         // chorusRate (sqrt(min*max))
+    { 0.0f, 1.0f, 0.0f },          // chorusDepth
+    { 0.0f, 1.0f, 0.0f },          // chorusMix
+    { 1.0f, 2000.0f, 44.7213595f },// delayTime (ms, sqrt(min*max))
+    { 0.0f, 0.95f, 0.0f },         // delayFeedback
+    { 1000.0f, 16000.0f, 4000.0f },// delayDamp (Hz, sqrt(min*max))
+    { 0.0f, 1.0f, 0.0f },          // reverbSize
+    { 0.0f, 1.0f, 0.0f },          // reverbDamp
+    { 0.0f, 1.0f, 0.0f },          // reverbWidth
 };
 
 // JUCE skew math: normalized p -> value = min + (max-min) * p^e where

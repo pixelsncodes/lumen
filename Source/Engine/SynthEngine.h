@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/EngineParams.h"
+#include "Engine/FxChain.h"
 #include "Engine/Voice.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -38,6 +39,12 @@ public:
 
     void render (float* outL, float* outR, int numSamples);
 
+    // Master FX bus (Phase 4). setFxEnabled(false) taps the pre-FX voice sum
+    // (harness null tests); latency is the limiter lookahead.
+    void setFxEnabled (bool enabled) noexcept { fxEnabled = enabled; }
+    int latencySamples() const noexcept { return fxEnabled ? fx.latencySamples() : 0; }
+    const FxChain::Levels& meterLevels() const noexcept { return fx.levels(); }
+
     int activeVoiceCount() const noexcept
     {
         int n = 0;
@@ -73,6 +80,8 @@ private:
 
     EngineParams current {};
     Voice voices[kNumVoices];
+    FxChain fx;
+    bool fxEnabled = true;
 
     OscSmoothers smoothA, smoothB;
     Smoothed subLevel, noiseLin, cutoff, res, drive, envAmount, keytrack, bendSemis;

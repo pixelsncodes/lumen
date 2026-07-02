@@ -41,7 +41,12 @@ const juce::StringArray& destTokens()
         "subLevel", "noiseLevel",
         "env1Attack", "env1Decay", "env1Sustain", "env1Release", "env1Curve",
         "env2Attack", "env2Decay", "env2Sustain", "env2Release", "env2Curve",
-        "env3Attack", "env3Decay", "env3Sustain", "env3Release", "env3Curve"
+        "env3Attack", "env3Decay", "env3Sustain", "env3Release", "env3Curve",
+        "delayMix", "reverbMix", "masterGain",
+        "driveAmount", "driveTone",
+        "chorusRate", "chorusDepth", "chorusMix",
+        "delayTime", "delayFeedback", "delayDamp",
+        "reverbSize", "reverbDamp", "reverbWidth"
     };
     return tokens;
 }

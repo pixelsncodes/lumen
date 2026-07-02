@@ -1,8 +1,8 @@
 // lumen_render — headless render/verification harness (SPEC section 18).
 //
 //   lumen_render --preset init --note 60 --vel 100 --dur 2 --tail 2
-//                --sr 48000 --out out.wav [--analyze] [--bench]
-//                [--set param=value ...]
+//                --sr 48000 --out out.wav [--analyze] [--bench] [--no-fx]
+//                [--measure-mod] [--measure-echo] [--set param=value ...]
 //
 // --analyze writes <out>.json with peak_dbfs, rms_dbfs, dc_offset, nan_count,
 // f0_hz, f0_cents_error, alias_floor_db, attack_ms_measured,
@@ -38,6 +38,8 @@ struct RenderOptions
     bool analyze = false;
     bool bench = false;
     bool measureMod = false;
+    bool measureEcho = false;
+    bool noFx = false; // tap the pre-FX voice sum (bypass the whole FX bus)
     std::vector<std::pair<juce::String, float>> overrides;      // --set id=value
     std::vector<juce::StringArray> modRoutes;                   // --mod src:dest:depth
     std::vector<juce::StringArray> macroMaps;                   // --macro n:dest:min:max
@@ -53,6 +55,8 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
         if (flag == "--analyze")                    { options.analyze = true; }
         else if (flag == "--bench")                 { options.bench = true; }
         else if (flag == "--measure-mod")           { options.measureMod = true; }
+        else if (flag == "--measure-echo")          { options.measureEcho = true; }
+        else if (flag == "--no-fx")                 { options.noFx = true; }
         else if (flag == "--bpm" && hasValue)       { options.bpm = juce::String (argv[++i]).getDoubleValue(); }
         else if ((flag == "--mod" || flag == "--macro") && hasValue)
         {
@@ -93,7 +97,8 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
 
     if (options.preset != "init")
     {
-        std::cerr << "Phase 2 supports only --preset init (got '" << options.preset << "')\n";
+        std::cerr << "Presets arrive in Phase 7; only --preset init is supported (got '"
+                  << options.preset << "')\n";
         return false;
     }
 
@@ -452,6 +457,81 @@ EnvTiming measureEnvelope (const std::vector<float>& mid, double sampleRate, dou
     result.valid = result.attackMs > 0.0;
     return result;
 }
+// Echo spacing (Phase 4 delay-sync gate): 1 ms rectified-peak envelope,
+// local maxima >= -34 dB of the global peak separated by >= 150 ms; each
+// echo's onset = interpolated crossing of 25% of its own peak walking left.
+// Spacing = median of consecutive onset differences.
+struct EchoMeasure { double spacingMs = 0.0; int count = 0; };
+
+EchoMeasure measureEchoes (const std::vector<float>& mid, double sampleRate)
+{
+    EchoMeasure result;
+    const int win = juce::jmax (8, static_cast<int> (0.001 * sampleRate));
+    const int numWin = static_cast<int> (mid.size()) / win;
+    if (numWin < 32)
+        return result;
+
+    std::vector<double> env (static_cast<size_t> (numWin), 0.0);
+    double globalPeak = 0.0;
+    for (int j = 0; j < numWin; ++j)
+    {
+        double m = 0.0;
+        for (int i = j * win; i < (j + 1) * win; ++i)
+            m = juce::jmax (m, static_cast<double> (std::abs (mid[static_cast<size_t> (i)])));
+        env[static_cast<size_t> (j)] = m;
+        globalPeak = juce::jmax (globalPeak, m);
+    }
+    if (globalPeak <= 0.0)
+        return result;
+
+    const double threshold = 0.02 * globalPeak;
+    const int half = 150; // +-150 ms neighborhood
+    std::vector<double> onsets;
+
+    for (int j = 0; j < numWin; ++j)
+    {
+        if (env[static_cast<size_t> (j)] < threshold)
+            continue;
+        bool isPeak = true;
+        for (int k = juce::jmax (0, j - half); k <= juce::jmin (numWin - 1, j + half); ++k)
+        {
+            if (env[static_cast<size_t> (k)] > env[static_cast<size_t> (j)]
+                || (env[static_cast<size_t> (k)] == env[static_cast<size_t> (j)] && k < j))
+            {
+                isPeak = false;
+                break;
+            }
+        }
+        if (! isPeak)
+            continue;
+
+        const double target = 0.25 * env[static_cast<size_t> (j)];
+        int k = j;
+        while (k > 0 && env[static_cast<size_t> (k - 1)] >= target)
+            --k;
+        double onset = 0.5; // window-centre time of index 0, in windows
+        if (k > 0)
+        {
+            const double lower = env[static_cast<size_t> (k - 1)];
+            const double upper = env[static_cast<size_t> (k)];
+            const double frac = (target - lower) / juce::jmax (1.0e-12, upper - lower);
+            onset = (k - 1) + 0.5 + frac;
+        }
+        onsets.push_back (onset * win * 1000.0 / sampleRate);
+    }
+
+    result.count = static_cast<int> (onsets.size());
+    if (onsets.size() >= 2)
+    {
+        std::vector<double> gaps;
+        for (size_t i = 1; i < onsets.size(); ++i)
+            gaps.push_back (onsets[i] - onsets[i - 1]);
+        std::sort (gaps.begin(), gaps.end());
+        result.spacingMs = gaps[gaps.size() / 2];
+    }
+    return result;
+}
+
 // Modulation-rate measurement: spectral-centroid trajectory over the sustain,
 // autocorrelated to find the dominant modulation period.
 struct ModMeasure { double rateHz = 0.0; double periodSeconds = 0.0; double zipperRatio = 0.0; };
@@ -569,6 +649,7 @@ int main (int argc, char* argv[])
 
     lumen::SynthEngine engine;
     engine.prepare (options.sampleRate, kBlockSize);
+    engine.setFxEnabled (! options.noFx);
     engine.setParams (params);
 
     if (options.bench)
@@ -587,7 +668,7 @@ int main (int argc, char* argv[])
         const double realtimeFactor = renderNotes (engine, buffer, options.sampleRate, notes, options.velocity);
         json->setProperty ("realtime_factor", realtimeFactor);
         json->setProperty ("bench_voices", 8);
-        json->setProperty ("schema_phase", 2);
+        json->setProperty ("schema_phase", 4);
 
         const auto stats = basicStats (buffer);
         json->setProperty ("peak_dbfs", juce::Decibels::gainToDecibels (stats.peak, -144.0f));
@@ -620,7 +701,14 @@ int main (int argc, char* argv[])
     if (options.analyze)
     {
         const auto stats = basicStats (buffer);
-        const auto mid = midChannel (buffer);
+        auto mid = midChannel (buffer);
+
+        // Trim the FX bus latency (limiter lookahead) so timing metrics stay
+        // aligned with the note-on/off sample positions.
+        const int latency = engine.latencySamples();
+        if (latency > 0 && latency < static_cast<int> (mid.size()))
+            mid.erase (mid.begin(), mid.begin() + latency);
+
         const double nominalHz = 440.0 * std::exp2 ((options.note - 69.0) / 12.0);
 
         // Sustain segment: skip the first 25% of the held note (attack +
@@ -643,7 +731,8 @@ int main (int argc, char* argv[])
         json->setProperty ("attack_ms_measured", timing.attackMs);
         json->setProperty ("release_ms_measured", timing.releaseMs);
         json->setProperty ("realtime_factor", realtimeFactor);
-        json->setProperty ("schema_phase", 3);
+        json->setProperty ("latency_samples", latency);
+        json->setProperty ("schema_phase", 4);
 
         if (options.measureMod)
         {
@@ -653,6 +742,13 @@ int main (int argc, char* argv[])
             json->setProperty ("mod_rate_hz", modResult.rateHz);
             json->setProperty ("mod_period_s", modResult.periodSeconds);
             json->setProperty ("zipper_ratio", modResult.zipperRatio);
+        }
+
+        if (options.measureEcho)
+        {
+            const auto echo = measureEchoes (mid, options.sampleRate);
+            json->setProperty ("echo_spacing_ms", echo.spacingMs);
+            json->setProperty ("echo_count", echo.count);
         }
 
         const auto jsonText = juce::JSON::toString (juce::var (json));

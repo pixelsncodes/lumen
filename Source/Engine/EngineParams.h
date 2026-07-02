@@ -42,6 +42,35 @@ struct EnvParams
     float curve          = 0.0f;   // -1 (exponential) .. +1 (logarithmic)
 };
 
+struct FxParams // SPEC section 10, fixed order Drive->Chorus->Delay->Reverb->Limiter
+{
+    bool  driveEnabled   = false;
+    float driveDb        = 0.0f;    // 0..24, tanh amount
+    float driveTone      = 0.0f;    // -1..1, +-6 dB tilt at 800 Hz
+
+    bool  chorusEnabled  = false;
+    float chorusRateHz   = 0.5f;    // 0.05..5
+    float chorusDepth    = 0.5f;    // 0..1
+    float chorusMix      = 0.5f;    // 0..1
+
+    bool  delayEnabled   = true;
+    bool  delaySync      = true;
+    float delayTimeMs    = 400.0f;  // 1..2000, used when !delaySync
+    int   delayDiv       = 12;      // "1/4", same table as the LFOs
+    float delayFeedback  = 0.35f;   // 0..0.95
+    float delayDampHz    = 8000.0f; // 1000..16000 feedback lowpass
+    bool  delayPingPong  = false;
+    float delayMix       = 0.0f;    // frozen parameter #7
+
+    bool  reverbEnabled  = true;
+    float reverbSize     = 0.5f;    // 0..1
+    float reverbDamp     = 0.5f;    // 0..1
+    float reverbWidth    = 1.0f;    // 0..1
+    float reverbMix      = 0.12f;   // frozen parameter #8
+
+    float masterGainDb   = 0.0f;    // -60 (= -inf) .. +6
+};
+
 struct EngineParams
 {
     OscParams oscA {};
@@ -70,5 +99,8 @@ struct EngineParams
     float macroValues[4] { 0.5f, 0.5f, 0.3f, 0.2f }; // frozen macro1..4 defaults
     double bpm = 120.0;                              // host tempo, fallback 120
     mod::Config mod {};                              // matrix slots + macro maps
+
+    // --- Phase 4: effects ---------------------------------------------
+    FxParams fx {};
 };
 } // namespace lumen

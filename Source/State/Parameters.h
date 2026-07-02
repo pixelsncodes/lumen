@@ -98,5 +98,25 @@ inline constexpr const char* lfo3Phase   = "lfo3Phase";
 inline constexpr const char* lfo3Fade    = "lfo3Fade";
 inline constexpr const char* lfo3Mode    = "lfo3Mode";
 
+// --- Phase 4: effects (delayMix/reverbMix live in the frozen first 8) ---
+inline constexpr const char* driveEnabled  = "driveEnabled";
+inline constexpr const char* driveAmount   = "driveAmount";
+inline constexpr const char* driveTone     = "driveTone";
+inline constexpr const char* chorusEnabled = "chorusEnabled";
+inline constexpr const char* chorusRate    = "chorusRate";
+inline constexpr const char* chorusDepth   = "chorusDepth";
+inline constexpr const char* chorusMix     = "chorusMix";
+inline constexpr const char* delayEnabled  = "delayEnabled";
+inline constexpr const char* delaySync     = "delaySync";
+inline constexpr const char* delayTime     = "delayTime";
+inline constexpr const char* delayDiv      = "delayDiv";
+inline constexpr const char* delayFeedback = "delayFeedback";
+inline constexpr const char* delayDamp     = "delayDamp";
+inline constexpr const char* delayPingPong = "delayPingPong";
+inline constexpr const char* reverbEnabled = "reverbEnabled";
+inline constexpr const char* reverbSize    = "reverbSize";
+inline constexpr const char* reverbDamp    = "reverbDamp";
+inline constexpr const char* reverbWidth   = "reverbWidth";
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

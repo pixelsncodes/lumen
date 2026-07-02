@@ -211,6 +211,56 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     addLfo (layout, "lfo2", "LFO 2", defaults.lfo[1]);
     addLfo (layout, "lfo3", "LFO 3", defaults.lfo[2]);
 
+    // Phase 4: effects. Continuous ranges mirror Engine/ModDestinations.h.
+    const auto& fx = defaults.fx;
+    const auto hzAttr = Attributes().withLabel ("Hz").withStringFromValueFunction (hzToText);
+
+    layout.add (std::make_unique<BoolParam>  (pid (driveEnabled), "Drive On", fx.driveEnabled));
+    layout.add (std::make_unique<FloatParam> (pid (driveAmount), "Drive Amount",
+        juce::NormalisableRange<float> (0.0f, 24.0f, 0.1f), fx.driveDb, dbAttr));
+    layout.add (std::make_unique<FloatParam> (pid (driveTone), "Drive Tone",
+        juce::NormalisableRange<float> (-1.0f, 1.0f), fx.driveTone, unitAttr));
+
+    layout.add (std::make_unique<BoolParam>  (pid (chorusEnabled), "Chorus On", fx.chorusEnabled));
+    juce::NormalisableRange<float> chorusRateRange (0.05f, 5.0f);
+    chorusRateRange.setSkewForCentre (0.5f); // sqrt(0.05 * 5)
+    layout.add (std::make_unique<FloatParam> (pid (chorusRate), "Chorus Rate",
+        chorusRateRange, fx.chorusRateHz,
+        Attributes().withLabel ("Hz").withStringFromValueFunction (
+            [] (float v, int) { return juce::String (v, 2) + " Hz"; })));
+    layout.add (std::make_unique<FloatParam> (pid (chorusDepth), "Chorus Depth",
+        unitRange, fx.chorusDepth, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (chorusMix), "Chorus Mix",
+        unitRange, fx.chorusMix, unitAttr));
+
+    layout.add (std::make_unique<BoolParam>  (pid (delayEnabled), "Delay On", fx.delayEnabled));
+    layout.add (std::make_unique<BoolParam>  (pid (delaySync), "Delay Sync", fx.delaySync));
+    juce::NormalisableRange<float> delayTimeRange (1.0f, 2000.0f);
+    delayTimeRange.setSkewForCentre (44.7213595f); // sqrt(1 * 2000)
+    layout.add (std::make_unique<FloatParam> (pid (delayTime), "Delay Time",
+        delayTimeRange, fx.delayTimeMs,
+        Attributes().withLabel ("ms").withStringFromValueFunction (
+            [] (float v, int) { return v < 1000.0f ? juce::String (juce::roundToInt (v)) + " ms"
+                                                   : juce::String (v / 1000.0f, 2) + " s"; })));
+    layout.add (std::make_unique<ChoiceParam> (pid (delayDiv), "Delay Sync Division",
+        syncDivNames(), fx.delayDiv));
+    layout.add (std::make_unique<FloatParam> (pid (delayFeedback), "Delay Feedback",
+        juce::NormalisableRange<float> (0.0f, 0.95f), fx.delayFeedback,
+        Attributes().withLabel ("%").withStringFromValueFunction (percentToText)));
+    juce::NormalisableRange<float> delayDampRange (1000.0f, 16000.0f);
+    delayDampRange.setSkewForCentre (4000.0f); // sqrt(1000 * 16000)
+    layout.add (std::make_unique<FloatParam> (pid (delayDamp), "Delay Damping",
+        delayDampRange, fx.delayDampHz, hzAttr));
+    layout.add (std::make_unique<BoolParam>  (pid (delayPingPong), "Delay Ping-Pong", fx.delayPingPong));
+
+    layout.add (std::make_unique<BoolParam>  (pid (reverbEnabled), "Reverb On", fx.reverbEnabled));
+    layout.add (std::make_unique<FloatParam> (pid (reverbSize), "Reverb Size",
+        unitRange, fx.reverbSize, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (reverbDamp), "Reverb Damping",
+        unitRange, fx.reverbDamp, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (reverbWidth), "Reverb Width",
+        unitRange, fx.reverbWidth, unitAttr));
+
     return layout;
 }
 } // namespace lumen::params

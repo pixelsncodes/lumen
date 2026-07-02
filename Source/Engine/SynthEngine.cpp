@@ -76,28 +76,10 @@ void SynthEngine::prepare (double sr, int maxBlockSize)
     for (int d = 0; d < mod::kNumDests; ++d)
         destExponent[d] = mod::skewExponent (static_cast<mod::Dest> (d));
 
-    // Measure tanh drive gain compensation at a -12 dBFS sine (DECISIONS.md).
-    constexpr int kProbe = 256;
-    double rmsIn = 0.0;
-    for (int i = 0; i < kProbe; ++i)
-    {
-        const double v = 0.25 * std::sin (2.0 * 3.14159265358979323846 * i / kProbe);
-        rmsIn += v * v;
-    }
-    rmsIn = std::sqrt (rmsIn / kProbe);
+    // Measured tanh loudness compensation (DECISIONS.md), shared with the FX drive.
+    FxChain::measureTanhCompensation (driveComp, 25);
 
-    for (int d = 0; d <= 24; ++d)
-    {
-        const double g = std::pow (10.0, d / 20.0);
-        double rmsOut = 0.0;
-        for (int i = 0; i < kProbe; ++i)
-        {
-            const double v = std::tanh (g * 0.25 * std::sin (2.0 * 3.14159265358979323846 * i / kProbe));
-            rmsOut += v * v;
-        }
-        rmsOut = std::sqrt (rmsOut / kProbe);
-        driveComp[d] = static_cast<float> (rmsIn / std::max (1.0e-9, rmsOut));
-    }
+    fx.prepare (sr, maxBlock);
 
     reset();
 }
@@ -148,6 +130,7 @@ void SynthEngine::reset()
 {
     for (auto& v : voices)
         v.kill();
+    fx.reset();
 }
 
 void SynthEngine::render (float* outL, float* outR, int numSamples)
@@ -206,6 +189,20 @@ float SynthEngine::baseNaturalFor (int dest) const noexcept
         case D::env3Sustain: return current.env3.sustain;
         case D::env3Release: return current.env3.releaseSeconds;
         case D::env3Curve:   return current.env3.curve;
+        case D::delayMix:      return current.fx.delayMix;
+        case D::reverbMix:     return current.fx.reverbMix;
+        case D::masterGain:    return current.fx.masterGainDb;
+        case D::driveAmount:   return current.fx.driveDb;
+        case D::driveTone:     return current.fx.driveTone;
+        case D::chorusRate:    return current.fx.chorusRateHz;
+        case D::chorusDepth:   return current.fx.chorusDepth;
+        case D::chorusMix:     return current.fx.chorusMix;
+        case D::delayTime:     return current.fx.delayTimeMs;
+        case D::delayFeedback: return current.fx.delayFeedback;
+        case D::delayDamp:     return current.fx.delayDampHz;
+        case D::reverbSize:    return current.fx.reverbSize;
+        case D::reverbDamp:    return current.fx.reverbDamp;
+        case D::reverbWidth:   return current.fx.reverbWidth;
         case D::count: break;
     }
     return 0.0f;
@@ -237,6 +234,20 @@ SynthEngine::Smoothed* SynthEngine::smootherFor (int dest) noexcept
         case D::oscBBlend:  return &smoothB.blend;
         case D::subLevel:   return &subLevel;
         case D::noiseLevel: return &noiseLin; // holds LINEAR gain; converted at the call site
+        case D::delayMix:      return &fx.smooth.delayMix;
+        case D::reverbMix:     return &fx.smooth.reverbMix;
+        case D::masterGain:    return &fx.smooth.masterGainDb;
+        case D::driveAmount:   return &fx.smooth.driveDb;
+        case D::driveTone:     return &fx.smooth.driveTone;
+        case D::chorusRate:    return &fx.smooth.chorusRateHz;
+        case D::chorusDepth:   return &fx.smooth.chorusDepth;
+        case D::chorusMix:     return &fx.smooth.chorusMix;
+        case D::delayTime:     return &fx.smooth.delayTimeMs;
+        case D::delayFeedback: return &fx.smooth.delayFeedback;
+        case D::delayDamp:     return &fx.smooth.delayDampHz;
+        case D::reverbSize:    return &fx.smooth.reverbSize;
+        case D::reverbDamp:    return &fx.smooth.reverbDamp;
+        case D::reverbWidth:   return &fx.smooth.reverbWidth;
         default: return nullptr;              // env params have no smoother (block rate)
     }
 }
@@ -580,6 +591,14 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
         v.startBlock (voiceGlobals, numSamples);
         v.render (outL, outR, numSamples, voiceBuffers);
         v.advancePolyLfos (current.lfo, current.bpm, numSamples);
+    }
+
+    // Master FX bus (SPEC section 10). Runs after the voice sum; the
+    // continuous FX targets were landed by applyGlobalModulation above.
+    if (fxEnabled)
+    {
+        fx.setBlockParams (current.fx, current.bpm);
+        fx.process (outL, outR, numSamples);
     }
 }
 } // namespace lumen

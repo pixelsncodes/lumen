@@ -1,13 +1,14 @@
 // lumen_tests — JUCE UnitTest runner (SPEC section 18).
-// Phase 2 suite: frozen-parameter contract, wavetable mip correctness, SVF
-// stability under audio-rate modulation, envelope timing, engine sanity and
-// voice stealing.
+// Suite: frozen-parameter contract, wavetable mip correctness, SVF stability
+// under audio-rate modulation, envelope timing, engine sanity and voice
+// stealing, mod-matrix math, LFOs, FX bypass null, limiter ceiling.
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
 #include "Engine/Envelope.h"
 #include "Engine/FactoryTables.h"
+#include "Engine/FxChain.h"
 #include "Engine/Lfo.h"
 #include "Engine/ModMatrix.h"
 #include "Engine/SVF.h"
@@ -93,10 +94,13 @@ public:
             expectWithinAbsoluteError (defaultValue, expected[i].defaultValue, tolerance);
         }
 
-        beginTest ("Phase 2 parameters present after the frozen block");
+        beginTest ("Phase 2-4 parameters present after the frozen block");
         for (auto* id : { lumen::params::masterGain, lumen::params::oscAMorph,
                           lumen::params::filterMode, lumen::params::env1Attack,
-                          lumen::params::oscBUnison, lumen::params::noiseLevel })
+                          lumen::params::oscBUnison, lumen::params::noiseLevel,
+                          lumen::params::driveAmount, lumen::params::chorusRate,
+                          lumen::params::delayTime, lumen::params::delayPingPong,
+                          lumen::params::reverbSize })
             expect (processor.apvts.getParameter (id) != nullptr, juce::String (id) + " exists");
     }
 };
@@ -308,6 +312,8 @@ public:
         lumen::SynthEngine engine;
         engine.prepare (sr, blockSize);
         lumen::EngineParams params;
+        params.fx.reverbEnabled = false; // this test asserts a silent tail,
+        params.fx.delayEnabled = false;  // so keep the time-based FX out
         engine.setParams (params);
 
         constexpr int totalSamples = 4 * 48000;
@@ -378,10 +384,151 @@ public:
             peak17 = juce::jmax (peak17, std::abs (left[static_cast<size_t> (i)]));
         }
         expectEquals (nan17, 0);
-        // Blow-up guard, not a loudness spec: 16 unity-ish voices may sum
-        // loud pre-limiter (the limiter arrives in Phase 4).
-        expect (peak17 < 8.0f, "16-voice pileup stays bounded pre-limiter");
+        // The always-on limiter caps the 16-voice pileup at -0.3 dBFS.
+        expect (peak17 <= 0.9672f, "16-voice pileup held under the limiter ceiling");
         expectEquals (engine.activeVoiceCount(), 0);
+    }
+};
+
+class FxNullTest final : public juce::UnitTest
+{
+public:
+    FxNullTest() : juce::UnitTest ("FX all-bypassed output nulls against the pre-FX signal", "Effects") {}
+
+    void runTest() override
+    {
+        constexpr double sr = 48000.0;
+        constexpr int blockSize = 512;
+        constexpr int totalSamples = 2 * 48000;
+        constexpr int noteOffSample = 48000;
+
+        lumen::EngineParams params;
+        params.fx.driveEnabled = false;
+        params.fx.chorusEnabled = false;
+        params.fx.delayEnabled = false;
+        params.fx.reverbEnabled = false; // mixes stay at their defaults: the
+                                         // bypass crossfade must null on its own
+        auto render = [&] (bool fxEnabled, std::vector<float>& left, std::vector<float>& right) -> int
+        {
+            lumen::SynthEngine engine;
+            engine.prepare (sr, blockSize);
+            engine.setFxEnabled (fxEnabled);
+            engine.setParams (params);
+            engine.noteOn (60, 100.0f / 127.0f);
+            bool off = false;
+            for (int pos = 0; pos < totalSamples; pos += blockSize)
+            {
+                if (! off && pos >= noteOffSample)
+                {
+                    engine.noteOff (60);
+                    off = true;
+                }
+                engine.render (left.data() + pos, right.data() + pos,
+                               std::min (blockSize, totalSamples - pos));
+            }
+            return engine.latencySamples();
+        };
+
+        std::vector<float> withFxL (totalSamples, 0.0f), withFxR (totalSamples, 0.0f);
+        std::vector<float> preFxL (totalSamples, 0.0f), preFxR (totalSamples, 0.0f);
+        const int latency = render (true, withFxL, withFxR);
+        render (false, preFxL, preFxR);
+
+        beginTest ("difference <= -80 dBFS after aligning the limiter lookahead");
+        expect (latency > 0, "FX bus reports lookahead latency");
+
+        float materialPeak = 0.0f, maxDiff = 0.0f;
+        for (int i = 0; i < totalSamples - latency; ++i)
+        {
+            materialPeak = juce::jmax (materialPeak, std::abs (preFxL[static_cast<size_t> (i)]));
+            maxDiff = juce::jmax (maxDiff,
+                std::abs (withFxL[static_cast<size_t> (i + latency)] - preFxL[static_cast<size_t> (i)]));
+            maxDiff = juce::jmax (maxDiff,
+                std::abs (withFxR[static_cast<size_t> (i + latency)] - preFxR[static_cast<size_t> (i)]));
+        }
+
+        const float materialDb = juce::Decibels::gainToDecibels (materialPeak, -144.0f);
+        const float diffDb = juce::Decibels::gainToDecibels (maxDiff, -144.0f);
+        logMessage ("    material peak " + juce::String (materialDb, 2) + " dBFS, null difference "
+                    + juce::String (diffDb, 2) + " dBFS");
+        expect (materialPeak > 0.05f, "material is audible");
+        expect (diffDb <= -80.0f, "null difference " + juce::String (diffDb, 2) + " dBFS <= -80");
+    }
+};
+
+class LimiterTest final : public juce::UnitTest
+{
+public:
+    LimiterTest() : juce::UnitTest ("Limiter ceiling, latency, and transparency", "Effects") {}
+
+    void runTest() override
+    {
+        constexpr double sr = 48000.0;
+        constexpr int blockSize = 512;
+        const float ceiling = juce::Decibels::decibelsToGain (-0.3f);
+
+        lumen::FxParams bypassed;
+        bypassed.driveEnabled = bypassed.chorusEnabled = false;
+        bypassed.delayEnabled = bypassed.reverbEnabled = false;
+
+        beginTest ("+6 dBFS sine is held at the -0.3 dBFS ceiling, no NaN");
+        lumen::FxChain fx;
+        fx.prepare (sr, blockSize);
+        fx.setBlockParams (bypassed, 120.0);
+        expectWithinAbsoluteError (static_cast<double> (fx.latencySamples()), 0.0015 * sr, 1.0);
+
+        float maxOut = 0.0f;
+        int nanCount = 0;
+        std::vector<float> left (blockSize), right (blockSize);
+        double phase = 0.0;
+        for (int block = 0; block < 200; ++block) // ~2.1 s
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                left[static_cast<size_t> (i)] = right[static_cast<size_t> (i)]
+                    = 2.0f * std::sin (static_cast<float> (phase)); // +6 dBFS
+                phase += 2.0 * juce::MathConstants<double>::pi * 997.0 / sr;
+            }
+            fx.setBlockParams (bypassed, 120.0);
+            fx.process (left.data(), right.data(), blockSize);
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = left[static_cast<size_t> (i)];
+                if (std::isnan (v) || std::isinf (v))
+                    ++nanCount;
+                else
+                    maxOut = juce::jmax (maxOut, std::abs (v));
+            }
+        }
+        expectEquals (nanCount, 0);
+        logMessage ("    +6 dB input -> peak " + juce::String (juce::Decibels::gainToDecibels (maxOut), 3) + " dBFS");
+        expect (maxOut <= ceiling + 1.0e-5f, "peak " + juce::String (maxOut, 6) + " <= ceiling");
+        expect (maxOut >= 0.9f, "limiter output works near the ceiling, not squashed to nothing");
+
+        beginTest ("-12 dBFS material passes bit-transparently (gain exactly 1)");
+        lumen::FxChain fx2;
+        fx2.prepare (sr, blockSize);
+        const int latency = fx2.latencySamples();
+        std::vector<float> inL, outL;
+        float maxDiff = 0.0f;
+        phase = 0.0;
+        for (int block = 0; block < 100; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                left[static_cast<size_t> (i)] = right[static_cast<size_t> (i)]
+                    = 0.25f * std::sin (static_cast<float> (phase)); // -12 dBFS
+                phase += 2.0 * juce::MathConstants<double>::pi * 199.0 / sr;
+            }
+            inL.insert (inL.end(), left.begin(), left.end());
+            fx2.setBlockParams (bypassed, 120.0);
+            fx2.process (left.data(), right.data(), blockSize);
+            outL.insert (outL.end(), left.begin(), left.end());
+        }
+        for (size_t i = 0; i + static_cast<size_t> (latency) < outL.size(); ++i)
+            maxDiff = juce::jmax (maxDiff, std::abs (outL[i + static_cast<size_t> (latency)] - inL[i]));
+        logMessage ("    transparency diff " + juce::String (juce::Decibels::gainToDecibels (maxDiff, -144.0f), 2) + " dBFS");
+        expect (maxDiff < 1.0e-6f, "limiter is transparent below the ceiling");
     }
 };
 
@@ -531,6 +678,8 @@ EnvelopeTimingTest envelopeTimingTest;
 EngineRenderTest engineRenderTest;
 ModMatrixMathTest modMatrixMathTest;
 LfoTest lfoTest;
+FxNullTest fxNullTest;
+LimiterTest limiterTest;
 } // namespace
 
 class ConsoleTestRunner final : public juce::UnitTestRunner

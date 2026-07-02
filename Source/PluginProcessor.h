@@ -64,8 +64,5 @@ private:
     std::atomic<lumen::mod::Config*> publishedModConfig { nullptr };
     int nextPoolEntry = 0;
 
-    juce::SmoothedValue<float> masterGainLinear;
-    std::atomic<float>* masterGainDb = nullptr;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LumenAudioProcessor)
 };
