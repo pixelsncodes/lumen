@@ -13,6 +13,11 @@ namespace
 const std::vector<Binding>& all()
 {
     static const std::vector<Binding> table = {
+        { params::macro1, [] (EngineParams& p, float v) { p.macroValues[0] = v; } },
+        { params::macro2, [] (EngineParams& p, float v) { p.macroValues[1] = v; } },
+        { params::macro3, [] (EngineParams& p, float v) { p.macroValues[2] = v; } },
+        { params::macro4, [] (EngineParams& p, float v) { p.macroValues[3] = v; } },
+
         { params::filterCutoff,    [] (EngineParams& p, float v) { p.filterCutoffHz = v; } },
         { params::filterRes,       [] (EngineParams& p, float v) { p.filterRes = v; } },
         { params::filterMode,      [] (EngineParams& p, float v) { p.filterMode = toInt (v); } },
@@ -67,6 +72,28 @@ const std::vector<Binding>& all()
         { params::env3Sustain, [] (EngineParams& p, float v) { p.env3.sustain = v; } },
         { params::env3Release, [] (EngineParams& p, float v) { p.env3.releaseSeconds = v; } },
         { params::env3Curve,   [] (EngineParams& p, float v) { p.env3.curve = v; } },
+
+        { params::lfo1Shape,   [] (EngineParams& p, float v) { p.lfo[0].shape = toInt (v); } },
+        { params::lfo1Sync,    [] (EngineParams& p, float v) { p.lfo[0].sync = toBool (v); } },
+        { params::lfo1Rate,    [] (EngineParams& p, float v) { p.lfo[0].rateHz = v; } },
+        { params::lfo1SyncDiv, [] (EngineParams& p, float v) { p.lfo[0].syncDiv = toInt (v); } },
+        { params::lfo1Phase,   [] (EngineParams& p, float v) { p.lfo[0].phaseDeg = v; } },
+        { params::lfo1Fade,    [] (EngineParams& p, float v) { p.lfo[0].fadeSeconds = v; } },
+        { params::lfo1Mode,    [] (EngineParams& p, float v) { p.lfo[0].mono = toInt (v) == 1; } },
+        { params::lfo2Shape,   [] (EngineParams& p, float v) { p.lfo[1].shape = toInt (v); } },
+        { params::lfo2Sync,    [] (EngineParams& p, float v) { p.lfo[1].sync = toBool (v); } },
+        { params::lfo2Rate,    [] (EngineParams& p, float v) { p.lfo[1].rateHz = v; } },
+        { params::lfo2SyncDiv, [] (EngineParams& p, float v) { p.lfo[1].syncDiv = toInt (v); } },
+        { params::lfo2Phase,   [] (EngineParams& p, float v) { p.lfo[1].phaseDeg = v; } },
+        { params::lfo2Fade,    [] (EngineParams& p, float v) { p.lfo[1].fadeSeconds = v; } },
+        { params::lfo2Mode,    [] (EngineParams& p, float v) { p.lfo[1].mono = toInt (v) == 1; } },
+        { params::lfo3Shape,   [] (EngineParams& p, float v) { p.lfo[2].shape = toInt (v); } },
+        { params::lfo3Sync,    [] (EngineParams& p, float v) { p.lfo[2].sync = toBool (v); } },
+        { params::lfo3Rate,    [] (EngineParams& p, float v) { p.lfo[2].rateHz = v; } },
+        { params::lfo3SyncDiv, [] (EngineParams& p, float v) { p.lfo[2].syncDiv = toInt (v); } },
+        { params::lfo3Phase,   [] (EngineParams& p, float v) { p.lfo[2].phaseDeg = v; } },
+        { params::lfo3Fade,    [] (EngineParams& p, float v) { p.lfo[2].fadeSeconds = v; } },
+        { params::lfo3Mode,    [] (EngineParams& p, float v) { p.lfo[2].mono = toInt (v) == 1; } },
     };
     return table;
 }

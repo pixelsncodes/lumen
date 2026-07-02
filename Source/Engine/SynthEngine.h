@@ -9,11 +9,17 @@
 
 namespace lumen
 {
-// 16-voice polyphonic engine (SPEC section 11). Pure DSP: the processor and
-// the render harness both drive it via setParams + noteOn/noteOff + render.
-// All continuous parameters are smoothed here (~20 ms) so every client gets
-// zipper-free behavior. render() ADDS into caller-zeroed buffers and
-// allocates nothing.
+// 16-voice polyphonic engine (SPEC section 11) + modulation matrix
+// (SPEC sections 8-9). Pure DSP: the processor and the render harness both
+// drive it via setParams + noteOn/noteOff + MIDI setters + render.
+//
+// Modulation model: global sources (macros, wheel, aftertouch, bend, mono
+// LFOs) are combined per block in normalized space and land on the existing
+// 20 ms smoothers; poly sources (envs, poly LFOs, velocity, keytrack,
+// random-per-note) are combined per voice per block and ramped across the
+// block (scratch-buffer overrides for the per-sample-buffered destinations,
+// start/end adjustments for the block-ramped ones). render() ADDS into
+// caller-zeroed buffers and allocates nothing.
 class SynthEngine
 {
 public:
@@ -24,6 +30,11 @@ public:
     void noteOn (int midiNote, float velocity);  // velocity 0..1
     void noteOff (int midiNote);
     void reset();                                // hard stop (all voices killed)
+
+    // MIDI-driven global mod sources (audio thread, per block)
+    void setModWheel (float v) noexcept   { modWheel = v; }
+    void setAftertouch (float v) noexcept { aftertouch = v; }
+    void setPitchBend (float v) noexcept  { pitchBend = v; } // -1..+1
 
     void render (float* outL, float* outR, int numSamples);
 
@@ -45,8 +56,14 @@ private:
 
     void renderChunk (float* outL, float* outR, int numSamples);
     Voice* findVoiceFor (int midiNote);
-    static void setTarget (Smoothed& s, float value, bool snap);
-    void pushTargets (bool snap);
+
+    // Modulation helpers
+    float baseNaturalFor (int dest) const noexcept;
+    Smoothed* smootherFor (int dest) noexcept;
+    static int bufferedIndexFor (int dest) noexcept; // -1 or 0..9 (BlockBuffers order)
+    void applyGlobalModulation (int numSamples);
+    void applyPolyModulation (int voiceIndex, VoiceBlockGlobals& globals,
+                              BlockBuffers& buffers, int numSamples);
 
     double sampleRate = 48000.0;
     int maxBlock = 0;
@@ -58,11 +75,24 @@ private:
     Voice voices[kNumVoices];
 
     OscSmoothers smoothA, smoothB;
-    Smoothed subLevel, noiseLin, cutoff, res, drive, envAmount, keytrack;
+    Smoothed subLevel, noiseLin, cutoff, res, drive, envAmount, keytrack, bendSemis;
 
     std::vector<float> bufMorphA, bufLevelA, bufMorphB, bufLevelB,
                        bufSubLevel, bufNoiseLin, bufCutoff, bufRes,
                        bufDrive, bufEnvAmount;
+    std::vector<float> scratch[10]; // per-voice overrides, one per buffered dest
     float driveComp[25] {}; // dB -> output gain compensation (measured at prepare)
+
+    // Modulation state
+    Lfo monoLfo[3];
+    float modWheel = 0.0f, aftertouch = 0.0f, pitchBend = 0.0f;
+    float destExponent[mod::kNumDests] {};
+    float globalNormSum[mod::kNumDests] {};
+    bool  globalActive[mod::kNumDests] {};
+    int   polySlotIndices[mod::kNumSlots] {};
+    int   numPolySlots = 0;
+    float voicePolyPrev[kNumVoices][mod::kNumDests] {};
+    bool  voiceModPrimed[kNumVoices] {};
+    EnvParams effEnv1 {}, effEnv2 {}, effEnv3 {}; // env params after global mod
 };
 } // namespace lumen

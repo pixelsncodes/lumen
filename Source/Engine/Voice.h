@@ -2,6 +2,7 @@
 
 #include "Engine/EngineParams.h"
 #include "Engine/Envelope.h"
+#include "Engine/Lfo.h"
 #include "Engine/SVF.h"
 #include "Engine/Wavetable.h"
 
@@ -51,6 +52,7 @@ struct VoiceBlockGlobals
     int   filterMode = 1;
     float keytrack = 0.0f;
     EnvParams env1, env2, env3;
+    double bendStart = 1.0, bendEnd = 1.0; // pitch-bend frequency ratio ramp
 };
 
 class Voice
@@ -75,6 +77,25 @@ public:
     void startBlock (const VoiceBlockGlobals& globals, int numSamples);
     void render (float* outL, float* outR, int numSamples, const BlockBuffers& buffers);
 
+    // --- Modulation sources (read at block start, SPEC section 9) -------
+    float envValue (int index) const noexcept
+    {
+        return index == 0 ? env1.value() : (index == 1 ? env2.value() : env3.value());
+    }
+    float polyLfoValue (int index, const LfoParams& p) const noexcept { return polyLfo[index].value (p); }
+    void advancePolyLfos (const LfoParams* p, double bpm, int numSamples) noexcept
+    {
+        for (int k = 0; k < 3; ++k)
+            polyLfo[k].advance (p[k], bpm, numSamples);
+    }
+    float velocityNorm() const noexcept { return velocityGain; }
+    float keytrackNorm() const noexcept // note 60 = 0, bipolar
+    {
+        const float v = (static_cast<float> (note) - 60.0f) / 64.0f;
+        return v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v);
+    }
+    float randomNorm() const noexcept { return randomValue; }
+
 private:
     struct UnisonLane
     {
@@ -93,7 +114,8 @@ private:
         bool enabled = false;
     };
 
-    void configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples);
+    void configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples,
+                       double bendStart, double bendEnd);
     float renderOscSample (OscState& osc, float morph, float& outR) noexcept;
 
     double sampleRate = 48000.0;
@@ -119,5 +141,8 @@ private:
 
     Envelope env1, env2, env3;
     SVF filter;
+
+    Lfo polyLfo[3];
+    float randomValue = 0.0f; // bipolar random-per-note, drawn at startNote
 };
 } // namespace lumen

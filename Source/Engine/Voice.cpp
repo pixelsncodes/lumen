@@ -89,6 +89,8 @@ void Voice::prepare (double sr, uint32_t noiseSeed)
     env2.setSampleRate (sr);
     env3.setSampleRate (sr);
     filter.prepare (sr);
+    for (int k = 0; k < 3; ++k)
+        polyLfo[k].prepare (sr, noiseState ^ (0x1234567u * static_cast<uint32_t> (k + 1)));
     active = false;
 }
 
@@ -109,6 +111,10 @@ void Voice::startNote (int midiNote, float velocity, uint64_t& rngState,
             lane.phase = random ? nextRand01 (rngState) : 0.0;
     }
     subPhase = 0.0;
+
+    for (auto& lfo : polyLfo)
+        lfo.retrigger();
+    randomValue = 2.0f * static_cast<float> (nextRand01 (rngState)) - 1.0f;
 
     if (! active)
         filter.reset();
@@ -134,7 +140,8 @@ void Voice::kill()
     active = false;
 }
 
-void Voice::configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples)
+void Voice::configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples,
+                          double bendStart, double bendEnd)
 {
     osc.enabled = g.enabled && g.table != nullptr && ! g.table->isEmpty();
     osc.table = g.table;
@@ -145,10 +152,10 @@ void Voice::configureOsc (OscState& osc, const OscBlockGlobals& g, int numSample
     const auto startLanes = computeLanes (osc.unison, g.detuneStart, g.widthStart, g.blendStart, g.panStart);
     const auto endLanes   = computeLanes (osc.unison, g.detuneEnd,   g.widthEnd,   g.blendEnd,   g.panEnd);
 
-    const double baseStart = static_cast<double> (noteHz)
+    const double baseStart = static_cast<double> (noteHz) * bendStart
         * std::exp2 ((static_cast<double> (g.semitones) + static_cast<double> (g.fineStart) / 100.0) / 12.0)
         / sampleRate;
-    const double baseEnd = static_cast<double> (noteHz)
+    const double baseEnd = static_cast<double> (noteHz) * bendEnd
         * std::exp2 ((static_cast<double> (g.semitones) + static_cast<double> (g.fineEnd) / 100.0) / 12.0)
         / sampleRate;
 
@@ -180,15 +187,15 @@ void Voice::startBlock (const VoiceBlockGlobals& globals, int numSamples)
     noiseType = globals.noiseType;
     keytrackFactor = std::exp2 (globals.keytrack * (static_cast<float> (note) - 60.0f) / 12.0f);
 
-    configureOsc (oscA, globals.oscA, numSamples);
-    configureOsc (oscB, globals.oscB, numSamples);
+    configureOsc (oscA, globals.oscA, numSamples, globals.bendStart, globals.bendEnd);
+    configureOsc (oscB, globals.oscB, numSamples, globals.bendStart, globals.bendEnd);
 
     // Sub tracks Osc A pitch pre-detune, -1 or -2 octaves (SPEC section 5).
     const double subScale = std::exp2 (-static_cast<double> (globals.subOctave));
-    const double subStart = static_cast<double> (noteHz)
+    const double subStart = static_cast<double> (noteHz) * globals.bendStart
         * std::exp2 ((globals.oscA.semitones + static_cast<double> (globals.oscA.fineStart) / 100.0) / 12.0)
         * subScale / sampleRate;
-    const double subEnd = static_cast<double> (noteHz)
+    const double subEnd = static_cast<double> (noteHz) * globals.bendEnd
         * std::exp2 ((globals.oscA.semitones + static_cast<double> (globals.oscA.fineEnd) / 100.0) / 12.0)
         * subScale / sampleRate;
     subInc = subStart;

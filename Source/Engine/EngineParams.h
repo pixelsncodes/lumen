@@ -7,6 +7,9 @@
 //
 // Pure DSP layer: no JUCE includes here.
 
+#include "Engine/Lfo.h"
+#include "Engine/ModMatrix.h"
+
 namespace lumen
 {
 enum class TableChoice   { basic = 0, pwm, harmonicRise, formant, image };
@@ -60,6 +63,12 @@ struct EngineParams
 
     EnvParams env1 {};                          // -> voice amplitude (fixed)
     EnvParams env2 { .releaseSeconds = 0.3f };  // -> filter via filterEnvAmount
-    EnvParams env3 {};                          // free (matrix, Phase 3)
+    EnvParams env3 {};                          // free (matrix)
+
+    // --- Phase 3: modulation ------------------------------------------
+    LfoParams lfo[3] {};
+    float macroValues[4] { 0.5f, 0.5f, 0.3f, 0.2f }; // frozen macro1..4 defaults
+    double bpm = 120.0;                              // host tempo, fallback 120
+    mod::Config mod {};                              // matrix slots + macro maps
 };
 } // namespace lumen

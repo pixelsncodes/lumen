@@ -15,6 +15,7 @@
 
 #include "Engine/SynthEngine.h"
 #include "State/EngineBindings.h"
+#include "State/ModState.h"
 
 #include <chrono>
 #include <cmath>
@@ -33,9 +34,13 @@ struct RenderOptions
     double durationSeconds = 2.0;
     double tailSeconds = 2.0;
     double sampleRate = 48000.0;
+    double bpm = 120.0;
     bool analyze = false;
     bool bench = false;
-    std::vector<std::pair<juce::String, float>> overrides; // --set id=value
+    bool measureMod = false;
+    std::vector<std::pair<juce::String, float>> overrides;      // --set id=value
+    std::vector<juce::StringArray> modRoutes;                   // --mod src:dest:depth
+    std::vector<juce::StringArray> macroMaps;                   // --macro n:dest:min:max
 };
 
 bool parseArguments (int argc, char* argv[], RenderOptions& options)
@@ -47,6 +52,19 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
 
         if (flag == "--analyze")                    { options.analyze = true; }
         else if (flag == "--bench")                 { options.bench = true; }
+        else if (flag == "--measure-mod")           { options.measureMod = true; }
+        else if (flag == "--bpm" && hasValue)       { options.bpm = juce::String (argv[++i]).getDoubleValue(); }
+        else if ((flag == "--mod" || flag == "--macro") && hasValue)
+        {
+            juce::StringArray parts;
+            parts.addTokens (juce::String (argv[++i]), ":", "");
+            if ((flag == "--mod" && parts.size() != 3) || (flag == "--macro" && parts.size() != 4))
+            {
+                std::cerr << flag << ": expected " << (flag == "--mod" ? "source:dest:depth" : "macroIndex:dest:min:max") << "\n";
+                return false;
+            }
+            (flag == "--mod" ? options.modRoutes : options.macroMaps).push_back (parts);
+        }
         else if (flag == "--preset" && hasValue)    { options.preset = argv[++i]; }
         else if (flag == "--out" && hasValue)       { options.outPath = argv[++i]; }
         else if (flag == "--note" && hasValue)      { options.note = juce::String (argv[++i]).getIntValue(); }
@@ -98,6 +116,41 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
             std::cerr << "--set: unknown or non-engine parameter '" << id << "'\n";
             return false;
         }
+    }
+
+    params.bpm = options.bpm;
+
+    int slotIndex = 0;
+    for (const auto& route : options.modRoutes)
+    {
+        const int source = lumen::modstate::sourceFromToken (route[0]);
+        const int dest = lumen::modstate::destFromToken (route[1]);
+        if (source < 0 || dest < 0 || slotIndex >= lumen::mod::kNumSlots)
+        {
+            std::cerr << "--mod: bad route '" << route.joinIntoString (":") << "'\n";
+            return false;
+        }
+        auto& slot = params.mod.slots[slotIndex++];
+        slot.source = source;
+        slot.dest = dest;
+        slot.depth = route[2].getFloatValue();
+        slot.enabled = true;
+    }
+
+    int macroSlot[4] {};
+    for (const auto& map : options.macroMaps)
+    {
+        const int m = map[0].getIntValue() - 1; // 1-based on the CLI
+        const int dest = lumen::modstate::destFromToken (map[1]);
+        if (m < 0 || m >= 4 || dest < 0 || macroSlot[m] >= lumen::mod::kMaxMacroMaps)
+        {
+            std::cerr << "--macro: bad mapping '" << map.joinIntoString (":") << "'\n";
+            return false;
+        }
+        auto& mm = params.mod.macroMaps[m][macroSlot[m]++];
+        mm.dest = dest;
+        mm.rangeMin = map[2].getFloatValue();
+        mm.rangeMax = map[3].getFloatValue();
     }
     return true;
 }
@@ -399,6 +452,109 @@ EnvTiming measureEnvelope (const std::vector<float>& mid, double sampleRate, dou
     result.valid = result.attackMs > 0.0;
     return result;
 }
+// Modulation-rate measurement: spectral-centroid trajectory over the sustain,
+// autocorrelated to find the dominant modulation period.
+struct ModMeasure { double rateHz = 0.0; double periodSeconds = 0.0; double zipperRatio = 0.0; };
+
+ModMeasure measureModulation (const std::vector<float>& mid, double sampleRate,
+                              int sustainStart, int sustainEnd)
+{
+    ModMeasure result;
+    constexpr int kWin = 2048, kHop = 256;
+    const int numFrames = (sustainEnd - sustainStart - kWin) / kHop;
+    if (numFrames < 40)
+        return result;
+
+    juce::dsp::FFT fft (11);
+    std::vector<float> frame (2 * kWin);
+    std::vector<double> centroid (static_cast<size_t> (numFrames));
+    const double binHz = sampleRate / kWin;
+    const int loBin = static_cast<int> (100.0 / binHz);
+    const int hiBin = juce::jmin (kWin / 2 - 1, static_cast<int> (16000.0 / binHz));
+
+    for (int f = 0; f < numFrames; ++f)
+    {
+        std::fill (frame.begin(), frame.end(), 0.0f);
+        const int offset = sustainStart + f * kHop;
+        for (int i = 0; i < kWin; ++i)
+        {
+            const float w = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * i / kWin);
+            frame[static_cast<size_t> (i)] = mid[static_cast<size_t> (offset + i)] * w;
+        }
+        fft.performRealOnlyForwardTransform (frame.data());
+
+        double num = 0.0, den = 0.0;
+        for (int k = loBin; k <= hiBin; ++k)
+        {
+            const double mag = std::hypot (frame[2 * static_cast<size_t> (k)],
+                                           frame[2 * static_cast<size_t> (k) + 1]);
+            num += k * binHz * mag;
+            den += mag;
+        }
+        centroid[static_cast<size_t> (f)] = den > 0.0 ? num / den : 0.0;
+    }
+
+    double mean = 0.0;
+    for (double c : centroid) mean += c;
+    mean /= numFrames;
+    double variance = 0.0;
+    for (auto& c : centroid) { c -= mean; variance += c * c; }
+    variance /= numFrames;
+
+    if (variance > 1.0) // centroid actually moves
+    {
+        const double hopSeconds = kHop / sampleRate;
+        const int minLag = juce::jmax (4, static_cast<int> (0.1 / hopSeconds));
+        const int maxLag = juce::jmin (numFrames / 2, static_cast<int> (3.0 / hopSeconds));
+
+        int bestLag = 0;
+        double bestR = -1.0;
+        std::vector<double> r (static_cast<size_t> (maxLag) + 1, 0.0);
+        for (int lag = minLag; lag <= maxLag; ++lag)
+        {
+            double sum = 0.0;
+            for (int m = 0; m + lag < numFrames; ++m)
+                sum += centroid[static_cast<size_t> (m)] * centroid[static_cast<size_t> (m + lag)];
+            r[static_cast<size_t> (lag)] = sum / ((numFrames - lag) * variance);
+            if (r[static_cast<size_t> (lag)] > bestR)
+            {
+                bestR = r[static_cast<size_t> (lag)];
+                bestLag = lag;
+            }
+        }
+
+        if (bestR > 0.2 && bestLag > minLag && bestLag < maxLag)
+        {
+            const double y0 = r[static_cast<size_t> (bestLag - 1)], y1 = r[static_cast<size_t> (bestLag)],
+                         y2 = r[static_cast<size_t> (bestLag + 1)];
+            const double denom = y0 - 2.0 * y1 + y2;
+            const double delta = std::abs (denom) > 1.0e-12 ? 0.5 * (y0 - y2) / denom : 0.0;
+            result.periodSeconds = (bestLag + delta) * hopSeconds;
+            result.rateHz = 1.0 / result.periodSeconds;
+        }
+    }
+
+    // Zipper detection: per-10ms peaks of the first difference. A smooth
+    // sweep keeps them stationary; parameter steps spike isolated windows.
+    const int window = static_cast<int> (0.010 * sampleRate);
+    std::vector<double> diffPeaks;
+    for (int start = sustainStart; start + window < sustainEnd; start += window)
+    {
+        double peak = 0.0;
+        for (int i = start + 1; i < start + window; ++i)
+            peak = juce::jmax (peak, std::abs (static_cast<double> (mid[static_cast<size_t> (i)])
+                                               - mid[static_cast<size_t> (i - 1)]));
+        diffPeaks.push_back (peak);
+    }
+    if (diffPeaks.size() >= 8)
+    {
+        auto sorted = diffPeaks;
+        std::sort (sorted.begin(), sorted.end());
+        const double median = sorted[sorted.size() / 2];
+        result.zipperRatio = median > 1.0e-9 ? sorted.back() / median : 0.0;
+    }
+    return result;
+}
 } // namespace
 
 int main (int argc, char* argv[])
@@ -487,7 +643,17 @@ int main (int argc, char* argv[])
         json->setProperty ("attack_ms_measured", timing.attackMs);
         json->setProperty ("release_ms_measured", timing.releaseMs);
         json->setProperty ("realtime_factor", realtimeFactor);
-        json->setProperty ("schema_phase", 2);
+        json->setProperty ("schema_phase", 3);
+
+        if (options.measureMod)
+        {
+            const auto modResult = measureModulation (mid, options.sampleRate,
+                                                      static_cast<int> (0.3 * options.sampleRate),
+                                                      noteOffSample);
+            json->setProperty ("mod_rate_hz", modResult.rateHz);
+            json->setProperty ("mod_period_s", modResult.periodSeconds);
+            json->setProperty ("zipper_ratio", modResult.zipperRatio);
+        }
 
         const auto jsonText = juce::JSON::toString (juce::var (json));
         outFile.withFileExtension ("json").replaceWithText (jsonText);

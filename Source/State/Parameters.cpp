@@ -1,6 +1,7 @@
 #include "State/Parameters.h"
 
 #include "Engine/EngineParams.h"
+#include "Engine/Lfo.h"
 
 namespace lumen::params
 {
@@ -71,6 +72,49 @@ namespace
             logTimeRange (0.005f, 15.0f), defaults.releaseSeconds, secAttr));
         layout.add (std::make_unique<FloatParam> (pid (curveId), name + " Curve",
             juce::NormalisableRange<float> (-1.0f, 1.0f), defaults.curve, unitAttr));
+    }
+
+    juce::StringArray syncDivNames()
+    {
+        juce::StringArray names;
+        const char* bases[] = { "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32" };
+        for (const char* base : bases)
+        {
+            names.add (base);
+            names.add (juce::String (base) + " D");
+            names.add (juce::String (base) + " T");
+        }
+        return names;
+    }
+
+    void addLfo (Layout& layout, const juce::String& prefix, const juce::String& name,
+                 const lumen::LfoParams& defaults)
+    {
+        auto id = [&prefix] (const char* suffix) { return juce::ParameterID (prefix + suffix, 1); };
+
+        layout.add (std::make_unique<ChoiceParam> (id ("Shape"), name + " Shape",
+            juce::StringArray { "Sine", "Triangle", "Saw Up", "Saw Down", "Square", "S&H" },
+            defaults.shape));
+        layout.add (std::make_unique<BoolParam> (id ("Sync"), name + " Sync", defaults.sync));
+
+        juce::NormalisableRange<float> rateRange (0.01f, 40.0f);
+        rateRange.setSkewForCentre (std::sqrt (0.01f * 40.0f));
+        layout.add (std::make_unique<FloatParam> (id ("Rate"), name + " Rate",
+            rateRange, defaults.rateHz,
+            Attributes().withLabel ("Hz").withStringFromValueFunction (
+                [] (float v, int) { return juce::String (v, 2) + " Hz"; })));
+
+        layout.add (std::make_unique<ChoiceParam> (id ("SyncDiv"), name + " Sync Division",
+            syncDivNames(), defaults.syncDiv));
+        layout.add (std::make_unique<FloatParam> (id ("Phase"), name + " Phase",
+            juce::NormalisableRange<float> (0.0f, 360.0f, 1.0f), defaults.phaseDeg,
+            Attributes().withLabel ("deg").withStringFromValueFunction (
+                [] (float v, int) { return juce::String (juce::roundToInt (v)) + " deg"; })));
+        layout.add (std::make_unique<FloatParam> (id ("Fade"), name + " Fade In",
+            juce::NormalisableRange<float> (0.0f, 5.0f), defaults.fadeSeconds,
+            Attributes().withLabel ("s").withStringFromValueFunction (secondsToText)));
+        layout.add (std::make_unique<ChoiceParam> (id ("Mode"), name + " Mode",
+            juce::StringArray { "Poly", "Mono" }, defaults.mono ? 1 : 0));
     }
 
     void addOscillator (Layout& layout, const juce::String& prefix, const juce::String& name,
@@ -161,6 +205,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     addEnvelope (layout, env1Attack, env1Decay, env1Sustain, env1Release, env1Curve, "Env 1", defaults.env1);
     addEnvelope (layout, env2Attack, env2Decay, env2Sustain, env2Release, env2Curve, "Env 2", defaults.env2);
     addEnvelope (layout, env3Attack, env3Decay, env3Sustain, env3Release, env3Curve, "Env 3", defaults.env3);
+
+    // Phase 3: LFOs
+    addLfo (layout, "lfo1", "LFO 1", defaults.lfo[0]);
+    addLfo (layout, "lfo2", "LFO 2", defaults.lfo[1]);
+    addLfo (layout, "lfo3", "LFO 3", defaults.lfo[2]);
 
     return layout;
 }

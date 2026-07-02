@@ -75,5 +75,28 @@ inline constexpr const char* env3Sustain = "env3Sustain";
 inline constexpr const char* env3Release = "env3Release";
 inline constexpr const char* env3Curve   = "env3Curve";
 
+// --- Phase 3: LFOs (ids are "lfo1".."lfo3" + suffix) --------------------
+inline constexpr const char* lfo1Shape   = "lfo1Shape";
+inline constexpr const char* lfo1Sync    = "lfo1Sync";
+inline constexpr const char* lfo1Rate    = "lfo1Rate";
+inline constexpr const char* lfo1SyncDiv = "lfo1SyncDiv";
+inline constexpr const char* lfo1Phase   = "lfo1Phase";
+inline constexpr const char* lfo1Fade    = "lfo1Fade";
+inline constexpr const char* lfo1Mode    = "lfo1Mode";
+inline constexpr const char* lfo2Shape   = "lfo2Shape";
+inline constexpr const char* lfo2Sync    = "lfo2Sync";
+inline constexpr const char* lfo2Rate    = "lfo2Rate";
+inline constexpr const char* lfo2SyncDiv = "lfo2SyncDiv";
+inline constexpr const char* lfo2Phase   = "lfo2Phase";
+inline constexpr const char* lfo2Fade    = "lfo2Fade";
+inline constexpr const char* lfo2Mode    = "lfo2Mode";
+inline constexpr const char* lfo3Shape   = "lfo3Shape";
+inline constexpr const char* lfo3Sync    = "lfo3Sync";
+inline constexpr const char* lfo3Rate    = "lfo3Rate";
+inline constexpr const char* lfo3SyncDiv = "lfo3SyncDiv";
+inline constexpr const char* lfo3Phase   = "lfo3Phase";
+inline constexpr const char* lfo3Fade    = "lfo3Fade";
+inline constexpr const char* lfo3Mode    = "lfo3Mode";
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

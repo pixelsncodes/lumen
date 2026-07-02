@@ -5,10 +5,12 @@
 #include "Engine/SynthEngine.h"
 #include "State/Parameters.h"
 
-class LumenAudioProcessor final : public juce::AudioProcessor
+class LumenAudioProcessor final : public juce::AudioProcessor,
+                                  private juce::ValueTree::Listener
 {
 public:
     LumenAudioProcessor();
+    ~LumenAudioProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -38,11 +40,29 @@ public:
 
 private:
     void renderSegment (juce::AudioBuffer<float>& buffer, int start, int numSamples);
+    void handleMidiMessage (const juce::MidiMessage& message);
+    void initializeModState();
+    void publishModConfig(); // message thread: parse ValueTree -> POD, publish
+
+    // ValueTree::Listener (matrix/macro edits from the UI)
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
+    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override;
+    void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+    void valueTreeParentChanged (juce::ValueTree&) override {}
 
     lumen::SynthEngine engine;
 
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;
+
+    // Lock-free matrix publish: message thread writes the next pool entry and
+    // swaps the pointer; the audio thread copies from the published entry at
+    // block start. Pool depth 8 makes write-while-read effectively impossible
+    // (would need 8 edits inside one block render).
+    lumen::mod::Config modConfigPool[8];
+    std::atomic<lumen::mod::Config*> publishedModConfig { nullptr };
+    int nextPoolEntry = 0;
 
     juce::SmoothedValue<float> masterGainLinear;
     std::atomic<float>* masterGainDb = nullptr;

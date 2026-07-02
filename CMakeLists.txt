@@ -52,16 +52,21 @@ set(LUMEN_ENGINE_SOURCES
     Source/Engine/SynthEngine.cpp
     Source/State/Parameters.cpp
     Source/State/EngineBindings.cpp
+    Source/State/ModState.cpp
 )
 set(LUMEN_ENGINE_HEADERS
     Source/Engine/EngineParams.h
     Source/Engine/Envelope.h
     Source/Engine/FactoryTables.h
+    Source/Engine/Lfo.h
+    Source/Engine/ModDestinations.h
+    Source/Engine/ModMatrix.h
     Source/Engine/SVF.h
     Source/Engine/SynthEngine.h
     Source/Engine/Voice.h
     Source/Engine/Wavetable.h
     Source/State/EngineBindings.h
+    Source/State/ModState.h
     Source/State/Parameters.h
 )
 

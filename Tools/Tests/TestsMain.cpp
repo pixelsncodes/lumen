@@ -8,9 +8,12 @@
 
 #include "Engine/Envelope.h"
 #include "Engine/FactoryTables.h"
+#include "Engine/Lfo.h"
+#include "Engine/ModMatrix.h"
 #include "Engine/SVF.h"
 #include "Engine/SynthEngine.h"
 #include "Engine/Wavetable.h"
+#include "State/ModState.h"
 #include "State/Parameters.h"
 
 #include <cmath>
@@ -382,11 +385,152 @@ public:
     }
 };
 
+class ModMatrixMathTest final : public juce::UnitTest
+{
+public:
+    ModMatrixMathTest() : juce::UnitTest ("Mod matrix combination math and clamping", "Modulation") {}
+
+    void runTest() override
+    {
+        using namespace lumen::mod;
+
+        beginTest ("final = clamp(base + sum(depth_i * source_i))");
+        Config config {};
+        config.slots[0] = { static_cast<int> (Source::lfo1), static_cast<int> (Dest::filterCutoff), 0.4f, true };
+        config.slots[1] = { static_cast<int> (Source::modWheel), static_cast<int> (Dest::filterCutoff), -0.25f, true };
+        config.slots[2] = { static_cast<int> (Source::modWheel), static_cast<int> (Dest::oscAMorph), 0.5f, true };
+        config.slots[3] = { static_cast<int> (Source::aftertouch), static_cast<int> (Dest::filterCutoff), 0.9f, false }; // disabled
+
+        float values[kNumSources] {};
+        bool active[kNumSources] {};
+        values[static_cast<int> (Source::lfo1)] = 0.5f;      active[static_cast<int> (Source::lfo1)] = true;
+        values[static_cast<int> (Source::modWheel)] = 0.8f;  active[static_cast<int> (Source::modWheel)] = true;
+        values[static_cast<int> (Source::aftertouch)] = 1.0f; active[static_cast<int> (Source::aftertouch)] = true;
+
+        const float cutoffSum = sumForDest (config, static_cast<int> (Dest::filterCutoff), values, active);
+        expectWithinAbsoluteError (cutoffSum, 0.4f * 0.5f - 0.25f * 0.8f, 1.0e-6f); // disabled slot ignored
+        const float morphSum = sumForDest (config, static_cast<int> (Dest::oscAMorph), values, active);
+        expectWithinAbsoluteError (morphSum, 0.4f, 1.0e-6f);
+        expectEquals (sumForDest (config, static_cast<int> (Dest::oscBMorph), values, active), 0.0f);
+
+        beginTest ("clamping to [0, 1] in normalized space");
+        expectEquals (clampNorm (0.5f + 2.0f), 1.0f);
+        expectEquals (clampNorm (0.2f - 3.0f), 0.0f);
+        expectEquals (clampNorm (0.7f), 0.7f);
+
+        beginTest ("normalize/denormalize round-trip incl. skewed ranges");
+        for (const auto dest : { Dest::filterCutoff, Dest::env1Attack, Dest::oscAPan, Dest::noiseLevel })
+        {
+            const float e = skewExponent (dest);
+            for (float p : { 0.0f, 0.1f, 0.5f, 0.9f, 1.0f })
+            {
+                const float natural = denormalize (dest, p, e);
+                expectWithinAbsoluteError (normalize (dest, natural, e), p, 1.0e-4f);
+            }
+        }
+        const float eCut = skewExponent (Dest::filterCutoff);
+        expectWithinAbsoluteError (denormalize (Dest::filterCutoff, 0.5f, eCut), 632.5f, 0.5f);
+
+        beginTest ("macro maps: exactly the mapped destinations respond");
+        Config macroConfig {};
+        macroConfig.macroMaps[0][0] = { static_cast<int> (Dest::oscAMorph), 0.0f, 0.5f };
+        macroConfig.macroMaps[1][0] = { static_cast<int> (Dest::filterRes), 0.1f, 0.9f };
+
+        const float zeros[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        float macros[4];
+        for (int m = 0; m < 4; ++m)
+        {
+            macros[0] = macros[1] = macros[2] = macros[3] = 0.0f;
+            macros[m] = 1.0f;
+            for (int d = 0; d < kNumDests; ++d)
+            {
+                const float sum = macroSumForDest (macroConfig, d, macros);
+                const float atZero = macroSumForDest (macroConfig, d, zeros);
+                const bool shouldRespond = (m == 0 && d == static_cast<int> (Dest::oscAMorph))
+                                        || (m == 1 && d == static_cast<int> (Dest::filterRes));
+                if (shouldRespond)
+                    expect (std::abs (sum - atZero) > 0.3f, "macro " + juce::String (m + 1) + " moves dest " + juce::String (d));
+                else
+                    expectWithinAbsoluteError (sum, atZero, 1.0e-6f);
+            }
+        }
+        const float halfMacro2[4] = { 0.0f, 0.5f, 0.0f, 0.0f };
+        expectWithinAbsoluteError (macroSumForDest (macroConfig, static_cast<int> (Dest::filterRes), halfMacro2),
+                                   0.1f + 0.8f * 0.5f, 1.0e-6f); // min + (max-min)*macro
+    }
+};
+
+class LfoTest final : public juce::UnitTest
+{
+public:
+    LfoTest() : juce::UnitTest ("LFO shapes, rate, host sync, fade", "Modulation") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("host sync beats: 120 BPM, 1/4 = 2 Hz; dotted x1.5, triplet x2/3");
+        LfoParams p;
+        p.sync = true;
+        p.syncDiv = 12; // "1/4"
+        expectWithinAbsoluteError (lfoRateHz (p, 120.0), 2.0, 1.0e-9);
+        p.syncDiv = 13; // "1/4 D"
+        expectWithinAbsoluteError (lfoRateHz (p, 120.0), 2.0 / 1.5, 1.0e-9);
+        p.syncDiv = 14; // "1/4 T"
+        expectWithinAbsoluteError (lfoRateHz (p, 120.0), 3.0, 1.0e-9);
+        p.syncDiv = 0;  // "4/1" = 16 beats
+        expectWithinAbsoluteError (lfoRateHz (p, 120.0), 0.125, 1.0e-9);
+
+        beginTest ("free rate: phase lands where it should");
+        Lfo lfo;
+        lfo.prepare (48000.0, 42);
+        LfoParams sine;
+        sine.rateHz = 1.0f;
+        lfo.advance (sine, 120.0, 12000); // 0.25 s at 1 Hz -> quarter cycle
+        expectWithinAbsoluteError (lfo.value (sine), 1.0f, 1.0e-3f); // sine peak
+
+        beginTest ("all shapes stay in [-1, 1]");
+        for (int shape = 0; shape < 6; ++shape)
+        {
+            Lfo l;
+            l.prepare (48000.0, 7);
+            LfoParams sp;
+            sp.shape = shape;
+            sp.rateHz = 3.7f;
+            float lo = 1.0e9f, hi = -1.0e9f;
+            for (int i = 0; i < 2000; ++i)
+            {
+                const float v = l.value (sp);
+                lo = juce::jmin (lo, v);
+                hi = juce::jmax (hi, v);
+                l.advance (sp, 120.0, 37);
+            }
+            expect (lo >= -1.0001f && hi <= 1.0001f, "shape " + juce::String (shape) + " bounded");
+            expect (hi - lo > 0.5f, "shape " + juce::String (shape) + " actually oscillates");
+        }
+
+        beginTest ("poly fade-in scales the output");
+        Lfo faded;
+        faded.prepare (48000.0, 3);
+        LfoParams fp;
+        fp.shape = static_cast<int> (LfoShape::square); // constant +1 first half cycle
+        fp.rateHz = 0.5f;
+        fp.fadeSeconds = 1.0f;
+        faded.retrigger();
+        faded.advance (fp, 120.0, 12000); // 0.25 s
+        expectWithinAbsoluteError (faded.value (fp), 0.25f, 0.01f);
+        faded.advance (fp, 120.0, 36000); // 1.25 s total: phase 0.625 -> square = -1, fade complete
+        expectWithinAbsoluteError (faded.value (fp), -1.0f, 0.01f);
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
 EngineRenderTest engineRenderTest;
+ModMatrixMathTest modMatrixMathTest;
+LfoTest lfoTest;
 } // namespace
 
 class ConsoleTestRunner final : public juce::UnitTestRunner
