@@ -14,12 +14,75 @@ FetchContent_Declare(JUCE
 )
 FetchContent_MakeAvailable(JUCE)
 
-# /W4 /WX on project sources only; JUCE module code keeps its own warning setup.
+# /W4 /WX (+ correct UTF-8 source decoding) on project sources only;
+# JUCE module code keeps its own warning setup.
 function(lumen_strict_sources)
     if(MSVC)
-        set_source_files_properties(${ARGV} PROPERTIES COMPILE_OPTIONS "/W4;/WX")
+        set_source_files_properties(${ARGV} PROPERTIES COMPILE_OPTIONS "/W4;/WX;/utf-8")
     endif()
 endfunction()
+
+set(LUMEN_COMMON_DEFS
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+)
+
+# ---------------------------------------------------------------------------
+# Lumen — the plugin (VST3 + Standalone)
+# ---------------------------------------------------------------------------
+juce_add_plugin(Lumen
+    COMPANY_NAME                "Lumen Audio"
+    PLUGIN_MANUFACTURER_CODE    Lumo
+    PLUGIN_CODE                 Lmn1
+    FORMATS                     VST3 Standalone
+    PRODUCT_NAME                "Lumen"
+    IS_SYNTH                    TRUE
+    NEEDS_MIDI_INPUT            TRUE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    VST3_CATEGORIES             "Instrument Synth"
+    COPY_PLUGIN_AFTER_BUILD     FALSE   # done by cmake/CopyVST3.cmake, best effort
+)
+
+set(LUMEN_PLUGIN_SOURCES
+    Source/PluginProcessor.cpp
+    Source/State/Parameters.cpp
+    Source/UI/PluginEditor.cpp
+)
+target_sources(Lumen PRIVATE
+    ${LUMEN_PLUGIN_SOURCES}
+    Source/PluginProcessor.h
+    Source/Engine/TestVoice.h
+    Source/State/Parameters.h
+    Source/UI/PluginEditor.h
+)
+lumen_strict_sources(${LUMEN_PLUGIN_SOURCES})
+
+target_include_directories(Lumen PUBLIC Source)
+target_compile_definitions(Lumen PUBLIC
+    ${LUMEN_COMMON_DEFS}
+    JUCE_VST3_CAN_REPLACE_VST2=0
+)
+target_link_libraries(Lumen
+    PRIVATE juce::juce_audio_utils
+    PUBLIC  juce::juce_recommended_config_flags
+)
+
+# Custom standalone app: adds --screenshot / --version (SPEC section 18).
+target_sources(Lumen_Standalone PRIVATE Source/Standalone/StandaloneApp.cpp)
+target_compile_definitions(Lumen_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+lumen_strict_sources(Source/Standalone/StandaloneApp.cpp)
+
+# Best-effort copy into the system VST3 folder; warns (never fails) on denial.
+set(LUMEN_VST3_DEST "C:/Program Files/Common Files/VST3")
+add_custom_command(TARGET Lumen_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+        -DSRC=$<TARGET_FILE_DIR:Lumen_VST3>/../..
+        -DDEST=${LUMEN_VST3_DEST}
+        -P ${CMAKE_SOURCE_DIR}/cmake/CopyVST3.cmake
+    COMMENT "Copying Lumen.vst3 to ${LUMEN_VST3_DEST} (best effort)"
+    VERBATIM
+)
 
 # ---------------------------------------------------------------------------
 # lumen_render — headless render/verification harness (console, no GUI)
@@ -32,11 +95,28 @@ set(LUMEN_RENDER_SOURCES
 target_sources(lumen_render PRIVATE ${LUMEN_RENDER_SOURCES})
 lumen_strict_sources(${LUMEN_RENDER_SOURCES})
 
-target_compile_definitions(lumen_render PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-)
+target_include_directories(lumen_render PRIVATE Source)
+target_compile_definitions(lumen_render PRIVATE ${LUMEN_COMMON_DEFS})
 target_link_libraries(lumen_render PRIVATE
     juce::juce_audio_formats
+    juce::juce_recommended_config_flags
+)
+
+# ---------------------------------------------------------------------------
+# lumen_tests — unit test runner (console)
+# ---------------------------------------------------------------------------
+juce_add_console_app(lumen_tests PRODUCT_NAME "lumen_tests")
+
+set(LUMEN_TESTS_SOURCES
+    Tools/Tests/TestsMain.cpp
+    Source/State/Parameters.cpp
+)
+target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})
+lumen_strict_sources(Tools/Tests/TestsMain.cpp)
+
+target_include_directories(lumen_tests PRIVATE Source)
+target_compile_definitions(lumen_tests PRIVATE ${LUMEN_COMMON_DEFS})
+target_link_libraries(lumen_tests PRIVATE
+    juce::juce_audio_processors
     juce::juce_recommended_config_flags
 )

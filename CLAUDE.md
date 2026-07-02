@@ -12,13 +12,15 @@ Lumen is a wavetable synthesizer: C++20, JUCE 8, CMake, targeting VST3 + Windows
 ```
 cmake -B build -G "Visual Studio 17 2022" -A x64        # configure
 cmake --build build --config Release                     # build everything
-build\<...>\lumen_tests.exe                              # unit tests
-build\<...>\lumen_render.exe --preset init --note 60 --out t.wav --analyze
-build\<...>\Lumen.exe --screenshot ui.png --view deep    # UI snapshot
-tools\pluginval.exe --strictness-level 10 --validate <path-to-Lumen.vst3>
+build\lumen_tests_artefacts\Release\lumen_tests.exe      # unit tests
+build\lumen_render_artefacts\Release\lumen_render.exe --preset init --note 60 --out t.wav --analyze
+build\Lumen_artefacts\Release\Standalone\Lumen.exe --screenshot ui.png --view deep
+Tools\pluginval.exe --strictness-level 10 --validate build\Lumen_artefacts\Release\VST3\Lumen.vst3
 ```
 
-Record the real artefact paths here after Phase 1 generates them.
+Dev machine note: this checkout lives on Windows (`C:\Users\pixel\Projects\lumen`) but Claude Code runs in WSL. Builds go through the Windows toolchain — invoke the VS-bundled CMake:
+`"/mnt/c/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" -S C:/Users/pixel/Projects/lumen -B C:/Users/pixel/Projects/lumen/build -G "Visual Studio 17 2022" -A x64`
+(pass `-DGIT_EXECUTABLE="C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/TeamFoundation/Team Explorer/Git/cmd/git.exe"` on a fresh configure so FetchContent can clone JUCE). The exes run fine directly from WSL.
 
 ## Non-negotiable rules
 
