@@ -2,6 +2,7 @@
 
 #include "Engine/EngineParams.h"
 #include "Engine/FxChain.h"
+#include "Engine/UiTap.h"
 #include "Engine/Voice.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -45,6 +46,10 @@ public:
     int latencySamples() const noexcept { return fxEnabled ? fx.latencySamples() : 0; }
     const FxChain::Levels& meterLevels() const noexcept { return fx.levels(); }
 
+    // Block-rate live-value snapshot for the UI (mod arcs, LFO markers).
+    // Written on the audio thread each chunk, read via atomics only.
+    UiTap& uiTap() noexcept { return ui; }
+
     int activeVoiceCount() const noexcept
     {
         int n = 0;
@@ -70,7 +75,9 @@ private:
     static int bufferedIndexFor (int dest) noexcept; // -1 or 0..9 (BlockBuffers order)
     void applyGlobalModulation (int numSamples);
     void applyPolyModulation (int voiceIndex, VoiceBlockGlobals& globals,
-                              BlockBuffers& buffers, int numSamples);
+                              BlockBuffers& buffers, int numSamples,
+                              bool publishToUi);
+    void publishUiTap (int newestVoice);
 
     double sampleRate = 48000.0;
     int maxBlock = 0;
@@ -103,5 +110,10 @@ private:
     float voicePolyPrev[kNumVoices][mod::kNumDests] {};
     bool  voiceModPrimed[kNumVoices] {};
     EnvParams effEnv1 {}, effEnv2 {}, effEnv3 {}; // env params after global mod
+
+    // UI snapshot scratch (audio thread only) + the published atomics.
+    float uiGlobalNorm[mod::kNumDests] {}; // base + global matrix + macros, normalized
+    float uiPolyNorm[mod::kNumDests] {};   // newest voice's poly sums this block
+    UiTap ui;
 };
 } // namespace lumen

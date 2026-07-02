@@ -3,13 +3,21 @@
 //
 //   Lumen.exe --version
 //   Lumen.exe --screenshot <file.png> [--view play|deep] [--preset <name>]
+//   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
+//   Lumen.exe --stress <seconds> [--view play|deep]
+//       Real audio device + 8-voice chord + random parameter wiggling at
+//       60 Hz with the frame HUD on; prints JSON frame/dropout stats and
+//       exits 0 only if frame avg <= 16.7 ms and dropouts == 0 (Phase 5 gate).
 //
-// --view/--preset are accepted now and become meaningful in Phase 5.
+// --preset is accepted and becomes meaningful in Phase 7.
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+
+#include "PluginProcessor.h"
+#include "UI/PluginEditor.h"
 
 #include <cstdio>
 
@@ -21,6 +29,14 @@ namespace
     {
         std::fputs (text.toRawUTF8(), stdout);
         std::fflush (stdout);
+    }
+
+    int requestedViewIndex (const juce::StringArray& args)
+    {
+        const auto viewIndex = args.indexOf ("--view");
+        if (viewIndex >= 0 && viewIndex + 1 < args.size())
+            return args[viewIndex + 1] == "deep" ? 1 : 0;
+        return 0;
     }
 } // namespace
 
@@ -44,6 +60,22 @@ public:
             return;
         }
 
+        if (args.contains ("--check-params"))
+        {
+            runParameterCheck();
+            return;
+        }
+
+        const auto stressIndex = args.indexOf ("--stress");
+        if (stressIndex >= 0)
+        {
+            const int seconds = stressIndex + 1 < args.size()
+                                    ? juce::jlimit (1, 600, args[stressIndex + 1].getIntValue())
+                                    : 60;
+            startStress (seconds, requestedViewIndex (args));
+            return;
+        }
+
         const auto screenshotIndex = args.indexOf ("--screenshot");
         if (screenshotIndex >= 0)
         {
@@ -58,10 +90,13 @@ public:
             screenshotFile = juce::File::getCurrentWorkingDirectory()
                                  .getChildFile (args[screenshotIndex + 1]);
 
-            screenshotProcessor.reset (::createPluginFilter());
-            screenshotEditor.reset (screenshotProcessor->createEditorAndMakeActive());
+            // Software rendering only: identical paint path (SPEC section 2).
+            LumenAudioProcessorEditor::disableOpenGL = true;
 
-            if (screenshotEditor == nullptr)
+            harnessProcessor.reset (::createPluginFilter());
+            harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
+
+            if (harnessEditor == nullptr)
             {
                 printToStdout ("Error: no editor available for screenshot\n");
                 setApplicationReturnValue (1);
@@ -69,9 +104,12 @@ public:
                 return;
             }
 
-            screenshotEditor->setTopLeftPosition (0, 0);
-            screenshotEditor->addToDesktop (juce::ComponentPeer::windowIsTemporary);
-            screenshotEditor->setVisible (true);
+            if (auto* editor = dynamic_cast<LumenAudioProcessorEditor*> (harnessEditor.get()))
+                editor->setView (requestedViewIndex (args));
+
+            harnessEditor->setTopLeftPosition (0, 0);
+            harnessEditor->addToDesktop (juce::ComponentPeer::windowIsTemporary);
+            harnessEditor->setVisible (true);
 
             // Let first paints and timers run before snapshotting (SPEC section 18).
             juce::Timer::callAfterDelay (700, [this] { takeScreenshotAndQuit(); });
@@ -95,7 +133,11 @@ public:
     void shutdown() override
     {
         window = nullptr;
-        releaseScreenshotObjects();
+        stressTimer = nullptr;
+        if (player != nullptr)
+            deviceManager.removeAudioCallback (player.get());
+        player = nullptr;
+        releaseHarnessObjects();
         properties.saveIfNeeded();
     }
 
@@ -105,14 +147,138 @@ public:
     }
 
 private:
+    // --- --check-params ---------------------------------------------------
+    void runParameterCheck()
+    {
+        LumenAudioProcessorEditor::disableOpenGL = true;
+        harnessProcessor.reset (::createPluginFilter());
+        harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
+
+        auto* editor = dynamic_cast<LumenAudioProcessorEditor*> (harnessEditor.get());
+        if (editor == nullptr)
+        {
+            printToStdout ("{\"error\":\"no editor\"}\n");
+            setApplicationReturnValue (1);
+            quit();
+            return;
+        }
+
+        int total = 0;
+        for (auto* parameter : harnessProcessor->getParameters())
+            if (dynamic_cast<juce::RangedAudioParameter*> (parameter) != nullptr)
+                ++total;
+
+        const auto missing = editor->missingParameterIds();
+        juce::String json = "{\"total_params\":" + juce::String (total)
+                          + ",\"attached\":" + juce::String (total - missing.size())
+                          + ",\"missing\":[";
+        for (int i = 0; i < missing.size(); ++i)
+            json += (i > 0 ? "," : "") + juce::String ("\"") + missing[i] + "\"";
+        json += "]}\n";
+        printToStdout (json);
+        setApplicationReturnValue (missing.isEmpty() ? 0 : 1);
+        quit();
+    }
+
+    // --- --stress ----------------------------------------------------------
+    void startStress (int seconds, int viewIndex)
+    {
+        auto* lumenProcessor = static_cast<LumenAudioProcessor*> (::createPluginFilter());
+        harnessProcessor.reset (lumenProcessor);
+
+        const auto error = deviceManager.initialiseWithDefaultDevices (0, 2);
+        if (error.isNotEmpty() || deviceManager.getCurrentAudioDevice() == nullptr)
+        {
+            printToStdout ("{\"error\":\"no audio device: " + error + "\"}\n");
+            setApplicationReturnValue (2);
+            quit();
+            return;
+        }
+
+        player = std::make_unique<juce::AudioProcessorPlayer>();
+        player->setProcessor (harnessProcessor.get());
+        deviceManager.addAudioCallback (player.get());
+
+        harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
+        auto* editor = dynamic_cast<LumenAudioProcessorEditor*> (harnessEditor.get());
+        if (editor == nullptr)
+        {
+            printToStdout ("{\"error\":\"no editor\"}\n");
+            setApplicationReturnValue (1);
+            quit();
+            return;
+        }
+        editor->setView (viewIndex);
+        harnessEditor->setTopLeftPosition (40, 40);
+        harnessEditor->addToDesktop (0);
+        harnessEditor->setVisible (true);
+
+        // Wiggle every continuous parameter except masterGain (no full-level
+        // blasts out of the monitors during an automated test).
+        for (auto* parameter : harnessProcessor->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+                if (dynamic_cast<juce::AudioParameterFloat*> (ranged) != nullptr
+                    && ranged->getParameterID() != "masterGain")
+                    wiggleTargets.add (ranged);
+
+        // 8-voice chord, held for the whole run (SPEC/PHASES: 8 sounding voices).
+        for (const int note : { 36, 43, 48, 55, 60, 64, 67, 72 })
+            lumenProcessor->uiNoteOn (note, 0.8f);
+
+        // Let prepareToPlay/table builds settle, then measure clean.
+        juce::Timer::callAfterDelay (1000, [this, editor, lumenProcessor, seconds]
+        {
+            lumenProcessor->resetPerfCounters();
+            editor->setHudEnabled (true);
+
+            stressTimer = std::make_unique<WiggleTimer> (*this);
+            stressTimer->startTimerHz (60);
+
+            juce::Timer::callAfterDelay (seconds * 1000, [this, editor, lumenProcessor, seconds]
+            {
+                stressTimer->stopTimer();
+                const auto stats = editor->getFrameStats();
+                const int dropoutTotal = lumenProcessor->dropoutCount();
+
+                const auto json = juce::String ("{\"seconds\":") + juce::String (seconds)
+                    + ",\"frames\":" + juce::String (stats.frames)
+                    + ",\"frame_avg_ms\":" + juce::String (stats.averageMs, 3)
+                    + ",\"frame_max_ms\":" + juce::String (stats.maxMs, 3)
+                    + ",\"dropouts\":" + juce::String (dropoutTotal)
+                    + ",\"audio_load\":" + juce::String (lumenProcessor->currentAudioLoad(), 3)
+                    + "}\n";
+                printToStdout (json);
+                setApplicationReturnValue (stats.averageMs <= 16.7 && dropoutTotal == 0 ? 0 : 1);
+                quit();
+            });
+        });
+    }
+
+    void wiggleOnce()
+    {
+        auto& random = juce::Random::getSystemRandom();
+        for (int i = 0; i < 6; ++i)
+            if (! wiggleTargets.isEmpty())
+                if (auto* parameter = wiggleTargets[random.nextInt (wiggleTargets.size())])
+                    parameter->setValueNotifyingHost (random.nextFloat());
+    }
+
+    struct WiggleTimer final : public juce::Timer
+    {
+        explicit WiggleTimer (LumenStandaloneApp& appRef) : app (appRef) {}
+        void timerCallback() override { app.wiggleOnce(); }
+        LumenStandaloneApp& app;
+    };
+
+    // --- --screenshot -------------------------------------------------------
     void takeScreenshotAndQuit()
     {
         bool ok = false;
 
-        if (screenshotEditor != nullptr)
+        if (harnessEditor != nullptr)
         {
-            const auto image = screenshotEditor->createComponentSnapshot (
-                screenshotEditor->getLocalBounds(), true, 1.0f);
+            const auto image = harnessEditor->createComponentSnapshot (
+                harnessEditor->getLocalBounds(), true, 1.0f);
 
             if (image.isValid())
             {
@@ -128,20 +294,26 @@ private:
         quit();
     }
 
-    void releaseScreenshotObjects()
+    void releaseHarnessObjects()
     {
-        if (screenshotEditor != nullptr && screenshotProcessor != nullptr)
-            screenshotProcessor->editorBeingDeleted (screenshotEditor.get());
+        if (harnessEditor != nullptr && harnessProcessor != nullptr)
+            harnessProcessor->editorBeingDeleted (harnessEditor.get());
 
-        screenshotEditor = nullptr;
-        screenshotProcessor = nullptr;
+        harnessEditor = nullptr;
+        harnessProcessor = nullptr;
     }
 
     juce::ApplicationProperties properties;
     std::unique_ptr<juce::StandaloneFilterWindow> window;
-    std::unique_ptr<juce::AudioProcessor> screenshotProcessor;
-    std::unique_ptr<juce::AudioProcessorEditor> screenshotEditor;
+
+    std::unique_ptr<juce::AudioProcessor> harnessProcessor;
+    std::unique_ptr<juce::AudioProcessorEditor> harnessEditor;
     juce::File screenshotFile;
+
+    juce::AudioDeviceManager deviceManager;
+    std::unique_ptr<juce::AudioProcessorPlayer> player;
+    std::unique_ptr<WiggleTimer> stressTimer;
+    juce::Array<juce::RangedAudioParameter*> wiggleTargets;
 };
 
 #if JucePlugin_Build_Standalone

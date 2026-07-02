@@ -28,6 +28,16 @@ set(LUMEN_COMMON_DEFS
 )
 
 # ---------------------------------------------------------------------------
+# Embedded assets: Inter (SIL OFL; license ships alongside, SPEC section 14)
+# ---------------------------------------------------------------------------
+juce_add_binary_data(LumenAssets SOURCES
+    Assets/Fonts/InterRegular.ttf
+    Assets/Fonts/InterMedium.ttf
+    Assets/Fonts/InterSemiBold.ttf
+    Assets/Fonts/InterLicenseOFL.txt
+)
+
+# ---------------------------------------------------------------------------
 # Lumen — the plugin (VST3 + Standalone)
 # ---------------------------------------------------------------------------
 juce_add_plugin(Lumen
@@ -74,13 +84,23 @@ set(LUMEN_ENGINE_HEADERS
 
 set(LUMEN_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
+    Source/UI/LumenLookAndFeel.cpp
+    Source/UI/Controls.cpp
+    Source/UI/Visualizers.cpp
+    Source/UI/Cards.cpp
     Source/UI/PluginEditor.cpp
     ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
     Source/PluginProcessor.h
+    Source/UI/Theme.h
+    Source/UI/LumenLookAndFeel.h
+    Source/UI/Controls.h
+    Source/UI/Visualizers.h
+    Source/UI/Cards.h
     Source/UI/PluginEditor.h
+    Source/Engine/UiTap.h
     ${LUMEN_ENGINE_HEADERS}
 )
 lumen_strict_sources(${LUMEN_PLUGIN_SOURCES})
@@ -91,7 +111,7 @@ target_compile_definitions(Lumen PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
 target_link_libraries(Lumen
-    PRIVATE juce::juce_audio_utils juce::juce_dsp
+    PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_opengl LumenAssets
     PUBLIC  juce::juce_recommended_config_flags
 )
 

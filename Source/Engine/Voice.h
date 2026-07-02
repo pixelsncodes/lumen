@@ -83,6 +83,7 @@ public:
         return index == 0 ? env1.value() : (index == 1 ? env2.value() : env3.value());
     }
     float polyLfoValue (int index, const LfoParams& p) const noexcept { return polyLfo[index].value (p); }
+    double polyLfoPhase (int index) const noexcept { return polyLfo[index].currentPhase(); }
     void advancePolyLfos (const LfoParams* p, double bpm, int numSamples) noexcept
     {
         for (int k = 0; k < 3; ++k)

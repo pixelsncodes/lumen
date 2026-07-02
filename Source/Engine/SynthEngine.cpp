@@ -339,12 +339,11 @@ void SynthEngine::applyGlobalModulation (int numSamples)
     {
         const auto dest = static_cast<mod::Dest> (d);
         const float base = baseNaturalFor (d);
+        const float baseNorm = mod::normalize (dest, base, destExponent[d]);
         float natural = base;
         if (globalActive[d])
-        {
-            const float n = mod::normalize (dest, base, destExponent[d]);
-            natural = mod::denormalize (dest, mod::clampNorm (n + globalNormSum[d]), destExponent[d]);
-        }
+            natural = mod::denormalize (dest, mod::clampNorm (baseNorm + globalNormSum[d]), destExponent[d]);
+        uiGlobalNorm[d] = mod::clampNorm (baseNorm + (globalActive[d] ? globalNormSum[d] : 0.0f));
 
         if (auto* smoother = smootherFor (d))
         {
@@ -366,10 +365,20 @@ void SynthEngine::applyGlobalModulation (int numSamples)
 
     setTarget (bendSemis, pitchBend * kBendRangeSemis, snap);
     primed = true;
+
+    // Global mod sources for the UI tap (poly sources come from the newest voice).
+    for (int s = 0; s < mod::kNumSources; ++s)
+        if (active[s])
+            ui.sourceValue[s].store (values[s], std::memory_order_relaxed);
+    for (int k = 0; k < 3; ++k)
+        if (current.lfo[k].mono)
+            ui.lfoPhase[k].store (static_cast<float> (monoLfo[k].currentPhase()),
+                                  std::memory_order_relaxed);
 }
 
 void SynthEngine::applyPolyModulation (int voiceIndex, VoiceBlockGlobals& globals,
-                                       BlockBuffers& buffers, int numSamples)
+                                       BlockBuffers& buffers, int numSamples,
+                                       bool publishToUi)
 {
     if (numPolySlots == 0)
     {
@@ -408,6 +417,10 @@ void SynthEngine::applyPolyModulation (int voiceIndex, VoiceBlockGlobals& global
         }
         polyNow[slot.dest] += slot.depth * values[slot.source];
     }
+
+    if (publishToUi)
+        for (int t = 0; t < numTouched; ++t)
+            uiPolyNorm[touched[t]] = polyNow[touched[t]];
 
     const float invN = 1.0f / static_cast<float> (numSamples);
 
@@ -578,6 +591,15 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
         bufDrive.data(), bufEnvAmount.data(), driveComp
     };
 
+    // Newest active voice = the one whose poly modulation the UI tap shows.
+    int newestVoice = -1;
+    for (int vi = 0; vi < kNumVoices; ++vi)
+        if (voices[vi].isActive()
+            && (newestVoice < 0 || voices[vi].age() > voices[newestVoice].age()))
+            newestVoice = vi;
+    for (auto& p : uiPolyNorm)
+        p = 0.0f;
+
     for (int vi = 0; vi < kNumVoices; ++vi)
     {
         auto& v = voices[vi];
@@ -586,12 +608,14 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
 
         VoiceBlockGlobals voiceGlobals = globals;
         BlockBuffers voiceBuffers = sharedBuffers;
-        applyPolyModulation (vi, voiceGlobals, voiceBuffers, numSamples);
+        applyPolyModulation (vi, voiceGlobals, voiceBuffers, numSamples, vi == newestVoice);
 
         v.startBlock (voiceGlobals, numSamples);
         v.render (outL, outR, numSamples, voiceBuffers);
         v.advancePolyLfos (current.lfo, current.bpm, numSamples);
     }
+
+    publishUiTap (newestVoice);
 
     // Master FX bus (SPEC section 10). Runs after the voice sum; the
     // continuous FX targets were landed by applyGlobalModulation above.
@@ -600,5 +624,38 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
         fx.setBlockParams (current.fx, current.bpm);
         fx.process (outL, outR, numSamples);
     }
+}
+
+void SynthEngine::publishUiTap (int newestVoice)
+{
+    using S = mod::Source;
+
+    for (int d = 0; d < mod::kNumDests; ++d)
+        ui.destNorm[d].store (mod::clampNorm (uiGlobalNorm[d] + uiPolyNorm[d]),
+                              std::memory_order_relaxed);
+
+    int voiceCount = 0;
+    for (const auto& v : voices)
+        voiceCount += v.isActive() ? 1 : 0;
+    ui.activeVoices.store (voiceCount, std::memory_order_relaxed);
+
+    if (newestVoice < 0)
+        return;
+
+    const auto& v = voices[newestVoice];
+    ui.sourceValue[static_cast<int> (S::env1)].store (v.envValue (0), std::memory_order_relaxed);
+    ui.sourceValue[static_cast<int> (S::env2)].store (v.envValue (1), std::memory_order_relaxed);
+    ui.sourceValue[static_cast<int> (S::env3)].store (v.envValue (2), std::memory_order_relaxed);
+    ui.sourceValue[static_cast<int> (S::velocity)].store (v.velocityNorm(), std::memory_order_relaxed);
+    ui.sourceValue[static_cast<int> (S::keytrack)].store (v.keytrackNorm(), std::memory_order_relaxed);
+    ui.sourceValue[static_cast<int> (S::randomPerNote)].store (v.randomNorm(), std::memory_order_relaxed);
+
+    for (int k = 0; k < 3; ++k)
+        if (! current.lfo[k].mono)
+        {
+            ui.sourceValue[static_cast<int> (S::lfo1) + k]
+                .store (v.polyLfoValue (k, current.lfo[k]), std::memory_order_relaxed);
+            ui.lfoPhase[k].store (static_cast<float> (v.polyLfoPhase (k)), std::memory_order_relaxed);
+        }
 }
 } // namespace lumen

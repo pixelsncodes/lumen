@@ -4,10 +4,15 @@
 #include "State/ModState.h"
 #include "UI/PluginEditor.h"
 
+#include <algorithm>
+#include <utility>
+
 LumenAudioProcessor::LumenAudioProcessor()
     : juce::AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", lumen::params::createParameterLayout())
 {
+    tapBuffer.assign (kTapCapacity, 0.0f);
+
     apvts.state.setProperty ("stateVersion", lumen::params::kStateVersion, nullptr);
 
     bindingValues.reserve (lumen::bindings::all().size());
@@ -105,11 +110,55 @@ void LumenAudioProcessor::handleMidiMessage (const juce::MidiMessage& message)
         engine.reset();
 }
 
+int LumenAudioProcessor::readAudioTap (float* dest, int maxSamples) noexcept
+{
+    int total = 0;
+    const auto scope = tapFifo.read (maxSamples);
+    for (const auto [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 },
+                                      std::pair { scope.startIndex2, scope.blockSize2 } })
+    {
+        if (size > 0)
+            std::copy_n (tapBuffer.data() + start, size, dest + total);
+        total += size;
+    }
+    return total;
+}
+
+void LumenAudioProcessor::uiNoteOn (int midiNote, float velocity) noexcept
+{
+    const auto scope = keyFifo.write (1);
+    if (scope.blockSize1 > 0)
+        keyEvents[scope.startIndex1] = { midiNote, velocity, true };
+}
+
+void LumenAudioProcessor::uiNoteOff (int midiNote) noexcept
+{
+    const auto scope = keyFifo.write (1);
+    if (scope.blockSize1 > 0)
+        keyEvents[scope.startIndex1] = { midiNote, 0.0f, false };
+}
+
 void LumenAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    const auto blockStartTicks = juce::Time::getHighResolutionTicks();
 
     buffer.clear();
+
+    // On-screen keyboard events (lock-free FIFO from the editor).
+    {
+        const auto scope = keyFifo.read (keyFifo.getNumReady());
+        for (const auto [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 },
+                                          std::pair { scope.startIndex2, scope.blockSize2 } })
+            for (int i = 0; i < size; ++i)
+            {
+                const auto& e = keyEvents[start + i];
+                if (e.on)
+                    engine.noteOn (e.note, e.velocity);
+                else
+                    engine.noteOff (e.note);
+            }
+    }
 
     // Snapshot APVTS -> engine once per block (no locks, plain atomics).
     lumen::EngineParams params;
@@ -137,6 +186,42 @@ void LumenAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         handleMidiMessage (metadata.getMessage());
     }
     renderSegment (buffer, segmentStart, buffer.getNumSamples() - segmentStart);
+
+    // --- UI taps (all lock-free, no allocation) -------------------------
+    const int numSamples = buffer.getNumSamples();
+    {
+        // Post-limiter mono mix for the scope/spectrum; drop what won't fit.
+        const float* l = buffer.getReadPointer (0);
+        const float* r = buffer.getReadPointer (1);
+        const auto scope = tapFifo.write (numSamples);
+        int written = 0;
+        for (const auto [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 },
+                                          std::pair { scope.startIndex2, scope.blockSize2 } })
+        {
+            for (int i = 0; i < size; ++i)
+                tapBuffer[static_cast<size_t> (start + i)] = 0.5f * (l[written + i] + r[written + i]);
+            written += size;
+        }
+    }
+
+    const auto& levels = engine.meterLevels();
+    meterAtomics.peakL.store (levels.peakL, std::memory_order_relaxed);
+    meterAtomics.peakR.store (levels.peakR, std::memory_order_relaxed);
+    meterAtomics.rmsL.store (levels.rmsL, std::memory_order_relaxed);
+    meterAtomics.rmsR.store (levels.rmsR, std::memory_order_relaxed);
+
+    // Real-time budget check (HUD / --stress dropout logging). A high-res
+    // tick read is a userspace counter read — RT-safe (DECISIONS.md).
+    const double elapsedSeconds = juce::Time::highResolutionTicksToSeconds (
+        juce::Time::getHighResolutionTicks() - blockStartTicks);
+    const double budgetSeconds = numSamples / getSampleRate();
+    if (budgetSeconds > 0.0)
+    {
+        audioLoad.store (static_cast<float> (elapsedSeconds / budgetSeconds),
+                         std::memory_order_relaxed);
+        if (elapsedSeconds > budgetSeconds)
+            dropouts.fetch_add (1, std::memory_order_relaxed);
+    }
 }
 
 juce::AudioProcessorEditor* LumenAudioProcessor::createEditor()

@@ -1,52 +1,81 @@
 #pragma once
 
-#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_opengl/juce_opengl.h>
 
-#include "PluginProcessor.h"
+#include "UI/Cards.h"
+#include "UI/LumenLookAndFeel.h"
 
-#include <array>
+#include <atomic>
 
-// Phase 3 placeholder editor: frozen first-8 + master gain knobs, plus the
-// temporary mod-matrix list panel (PHASES.md Phase 3 — the drag-drop
-// modulation UX arrives with the real Play/Deep views in Phase 5).
-class LumenAudioProcessorEditor final : public juce::AudioProcessorEditor
+// Phase 5 editor: Play + Deep views (SPEC 14), OpenGL-accelerated with an
+// identical software paint path (all drawing goes through paint(), so
+// --screenshot snapshots match what OpenGL renders), 60 Hz UI clock that
+// drains the processor's audio tap and animates the visible visualizers,
+// drag-and-drop modulation, resizing 70-200% via a whole-content scale
+// transform, and a frame-time debug HUD (toggle: H key).
+class LumenAudioProcessorEditor final : public juce::AudioProcessorEditor,
+                                        public juce::DragAndDropContainer,
+                                        private juce::Timer,
+                                        private juce::MidiKeyboardState::Listener
 {
 public:
     explicit LumenAudioProcessorEditor (LumenAudioProcessor& processorToUse);
+    ~LumenAudioProcessorEditor() override;
 
     void paint (juce::Graphics& g) override;
+    void paintOverChildren (juce::Graphics& g) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override;
+
+    // 0 = play, 1 = deep. Persisted as a state property ("uiView").
+    void setView (int index);
+
+    // --- verification hooks (SPEC 18 harness) ---------------------------
+    struct FrameStats
+    {
+        int frames = 0;
+        double averageMs = 0.0;
+        double maxMs = 0.0;
+    };
+    void setHudEnabled (bool enabled);
+    FrameStats getFrameStats() const;
+    juce::StringArray missingParameterIds() const; // --check-params
+
+    // Screenshot/headless runs skip the OpenGL context (software path only —
+    // identical output by construction). Set before creating the editor.
+    static bool disableOpenGL;
 
 private:
-    struct Knob
-    {
-        juce::Slider slider;
-        juce::Label label;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-    };
-
-    // One editable matrix slot row, bound directly to its SLOT ValueTree.
-    struct MatrixRow final : public juce::Component
-    {
-        MatrixRow (juce::ValueTree slotTree, const juce::StringArray& destNames);
-        void resized() override;
-
-        juce::ValueTree slot;
-        juce::ComboBox source, dest;
-        juce::Slider depth;
-        juce::ToggleButton enabled;
-    };
-
-    void setUpKnob (Knob& knob, const char* paramID, const juce::String& text, juce::Colour accent);
-    void layoutKnobRow (juce::Rectangle<int> row, Knob* knobs, int count, float scale);
+    void timerCallback() override;
+    void handleNoteOn (juce::MidiKeyboardState*, int, int note, float velocity) override;
+    void handleNoteOff (juce::MidiKeyboardState*, int, int note, float) override;
 
     LumenAudioProcessor& processor;
-    std::array<Knob, 4> macroKnobs;
-    std::array<Knob, 5> utilityKnobs;
+    LumenLookAndFeel lumenLnf;
 
-    juce::Viewport matrixViewport;
-    juce::Component matrixContent;
-    juce::OwnedArray<MatrixRow> matrixRows;
+    juce::MidiKeyboardState keyboardState;
+    AudioHistory history;
+    std::set<juce::String> attachedIds;
+    std::vector<ModKnob*> knobRegistry;
+    UiShared shared;
+
+    juce::Component content; // fixed 1040x660, scaled by transform on resize
+    std::unique_ptr<HeaderBar> header;
+    std::unique_ptr<DeepView> deepView;
+    std::unique_ptr<PlayView> playView;
+
+    juce::OpenGLContext glContext;
+    bool glAttached = false;
+
+    int tick = 0;
+
+    // Frame-time instrumentation (written on the paint thread, read from the
+    // message thread by --stress; HUD text is drawn on the paint thread).
+    bool hudEnabled = false;
+    double paintStartMs = 0.0;
+    std::atomic<juce::uint32> frameCount { 0 };
+    std::atomic<juce::uint64> frameSumUs { 0 };
+    std::atomic<juce::uint32> frameMaxUs { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LumenAudioProcessorEditor)
 };

@@ -5,6 +5,9 @@
 #include "Engine/SynthEngine.h"
 #include "State/Parameters.h"
 
+#include <atomic>
+#include <vector>
+
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
 {
@@ -38,6 +41,44 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // ------------------------------------------------------------------
+    // UI bridge (SPEC sections 10/15): everything below is lock-free.
+    // ------------------------------------------------------------------
+
+    // Live modulation values published by the engine each block.
+    lumen::UiTap& uiTap() noexcept { return engine.uiTap(); }
+
+    // Latest parsed matrix/macro config (stable between UI edits) — used by
+    // knobs to know their modulation span without re-parsing the ValueTree.
+    const lumen::mod::Config* currentModConfig() const noexcept
+    {
+        return publishedModConfig.load (std::memory_order_acquire);
+    }
+
+    // Post-limiter mono audio tap for the scope/spectrum. Single consumer:
+    // the editor drains it on its UI timer into a local history buffer.
+    // Returns the number of samples read into dest.
+    int readAudioTap (float* dest, int maxSamples) noexcept;
+
+    // On-screen keyboard -> audio thread (applied at the next block start).
+    void uiNoteOn (int midiNote, float velocity) noexcept;
+    void uiNoteOff (int midiNote) noexcept;
+
+    // Output meter levels (peak/RMS per block, linear).
+    struct MeterAtomics
+    {
+        std::atomic<float> peakL { 0.0f }, peakR { 0.0f };
+        std::atomic<float> rmsL { 0.0f }, rmsR { 0.0f };
+    };
+    const MeterAtomics& meterLevels() const noexcept { return meterAtomics; }
+
+    // processBlock duration vs. real-time budget (frame HUD / --stress).
+    // load = duration / budget of the most recent block; dropouts = blocks
+    // that exceeded their budget since the last resetPerfCounters().
+    float currentAudioLoad() const noexcept { return audioLoad.load (std::memory_order_relaxed); }
+    int dropoutCount() const noexcept { return dropouts.load (std::memory_order_relaxed); }
+    void resetPerfCounters() noexcept { dropouts.store (0); audioLoad.store (0.0f); }
+
 private:
     void renderSegment (juce::AudioBuffer<float>& buffer, int start, int numSamples);
     void handleMidiMessage (const juce::MidiMessage& message);
@@ -63,6 +104,21 @@ private:
     lumen::mod::Config modConfigPool[8];
     std::atomic<lumen::mod::Config*> publishedModConfig { nullptr };
     int nextPoolEntry = 0;
+
+    // Audio tap: SPSC ring, audio thread writes, editor timer reads.
+    static constexpr int kTapCapacity = 16384;
+    juce::AbstractFifo tapFifo { kTapCapacity };
+    std::vector<float> tapBuffer;
+
+    // On-screen keyboard events: message thread writes, audio thread reads.
+    struct KeyEvent { int note; float velocity; bool on; };
+    static constexpr int kKeyFifoCapacity = 128;
+    juce::AbstractFifo keyFifo { kKeyFifoCapacity };
+    KeyEvent keyEvents[kKeyFifoCapacity] {};
+
+    MeterAtomics meterAtomics;
+    std::atomic<float> audioLoad { 0.0f };
+    std::atomic<int> dropouts { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LumenAudioProcessor)
 };

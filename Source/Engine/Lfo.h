@@ -98,6 +98,9 @@ public:
         ageSeconds += numSamples / sampleRate;
     }
 
+    // Raw 0..1 phase (before the phase-offset parameter) for UI position markers.
+    double currentPhase() const noexcept { return phase; }
+
 private:
     void drawSample() noexcept
     {
