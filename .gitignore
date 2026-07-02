@@ -1,0 +1,22 @@
+# Build output
+build/
+out/
+.vs/
+*.user
+
+# Downloaded tooling (re-fetch, don't commit)
+Tools/pluginval.exe
+Tools/pluginval_*.zip
+tools/pluginval.exe
+tools/pluginval_*.zip
+
+# Render/verification scratch output
+*.wav
+render*.json
+shot*.png
+ui*.png
+
+# OS noise
+Thumbs.db
+Desktop.ini
+.DS_Store
