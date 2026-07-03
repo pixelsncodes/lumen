@@ -452,8 +452,8 @@ private:
             rows.push_back ({ kItem, "Version " + juce::String (JucePlugin_VersionString), false, false,
                               measure ("Version " + juce::String (JucePlugin_VersionString)) });
             rows.push_back ({ kSeparator, {}, false, false, 11 });
-            rows.push_back ({ kItem, "MIDI Learn", false, true, measure ("MIDI Learn") });
-            rows.push_back ({ kItem, "Tooltips", false, false, measure ("Tooltips") });
+            rows.push_back ({ kItem, "MIDI Learn: right-click any knob", false, true,
+                              measure ("MIDI Learn: right-click any knob") });
         }
         else if (auto* lumen = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
         {

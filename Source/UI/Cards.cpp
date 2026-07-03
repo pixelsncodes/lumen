@@ -628,15 +628,13 @@ void HeaderBar::showGearMenu()
         return;
     }
 
-    // Plugin: a minimal branded menu (about/version for now — MIDI Learn +
-    // tooltips populate it later).
+    // Plugin: a minimal branded menu (the host owns the audio devices).
     juce::PopupMenu menu;
     menu.setLookAndFeel (&menuLnf);
     menu.addSectionHeader ("Lumen");
     menu.addItem (1, "Version " + juce::String (JucePlugin_VersionString), false, false);
     menu.addSeparator();
-    menu.addItem (2, "MIDI Learn", false, false);
-    menu.addItem (3, "Tooltips", false, false);
+    menu.addItem (2, "MIDI Learn: right-click any knob", false, false);
     menu.showMenuAsync (juce::PopupMenu::Options()
                             .withTargetComponent (gear)
                             .withMinimumWidth (190));

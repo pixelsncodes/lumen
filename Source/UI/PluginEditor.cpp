@@ -1,6 +1,7 @@
 #include "UI/PluginEditor.h"
 
 #include "Lens/LensController.h"
+#include "State/MidiLearn.h"
 #include "UI/Theme.h"
 
 namespace
@@ -241,6 +242,9 @@ juce::StringArray LumenAudioProcessorEditor::missingParameterIds() const
 void LumenAudioProcessorEditor::timerCallback()
 {
     ++tick;
+
+    // Finalize any MIDI Learn the audio thread captured (persists the map).
+    processor.midiLearn().poll();
 
     // Drain the processor's lock-free audio tap into the UI-side history.
     float tapChunk[4096];

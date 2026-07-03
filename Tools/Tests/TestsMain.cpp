@@ -21,6 +21,7 @@
 #include "State/EngineBindings.h"
 #include "State/FactoryPresets.h"
 #include "State/LensState.h"
+#include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
 #include "UI/WaterfallModel.h"
@@ -1708,6 +1709,76 @@ public:
     }
 };
 
+class MidiLearnTest final : public juce::UnitTest
+{
+public:
+    MidiLearnTest() : juce::UnitTest ("MIDI Learn map persists across restart", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        const auto mapFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("lumen_midimap_test.xml");
+        mapFile.deleteFile();
+
+        beginTest ("learn binds the next CC and persists to the map file");
+        {
+            NullProcessor processor;
+            MidiLearnController learn (processor.apvts, mapFile);
+
+            expectEquals (learn.boundCcFor ("filterCutoff"), -1, "starts unbound");
+            learn.armLearn ("filterCutoff");
+            expect (learn.isArmedFor ("filterCutoff"));
+
+            learn.handleController (21, 127);      // Launchkey knob sends CC 21
+            expect (learn.poll(), "poll finalizes the learn");
+            expectEquals (learn.boundCcFor ("filterCutoff"), 21);
+            expect (mapFile.existsAsFile(), "map file written");
+
+            // The learning gesture already applied the value.
+            auto* cutoff = processor.apvts.getParameter ("filterCutoff");
+            expectWithinAbsoluteError (cutoff->getValue(), 1.0f, 1.0e-6f);
+
+            learn.armLearn ("reverbMix");
+            learn.handleController (22, 0);
+            learn.poll();
+        }
+
+        beginTest ("a fresh instance (restart) loads the map and applies CCs");
+        {
+            NullProcessor processor;
+            MidiLearnController learn (processor.apvts, mapFile);
+
+            expectEquals (learn.boundCcFor ("filterCutoff"), 21, "binding survived the restart");
+            expectEquals (learn.boundCcFor ("reverbMix"), 22);
+
+            auto* cutoff = processor.apvts.getParameter ("filterCutoff");
+            learn.handleController (21, 64);
+            expectWithinAbsoluteError (cutoff->getValue(), 64.0f / 127.0f, 1.0e-6f,
+                                       "bound CC drives the parameter");
+
+            beginTest ("re-learn moves a binding; clear removes it and persists");
+            learn.armLearn ("filterCutoff"); // re-learn onto CC 30
+            learn.handleController (30, 10);
+            learn.poll();
+            expectEquals (learn.boundCcFor ("filterCutoff"), 30, "re-learn moved the binding");
+
+            learn.clearBinding ("filterCutoff");
+            expectEquals (learn.boundCcFor ("filterCutoff"), -1);
+        }
+
+        {
+            NullProcessor processor;
+            MidiLearnController learn (processor.apvts, mapFile);
+            expectEquals (learn.boundCcFor ("filterCutoff"), -1, "clear persisted");
+            expectEquals (learn.boundCcFor ("reverbMix"), 22, "other bindings untouched");
+        }
+
+        mapFile.deleteFile();
+    }
+};
+
 class VoiceModeTest final : public juce::UnitTest
 {
 public:
@@ -1890,6 +1961,7 @@ SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
 EngineRenderTest engineRenderTest;
 VoiceModeTest voiceModeTest;
+MidiLearnTest midiLearnTest;
 InitModDefaultsTest initModDefaultsTest;
 ModMatrixMathTest modMatrixMathTest;
 LfoTest lfoTest;

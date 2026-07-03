@@ -2,6 +2,7 @@
 
 #include "Lens/LensController.h"
 #include "State/EngineBindings.h"
+#include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/PresetManager.h"
 #include "UI/PluginEditor.h"
@@ -27,6 +28,7 @@ LumenAudioProcessor::LumenAudioProcessor()
 
     initializeModState();
     lens = std::make_unique<lumen::LensController> (apvts, engine);
+    midiLearnController = std::make_unique<lumen::MidiLearnController> (apvts);
 
     // Default patch = Slow Aurora (user-approved deviation from SPEC section
     // 16's Neon Tide — DECISIONS.md). Hosts overwrite this via
@@ -115,8 +117,13 @@ void LumenAudioProcessor::handleMidiMessage (const juce::MidiMessage& message)
         engine.noteOff (message.getNoteNumber());
         pushMidiDisplayEvent (message.getNoteNumber(), 0.0f, false);
     }
-    else if (message.isController() && message.getControllerNumber() == 1)
-        engine.setModWheel (static_cast<float> (message.getControllerValue()) / 127.0f);
+    else if (message.isController())
+    {
+        if (message.getControllerNumber() == 1)
+            engine.setModWheel (static_cast<float> (message.getControllerValue()) / 127.0f);
+        midiLearnController->handleController (message.getControllerNumber(),
+                                               message.getControllerValue());
+    }
     else if (message.isChannelPressure())
         engine.setAftertouch (static_cast<float> (message.getChannelPressureValue()) / 127.0f);
     else if (message.isPitchWheel())

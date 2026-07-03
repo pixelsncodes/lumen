@@ -95,6 +95,7 @@ set(LUMEN_ENGINE_HEADERS
 set(LUMEN_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
     Source/Lens/LensController.cpp
+    Source/State/MidiLearn.cpp
     Source/State/PresetManager.cpp
     Source/UI/LumenLookAndFeel.cpp
     Source/UI/Controls.cpp
@@ -108,6 +109,7 @@ target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
     Source/PluginProcessor.h
     Source/Lens/LensController.h
+    Source/State/MidiLearn.h
     Source/State/PresetManager.h
     Source/UI/Theme.h
     Source/UI/LumenLookAndFeel.h
@@ -180,6 +182,7 @@ juce_add_console_app(lumen_tests PRODUCT_NAME "lumen_tests")
 set(LUMEN_TESTS_SOURCES
     Tools/Tests/TestsMain.cpp
     Source/Lens/LensController.cpp # drop/clear reversibility test drives it directly
+    Source/State/MidiLearn.cpp     # MIDI map save/load round-trip test
     ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})

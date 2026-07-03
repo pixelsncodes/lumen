@@ -1,5 +1,6 @@
 #include "UI/Controls.h"
 
+#include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "UI/LumenLookAndFeel.h"
 #include "UI/Theme.h"
@@ -327,8 +328,14 @@ void ModKnob::showContextMenu()
     menu.addSubMenu ("Add modulation", addMenu);
 
     menu.addSeparator();
-    menu.addItem (4, "MIDI Learn (Phase 7)", false);
-    menu.addItem (5, "Clear MIDI (Phase 7)", false);
+    auto& learn = shared.processor.midiLearn();
+    const int boundCc = learn.boundCcFor (paramId);
+    const bool armedHere = learn.isArmedFor (paramId);
+    menu.addItem (4, armedHere ? "MIDI Learn: move a control..." : "MIDI Learn",
+                  true, armedHere);
+    menu.addItem (5, boundCc >= 0 ? "Clear MIDI (CC " + juce::String (boundCc) + ")"
+                                  : "Clear MIDI",
+                  boundCc >= 0);
 
     juce::Component::SafePointer<ModKnob> safeThis (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
@@ -342,6 +349,18 @@ void ModKnob::showContextMenu()
             if (result == 1)
             {
                 self.resetToDefault();
+            }
+            else if (result == 4)
+            {
+                auto& midiLearn = self.shared.processor.midiLearn();
+                if (midiLearn.isArmedFor (self.paramId))
+                    midiLearn.cancelLearn(); // second click un-arms
+                else
+                    midiLearn.armLearn (self.paramId);
+            }
+            else if (result == 5)
+            {
+                self.shared.processor.midiLearn().clearBinding (self.paramId);
             }
             else if (result >= 3000)
             {

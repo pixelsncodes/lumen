@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace lumen { class LensController; class PresetManager; }
+namespace lumen { class LensController; class MidiLearnController; class PresetManager; }
 
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
@@ -51,6 +51,10 @@ public:
 
     // Preset browser/loader (Phase 7). Message thread only.
     lumen::PresetManager& presetManager() noexcept { return *presets; }
+
+    // MIDI Learn (SPEC section 17): global CC map, persisted at
+    // %APPDATA%/Lumen/midi_map.xml. See MidiLearn.h for the thread contract.
+    lumen::MidiLearnController& midiLearn() noexcept { return *midiLearnController; }
 
     // ------------------------------------------------------------------
     // UI bridge (SPEC sections 10/15): everything below is lock-free.
@@ -116,6 +120,7 @@ private:
     lumen::SynthEngine engine;
     std::unique_ptr<lumen::LensController> lens;
     std::unique_ptr<lumen::PresetManager> presets;
+    std::unique_ptr<lumen::MidiLearnController> midiLearnController;
 
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;
