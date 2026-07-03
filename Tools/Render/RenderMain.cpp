@@ -42,7 +42,7 @@ struct RenderOptions
     bool noFx = false; // tap the pre-FX voice sum (bypass the whole FX bus)
     std::vector<std::pair<juce::String, float>> overrides;      // --set id=value
     std::vector<juce::StringArray> modRoutes;                   // --mod src:dest:depth
-    std::vector<juce::StringArray> macroMaps;                   // --macro n:dest:min:max
+    std::vector<juce::StringArray> macroMaps;                   // --macro n:dest:min:max[:curve]
 };
 
 bool parseArguments (int argc, char* argv[], RenderOptions& options)
@@ -62,9 +62,10 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
         {
             juce::StringArray parts;
             parts.addTokens (juce::String (argv[++i]), ":", "");
-            if ((flag == "--mod" && parts.size() != 3) || (flag == "--macro" && parts.size() != 4))
+            if ((flag == "--mod" && parts.size() != 3)
+                || (flag == "--macro" && (parts.size() < 4 || parts.size() > 5)))
             {
-                std::cerr << flag << ": expected " << (flag == "--mod" ? "source:dest:depth" : "macroIndex:dest:min:max") << "\n";
+                std::cerr << flag << ": expected " << (flag == "--mod" ? "source:dest:depth" : "macroIndex:dest:min:max[:curve]") << "\n";
                 return false;
             }
             (flag == "--mod" ? options.modRoutes : options.macroMaps).push_back (parts);
@@ -162,6 +163,7 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
         mm.dest = dest;
         mm.rangeMin = map[2].getFloatValue();
         mm.rangeMax = map[3].getFloatValue();
+        mm.curve = map.size() == 5 ? juce::jlimit (0.25f, 4.0f, map[4].getFloatValue()) : 1.0f;
     }
     return true;
 }

@@ -3,6 +3,8 @@
 #include "Engine/Lfo.h"
 #include "Engine/ModDestinations.h"
 
+#include <cmath>
+
 namespace lumen::mod
 {
 // Modulation sources (SPEC section 9).
@@ -32,6 +34,7 @@ struct MacroMapping
     int dest = -1;              // Dest, -1 = unused
     float rangeMin = 0.0f;      // normalized offset added at macro = 0
     float rangeMax = 1.0f;      // normalized offset added at macro = 1
+    float curve = 1.0f;         // response exponent: offset follows macro^curve
 };
 
 // Plain data handed to the engine each block (part of EngineParams).
@@ -77,14 +80,23 @@ inline float sumForDest (const Config& config, int dest,
     return sum;
 }
 
-// Macro mapping lists contribute globally: offset = min + (max-min) * macro.
+// One macro mapping's contribution: offset = min + (max-min) * macro^curve.
+// curve 1 = linear; curve > 1 packs the offset's growth into the top of the
+// knob travel (the map still spans exactly min..max end to end).
+inline float macroMapOffset (const MacroMapping& map, float macro) noexcept
+{
+    const float shaped = map.curve == 1.0f ? macro : std::pow (macro, map.curve);
+    return map.rangeMin + (map.rangeMax - map.rangeMin) * shaped;
+}
+
+// Macro mapping lists contribute globally.
 inline float macroSumForDest (const Config& config, int dest, const float* macroValues) noexcept
 {
     float sum = 0.0f;
     for (int m = 0; m < kNumMacros; ++m)
         for (const auto& map : config.macroMaps[m])
             if (map.dest == dest)
-                sum += map.rangeMin + (map.rangeMax - map.rangeMin) * macroValues[m];
+                sum += macroMapOffset (map, macroValues[m]);
     return sum;
 }
 

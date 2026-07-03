@@ -332,13 +332,12 @@ void SynthEngine::applyGlobalModulation (int numSamples)
         }
     }
 
-    // Macro mapping lists (SPEC section 9): offset = min + (max-min) * macro.
+    // Macro mapping lists (SPEC section 9): offset = min + (max-min) * macro^curve.
     for (int m = 0; m < mod::kNumMacros; ++m)
         for (const auto& map : current.mod.macroMaps[m])
             if (map.dest >= 0 && map.dest < mod::kNumDests)
             {
-                globalNormSum[map.dest] += map.rangeMin
-                    + (map.rangeMax - map.rangeMin) * current.macroValues[m];
+                globalNormSum[map.dest] += mod::macroMapOffset (map, current.macroValues[m]);
                 globalActive[map.dest] = true;
             }
 

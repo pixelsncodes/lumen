@@ -16,22 +16,25 @@ namespace
     // exactly as approved and the knobs sweep away from it:
     //   Tone     down = darker (cutoff), up = hotter (filter drive)
     //   Motion   speed of the built-in LFO1 -> Osc A morph wobble
-    //   Space    reverb + delay mix, dry at 0
-    //   Texture  unison detune spread + noise bed
+    //   Space    reverb + delay mix, dry at 0, near-wet at 1
+    //   Texture  unison detune spread + noise bed (-24 dB ceiling at 1)
     struct InitSlot { const char* source; const char* dest; float depth; };
     constexpr InitSlot kInitSlots[] = {
-        { "lfo1", "oscAMorph", 0.25f },
+        { "lfo1", "oscAMorph", 0.50f },
     };
 
-    struct InitMap { int macro; const char* dest; float min; float max; };
+    // Space uses curve 1.6 (offset = min + (max-min) * space^1.6): the wet
+    // range is huge without a long dead zone at the bottom of the travel —
+    // min = -(max-min) * 0.3^1.6 (0.3^1.6 = 0.14567801) pins zero at 0.3.
+    struct InitMap { int macro; const char* dest; float min; float max; float curve = 1.0f; };
     constexpr InitMap kInitMaps[] = {
-        { 0, "filterCutoff", -0.60f,  0.60f  },
-        { 0, "filterDrive",  -0.25f,  0.25f  },
-        { 1, "lfo1Rate",     -0.20f,  0.20f  },
-        { 2, "reverbMix",    -0.195f, 0.455f },
-        { 2, "delayMix",     -0.12f,  0.28f  },
-        { 3, "oscADetune",   -0.10f,  0.40f  },
-        { 3, "noiseLevel",   -0.10f,  0.40f  },
+        { 0, "filterCutoff", -0.60f,       0.60f       },
+        { 0, "filterDrive",  -0.25f,       0.25f       },
+        { 1, "lfo1Rate",     -0.20f,       0.20f       },
+        { 2, "reverbMix",    -0.12382631f, 0.72617369f, 1.6f },
+        { 2, "delayMix",     -0.08012291f, 0.46987709f, 1.6f },
+        { 3, "oscADetune",   -0.175f,      0.70f       },
+        { 3, "noiseLevel",   -0.15f,       0.60f       },
     };
 } // namespace
 
@@ -134,6 +137,7 @@ void ensureTrees (juce::ValueTree& state)
             map.setProperty ("dest", m.dest, nullptr);
             map.setProperty ("min", m.min, nullptr);
             map.setProperty ("max", m.max, nullptr);
+            map.setProperty ("curve", m.curve, nullptr);
             macros.getChild (m.macro).appendChild (map, nullptr);
         }
     }
@@ -161,6 +165,7 @@ void applyInitModDefaults (mod::Config& out)
         map.dest = dest;
         map.rangeMin = m.min;
         map.rangeMax = m.max;
+        map.curve = m.curve;
     }
 }
 
@@ -200,6 +205,9 @@ void buildConfig (const juce::ValueTree& state, mod::Config& out)
             mm.dest = dest;
             mm.rangeMin = juce::jlimit (-1.0f, 1.0f, static_cast<float> (static_cast<double> (map["min"])));
             mm.rangeMax = juce::jlimit (-1.0f, 1.0f, static_cast<float> (static_cast<double> (map["max"])));
+            // Older states have no "curve" attribute -> 1 (linear, unchanged).
+            mm.curve = juce::jlimit (0.25f, 4.0f,
+                static_cast<float> (static_cast<double> (map.getProperty ("curve", 1.0))));
         }
     }
 }

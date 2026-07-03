@@ -552,7 +552,7 @@ public:
         expect (slot0.enabled, "motion slot enabled");
         expectEquals (slot0.source, modstate::sourceFromToken ("lfo1"));
         expectEquals (slot0.dest, modstate::destFromToken ("oscAMorph"));
-        expectWithinAbsoluteError (slot0.depth, 0.25f, 1.0e-6f);
+        expectWithinAbsoluteError (slot0.depth, 0.50f, 1.0e-6f);
         for (int i = 1; i < mod::kNumSlots; ++i)
             expect (! fromTree.slots[i].enabled, "remaining slots empty");
 
@@ -567,6 +567,8 @@ public:
                                            direct.macroMaps[m][i].rangeMin, 1.0e-6f);
                 expectWithinAbsoluteError (fromTree.macroMaps[m][i].rangeMax,
                                            direct.macroMaps[m][i].rangeMax, 1.0e-6f);
+                expectWithinAbsoluteError (fromTree.macroMaps[m][i].curve,
+                                           direct.macroMaps[m][i].curve, 1.0e-6f);
             }
 
         beginTest ("neutral at the frozen macro defaults (Init timbre unchanged)");
@@ -677,6 +679,20 @@ public:
         const float halfMacro2[4] = { 0.0f, 0.5f, 0.0f, 0.0f };
         expectWithinAbsoluteError (macroSumForDest (macroConfig, static_cast<int> (Dest::filterRes), halfMacro2),
                                    0.1f + 0.8f * 0.5f, 1.0e-6f); // min + (max-min)*macro
+
+        beginTest ("macro map curve shapes the response, endpoints unchanged");
+        Config curveConfig {};
+        curveConfig.macroMaps[0][0] = { static_cast<int> (Dest::reverbMix), -0.2f, 0.8f, 2.0f };
+        float curveMacros[4] = { 0.5f, 0.0f, 0.0f, 0.0f };
+        // offset = min + (max-min) * macro^curve = -0.2 + 1.0 * 0.25
+        expectWithinAbsoluteError (macroSumForDest (curveConfig, static_cast<int> (Dest::reverbMix), curveMacros),
+                                   0.05f, 1.0e-6f);
+        curveMacros[0] = 0.0f;
+        expectWithinAbsoluteError (macroSumForDest (curveConfig, static_cast<int> (Dest::reverbMix), curveMacros),
+                                   -0.2f, 1.0e-6f);
+        curveMacros[0] = 1.0f;
+        expectWithinAbsoluteError (macroSumForDest (curveConfig, static_cast<int> (Dest::reverbMix), curveMacros),
+                                   0.8f, 1.0e-6f);
     }
 };
 

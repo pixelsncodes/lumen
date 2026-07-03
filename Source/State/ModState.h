@@ -11,7 +11,8 @@ namespace lumen::modstate
 // not host-automatable). Layout inside the APVTS state tree:
 //
 //   <MODMATRIX> <SLOT source="lfo1" dest="filterCutoff" depth="0.4" enabled="1"/> x24 </MODMATRIX>
-//   <MACROS> <MACRO index="0"> <MAP dest="oscAMorph" min="0" max="0.5"/> ... </MACRO> x4 </MACROS>
+//   <MACROS> <MACRO index="0"> <MAP dest="oscAMorph" min="0" max="0.5" curve="1"/> ... </MACRO> x4 </MACROS>
+//   (curve is optional; missing = 1 = linear, see mod::macroMapOffset)
 //
 // Sources and destinations are stored as string tokens so states stay
 // readable and survive enum growth.

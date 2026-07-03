@@ -73,7 +73,9 @@ struct FxParams // SPEC section 10, fixed order Drive->Chorus->Delay->Reverb->Li
 
 struct EngineParams
 {
-    OscParams oscA {};
+    // Osc A ships 4 unison lanes so the Texture macro's detune spread is live
+    // out of the box (Voice zeroes the detune offset when unison == 1).
+    OscParams oscA { .unison = 4 };
     OscParams oscB { .enabled = false };
 
     int   subWave    = 0;       // SubWave
