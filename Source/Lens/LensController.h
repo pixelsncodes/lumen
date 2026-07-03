@@ -34,19 +34,24 @@ public:
     bool loadImage (const juce::Image& image, const juce::String& sourceName);
 
     // Remove the osc's Lens image: clear the table/thumbnail (engine +
-    // state) and revert the osc to the init wavetable if it was playing the
-    // Image slot. Every other patch parameter is left as it is.
+    // state). If the image arrived by drop this session, every parameter and
+    // matrix/macro edit the drop made is restored to its exact pre-drop
+    // value (the overlay is fully non-destructive and reversible); if it
+    // came in with a loaded state, only the table choice reverts (to the
+    // init wavetable, and only if the osc is still on its Image slot).
     void removeImage (int osc);
 
-    // Settings (persisted in the LENS state tree). Changing the mode
-    // re-analyzes the in-session source image if one is still in memory;
-    // after a state reload only the generated table exists (SPEC 13 stores
-    // no source data), so the new mode applies to the next drop.
+    // Settings. Mode and target persist in the LENS state tree; changing the
+    // mode re-analyzes the in-session source image if one is still in memory
+    // (after a state reload only the generated table exists — SPEC 13 stores
+    // no source data — so the new mode applies to the next drop). The COLORS
+    // toggle is session-global: default ON, survives preset loads, and is
+    // never recalled from or written into preset/DAW state.
     void setMode (int newMode);
     void setChroma (bool on);
     void setTarget (int osc);
     int mode() const;
-    bool chroma() const;
+    bool chroma() const noexcept { return chromaOn; }
     int target() const;
 
     // Rebuild engine tables from the stored state (ctor / setStateInformation).
@@ -69,6 +74,9 @@ private:
     static int oscIndex (int osc) noexcept { return osc == 1 ? 1 : 0; }
 
     void analyzeAndInstall (int osc, bool storeState, bool allowChroma);
+    void capturePreImageState (int osc);
+    void restorePreImageState (int osc);
+    static juce::StringArray touchedParamIds (int osc);
     void applyMorphJourney (int osc);
     void removeMorphJourney (int osc);
     void installTable (int osc, const std::vector<float>& frames);
@@ -82,7 +90,20 @@ private:
     SynthEngine& engine;
 
     lens::Analysis session[2];              // in-session sources, not persisted
+    bool chromaOn = true;                   // COLORS: session-global, default ON
     juce::Image display[2];
+
+    // Captured on an osc's no-image -> image transition (drops only, never
+    // state loads) and restored exactly on image-clear: normalized values of
+    // every parameter a drop can write, plus deep copies of the matrix and
+    // macro trees. Invalidated by preset/state loads (new baseline).
+    struct PreImageState
+    {
+        bool valid = false;
+        std::vector<std::pair<juce::String, float>> params; // id -> normalized
+        juce::ValueTree matrix, macros;
+    };
+    PreImageState preImage[2];
     juce::String names[2];
     std::unique_ptr<Wavetable> current[2];
     int version = 0;

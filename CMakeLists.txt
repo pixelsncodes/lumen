@@ -179,6 +179,7 @@ juce_add_console_app(lumen_tests PRODUCT_NAME "lumen_tests")
 
 set(LUMEN_TESTS_SOURCES
     Tools/Tests/TestsMain.cpp
+    Source/Lens/LensController.cpp # drop/clear reversibility test drives it directly
     ${LUMEN_ENGINE_SOURCES}
 )
 target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})

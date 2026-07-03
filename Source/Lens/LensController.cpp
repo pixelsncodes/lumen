@@ -33,6 +33,14 @@ bool LensController::loadImage (const juce::Image& image, const juce::String& so
         return false;
 
     const int osc = target();
+
+    // First drop onto this osc since it was last image-free: snapshot the
+    // pre-image world before anything moves, so image-clear can restore it
+    // exactly. A replace keeps the original snapshot — clearing after two
+    // drops still returns to the values from before the first one.
+    if (! preImage[osc].valid)
+        capturePreImageState (osc);
+
     session[osc] = std::move (analysis);
     display[osc] = session[osc].working;
     names[osc] = sourceName;
@@ -50,6 +58,8 @@ void LensController::applyMorphJourney (int osc)
     // Env 3 becomes the journey ramp: a slow glide to the far end of the
     // image, held there for the rest of the note (constants in LensEngine.h,
     // logged in DECISIONS.md). Decay/release are left to the loaded patch.
+    // Every parameter written here must appear in touchedParamIds(), or
+    // image-clear cannot restore it.
     setParamNatural (params::env3Attack, lens::kJourneyAttackSeconds);
     setParamNatural (params::env3Sustain, 1.0f);
     setParamNatural (params::env3Curve, 0.0f);
@@ -184,8 +194,17 @@ void LensController::removeImage (int osc)
     names[index] = {};
     lensstate::removeImage (apvts.state, index);
 
-    // Revert to the init wavetable only if the osc is still on its Image
-    // slot (leave a user's explicit factory-table choice alone).
+    // Dropped this session: put back exactly what the drop (chroma patch,
+    // morph journey, table/enable switches, macro positions) overwrote.
+    if (preImage[index].valid)
+    {
+        restorePreImageState (index);
+        return;
+    }
+
+    // The image came in with a loaded state — there is no pre-image world to
+    // return to. Revert to the init wavetable only if the osc is still on
+    // its Image slot (leave a user's explicit factory-table choice alone).
     const juce::String tableId = index == 1 ? "oscBTable" : "oscATable";
     if (auto* value = apvts.getRawParameterValue (tableId);
         value != nullptr && juce::roundToInt (value->load()) == 4)
@@ -194,6 +213,62 @@ void LensController::removeImage (int osc)
     // Without an image the journey would sweep the factory table instead;
     // take its route (and the Motion speed map, if unshared) back out.
     removeMorphJourney (index);
+}
+
+juce::StringArray LensController::touchedParamIds (int osc)
+{
+    // Every APVTS parameter loadImage can write, via analyzeAndInstall
+    // (table/enable), applyChromaPatch, or applyMorphJourney. Any new write
+    // in those paths must be added here or image-clear cannot undo it.
+    const juce::String prefix = osc == 1 ? "oscB" : "oscA";
+    return {
+        prefix + "Table", prefix + "Enabled", prefix + "Detune", prefix + "Unison",
+        "filterMode", params::filterCutoff, params::filterRes,
+        params::env1Attack, params::env1Release,
+        params::driveAmount, params::driveEnabled,
+        params::noiseLevel, params::reverbMix,
+        params::macro1, params::macro2, params::macro3, params::macro4,
+        params::lfo1Shape, params::lfo1Sync, params::lfo1Mode, params::lfo1Rate,
+        params::env3Attack, params::env3Sustain, params::env3Curve,
+    };
+}
+
+void LensController::capturePreImageState (int osc)
+{
+    auto& snap = preImage[osc];
+    snap.params.clear();
+    for (const auto& id : touchedParamIds (osc))
+        if (auto* param = apvts.getParameter (id))
+            snap.params.emplace_back (id, param->getValue());
+    snap.matrix = apvts.state.getChildWithName ("MODMATRIX").createCopy();
+    snap.macros = apvts.state.getChildWithName ("MACROS").createCopy();
+    snap.valid = true;
+}
+
+void LensController::restorePreImageState (int osc)
+{
+    auto& snap = preImage[osc];
+    if (! snap.valid)
+        return;
+
+    for (const auto& [id, normalized] : snap.params)
+        if (auto* param = apvts.getParameter (id))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (normalized);
+            param->endChangeGesture();
+        }
+
+    // Whole-tree restore: takes the chroma LFO route, the journey route and
+    // the Motion speed map back out in one bit-exact step.
+    if (auto matrix = apvts.state.getChildWithName ("MODMATRIX");
+        matrix.isValid() && snap.matrix.isValid())
+        matrix.copyPropertiesAndChildrenFrom (snap.matrix, nullptr);
+    if (auto macros = apvts.state.getChildWithName ("MACROS");
+        macros.isValid() && snap.macros.isValid())
+        macros.copyPropertiesAndChildrenFrom (snap.macros, nullptr);
+
+    snap = {};
 }
 
 void LensController::clearTable (int osc)
@@ -239,9 +314,9 @@ void LensController::setMode (int newMode)
 
 void LensController::setChroma (bool on)
 {
-    if (on == chroma())
+    if (on == chromaOn)
         return;
-    lensstate::setChroma (apvts.state, on);
+    chromaOn = on; // session-global only — never written into the state tree
 
     // Turning it on with an image already loaded applies the patch now.
     const int osc = target();
@@ -255,7 +330,6 @@ void LensController::setTarget (int osc)
 }
 
 int LensController::mode() const     { return lensstate::mode (apvts.state); }
-bool LensController::chroma() const  { return lensstate::chroma (apvts.state); }
 int LensController::target() const   { return lensstate::target (apvts.state); }
 
 void LensController::applyStateToEngine()
@@ -265,7 +339,9 @@ void LensController::applyStateToEngine()
     std::vector<float> frames;
     for (int osc = 0; osc < 2; ++osc)
     {
-        session[osc] = {}; // the loaded state has no source image, only data
+        session[osc] = {};  // the loaded state has no source image, only data
+        preImage[osc] = {}; // a loaded state is a new baseline — old snapshots
+                            // must not be restored over it
         if (lensstate::loadImageFrames (apvts.state, osc, frames))
         {
             installTable (osc, frames);
@@ -291,6 +367,8 @@ void LensController::setParamNatural (const juce::String& paramId, float natural
 
 void LensController::applyChromaPatch (const lens::ChromaStats& stats, int osc)
 {
+    // Every parameter written here must appear in touchedParamIds(), or
+    // image-clear cannot restore it.
     const auto t = lens::patchTargetsFor (stats);
     const juce::String prefix = osc == 1 ? "oscB" : "oscA";
 

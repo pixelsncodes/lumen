@@ -4,6 +4,7 @@
 // stealing, mod-matrix math, LFOs, FX bypass null, limiter ceiling.
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_cryptography/juce_cryptography.h>
 #include <juce_dsp/juce_dsp.h>
 
 #include "Engine/Envelope.h"
@@ -14,6 +15,7 @@
 #include "Engine/SVF.h"
 #include "Engine/SynthEngine.h"
 #include "Engine/Wavetable.h"
+#include "Lens/LensController.h"
 #include "Lens/LensEngine.h"
 #include "Lens/TestImages.h"
 #include "State/EngineBindings.h"
@@ -1636,6 +1638,76 @@ public:
     }
 };
 
+// The Lens overlay must be fully non-destructive: dropping an image and then
+// removing it returns the patch to its exact pre-drop state — proven on the
+// rendered audio (SHA-256) and on the state tree bytes. COLORS stays at its
+// session default (ON), so this also covers undoing the chroma patch, the
+// macro knob positions, and the morph-journey routes.
+class LensReversibilityTest final : public juce::UnitTest
+{
+public:
+    LensReversibilityTest()
+        : juce::UnitTest ("Lens drop/clear reversibility (bit-exact render)", "Lens") {}
+
+    static juce::String renderSha256 (NullProcessor& processor, const lumen::LensController& lens)
+    {
+        using namespace lumen;
+
+        EngineParams params;
+        for (auto* raw : processor.getParameters())
+            if (auto* parameter = dynamic_cast<juce::RangedAudioParameter*> (raw))
+                bindings::set (params, parameter->paramID,
+                               parameter->convertFrom0to1 (parameter->getValue()));
+        modstate::buildConfig (processor.apvts.state, params.mod);
+
+        std::vector<float> l, r;
+        presettest::renderParams (params, lens.currentTable (0), lens.currentTable (1), l, r);
+
+        juce::MemoryOutputStream bytes;
+        bytes.write (l.data(), l.size() * sizeof (float));
+        bytes.write (r.data(), r.size() * sizeof (float));
+        return juce::SHA256 (bytes.getMemoryBlock()).toHexString();
+    }
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("render -> drop -> remove -> render is SHA-256 identical");
+
+        NullProcessor processor;
+        modstate::ensureTrees (processor.apvts.state);
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        expect (lens.chroma(), "COLORS session default is ON");
+
+        // Hand-tweaked start (not the parameter defaults): image-clear must
+        // restore this exact value, not the preset default.
+        auto* macro2 = processor.apvts.getParameter (params::macro2);
+        expect (macro2 != nullptr);
+        if (macro2 == nullptr)
+            return;
+        macro2->setValueNotifyingHost (0.37f);
+        const float tweaked = macro2->getValue();
+
+        const auto stateBefore = processor.apvts.copyState().toXmlString();
+        const auto shaBefore = renderSha256 (processor, lens);
+
+        expect (lens.loadImage (lens::testimages::warm(), "warm"), "image loads");
+        expect (! juce::approximatelyEqual (macro2->getValue(), tweaked),
+                "the drop moves the macro knobs (chroma mapping active)");
+        expect (renderSha256 (processor, lens) != shaBefore,
+                "the drop changes the render (guards against a vacuous match)");
+
+        lens.removeImage (0);
+        expectEquals (renderSha256 (processor, lens), shaBefore,
+                      "post-clear render SHA-256 matches the pre-drop render");
+        expectEquals (processor.apvts.copyState().toXmlString(), stateBefore,
+                      "state tree restored byte-exactly (params + matrix + macros)");
+        expectEquals (macro2->getValue(), tweaked, "hand-tweaked macro preserved");
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
@@ -1651,6 +1723,7 @@ LensDeterminismTest lensDeterminismTest;
 LensCentroidTest lensCentroidTest;
 LensStripeBinsTest lensStripeBinsTest;
 LensChromaTest lensChromaTest;
+LensReversibilityTest lensReversibilityTest;
 FactoryPresetBankTest factoryPresetBankTest;
 FactoryPresetAgreementTest factoryPresetAgreementTest;
 FactoryPresetStateTest factoryPresetStateTest;

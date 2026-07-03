@@ -997,8 +997,8 @@ juce::ValueTree buildState (const FactoryPreset& preset,
 
     // LENS settings always present (stable round-trips); frames + thumbnail
     // only for the two Lens-built presets — generated, never a source path.
+    // COLORS is session-global (LensController), not part of preset state.
     lensstate::setMode (state, preset.lens.mode);
-    lensstate::setChroma (state, false);
     lensstate::setTarget (state, preset.hasLens() ? preset.lens.targetOsc : 0);
     if (preset.hasLens())
     {
