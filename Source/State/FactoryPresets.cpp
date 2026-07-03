@@ -72,7 +72,8 @@ namespace
     constexpr float kTriangle = 1.0f, kSawDown = 3.0f, kSquare = 4.0f, kSampleHold = 5.0f;
     constexpr float kSubSine = 0.0f, kSubTri = 1.0f, kSubSquare = 2.0f;
     constexpr float kPink = 1.0f;
-    constexpr float kMono = 1.0f;
+    constexpr float kMono = 1.0f;              // LFO mode
+    constexpr float kVoiceMono = 1.0f, kVoiceLegato = 2.0f; // voiceMode (SPEC 11)
     // Delay sync divisions: base*3 + 0 straight / 1 dotted / 2 triplet.
     constexpr float kDiv12   = 9.0f;   // 1/2
     constexpr float kDiv12D  = 10.0f;  // 1/2 dotted
@@ -111,9 +112,12 @@ namespace
             .done());
 
         // Rubber — elastic resonant pluck bass: closed LP24 kicked open by a
-        // fast envelope; velocity digs into the filter.
+        // fast envelope; velocity digs into the filter. Mono with a short
+        // glide (v1.0 revisit): bass lines slide rubber-band style between
+        // notes while every note still retriggers the pluck.
         bank.push_back (Build ("Rubber", "Bass")
             .macros (0.30f, 0.45f, 0.15f, 0.25f)
+            .set (voiceMode, kVoiceMono).set (glideTime, 0.06f)
             .set (oscAMorph, 0.6f).set (oscAUnison, 1.0f).set (oscALevel, 0.8f)
             .set (subWave, kSubSine).set (subLevel, 0.25f)
             .set (filterMode, kLp24).set (filterCutoff, 260.0f).set (filterRes, 0.4f)
@@ -132,9 +136,12 @@ namespace
             .done());
 
         // Neon Growl — formant bass with an LFO chewing the morph; drive on
-        // both the filter and the bus for bite.
+        // both the filter and the bus for bite. Legato with glide (v1.0
+        // revisit): overlapped playing smears the growl between pitches
+        // without re-kicking the envelope — detached notes still bite.
         bank.push_back (Build ("Neon Growl", "Bass")
             .macros (0.40f, 0.60f, 0.15f, 0.55f)
+            .set (voiceMode, kVoiceLegato).set (glideTime, 0.09f)
             .set (oscATable, kFormant).set (oscAMorph, 0.35f)
             .set (oscAUnison, 2.0f).set (oscADetune, 8.0f).set (oscAWidth, 0.4f).set (oscALevel, 0.9f)
             .set (masterGain, 3.0f)
@@ -220,9 +227,12 @@ namespace
 
         // ================= LEADS ========================================
         // Laser — zap lead: a fast free envelope drops brightness and pitch
-        // on every note; ping-pong eighths echo the zap.
+        // on every note; ping-pong eighths echo the zap. Mono with glide
+        // (v1.0 revisit): every note re-zaps while the pitch sweeps between
+        // successive notes — the classic laser portamento dive.
         bank.push_back (Build ("Laser", "Leads")
             .macros (0.70f, 0.65f, 0.35f, 0.30f)
+            .set (voiceMode, kVoiceMono).set (glideTime, 0.12f)
             .set (oscATable, kRise).set (oscAMorph, 0.9f)
             .set (oscAUnison, 2.0f).set (oscADetune, 10.0f).set (oscAWidth, 0.5f).set (oscALevel, 0.75f)
             .set (masterGain, 3.0f)
