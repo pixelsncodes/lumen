@@ -679,10 +679,6 @@ void HeaderBar::showSaveDialog()
                                           "Stores the patch in Documents/Lumen/Presets.",
                                           juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor ("name", manager.currentName(), "Name");
-    window->addTextEditor ("category", manager.currentCategory().isNotEmpty()
-                                           ? manager.currentCategory()
-                                           : juce::String ("User"), "Category");
-    window->addTextEditor ("author", "", "Author");
     window->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
     window->enterModalState (true, juce::ModalCallbackFunction::create (
@@ -690,9 +686,7 @@ void HeaderBar::showSaveDialog()
         {
             if (result == 1)
                 processor.presetManager().saveUserPreset (
-                    window->getTextEditorContents ("name"),
-                    window->getTextEditorContents ("category"),
-                    window->getTextEditorContents ("author"));
+                    window->getTextEditorContents ("name"));
         }), true);
 }
 

@@ -10,12 +10,7 @@ namespace lumen
 namespace
 {
     constexpr const char* kExtension = ".lumen";
-
-    int categoryRank (const juce::String& category)
-    {
-        const int index = presets::categories().indexOf (category);
-        return index >= 0 ? index : presets::categories().size(); // user categories last
-    }
+    constexpr const char* kUserCategory = "User";
 } // namespace
 
 PresetManager::PresetManager (LumenAudioProcessor& processorToUse)
@@ -40,8 +35,11 @@ void PresetManager::refresh()
         list.push_back ({ preset.name, preset.category, i, {} });
     }
 
-    // User presets: <Presets>/<Category>/<Name>.lumen. Factory names win a
-    // collision (the factory bank is the reference the manual points at).
+    // User presets: every .lumen file under <Presets>/, any depth. Factory
+    // names win a collision (the factory bank is the reference the manual
+    // points at). Display-time bucketing: whatever folder or stored category
+    // a file has, it shows under the single "User" section pinned after the
+    // factory bank — existing saved presets migrate with no state change.
     std::vector<Entry> user;
     for (const auto& file : presetsDirectory().findChildFiles (
              juce::File::findFiles, true, juce::String ("*") + kExtension))
@@ -49,17 +47,10 @@ void PresetManager::refresh()
         const auto name = file.getFileNameWithoutExtension();
         if (presets::find (name) != nullptr)
             continue;
-        const auto parent = file.getParentDirectory();
-        const auto category = parent == presetsDirectory() ? juce::String ("User")
-                                                           : parent.getFileName();
-        user.push_back ({ name, category, -1, file });
+        user.push_back ({ name, kUserCategory, -1, file });
     }
     std::sort (user.begin(), user.end(), [] (const Entry& a, const Entry& b)
     {
-        if (const int rank = categoryRank (a.category) - categoryRank (b.category); rank != 0)
-            return rank < 0;
-        if (a.category != b.category)
-            return a.category.compareIgnoreCase (b.category) < 0;
         return a.name.compareIgnoreCase (b.name) < 0;
     });
     list.insert (list.end(), user.begin(), user.end());
@@ -68,11 +59,6 @@ void PresetManager::refresh()
 juce::String PresetManager::currentName() const
 {
     return processor.apvts.state.getProperty ("presetName", "Init").toString();
-}
-
-juce::String PresetManager::currentCategory() const
-{
-    return processor.apvts.state.getProperty ("presetCategory", "").toString();
 }
 
 int PresetManager::currentIndex() const
@@ -132,20 +118,18 @@ void PresetManager::step (int delta)
     loadIndex (next);
 }
 
-bool PresetManager::saveUserPreset (const juce::String& name, const juce::String& category,
-                                    const juce::String& author)
+bool PresetManager::saveUserPreset (const juce::String& name)
 {
     const auto legalName = juce::File::createLegalFileName (name.trim());
     if (legalName.isEmpty())
         return false;
-    const auto legalCategory = juce::File::createLegalFileName (
-        category.trim().isEmpty() ? juce::String ("User") : category.trim());
 
     processor.apvts.state.setProperty ("presetName", legalName, nullptr);
-    processor.apvts.state.setProperty ("presetCategory", legalCategory, nullptr);
-    processor.apvts.state.setProperty ("presetAuthor", author.trim(), nullptr);
+    processor.apvts.state.setProperty ("presetCategory", juce::String (kUserCategory), nullptr);
+    // No author prompt for user saves; drop any factory author riding along.
+    processor.apvts.state.removeProperty ("presetAuthor", nullptr);
 
-    const auto file = presetsDirectory().getChildFile (legalCategory)
+    const auto file = presetsDirectory().getChildFile (kUserCategory)
                           .getChildFile (legalName + kExtension);
     if (! file.getParentDirectory().createDirectory())
         return false;

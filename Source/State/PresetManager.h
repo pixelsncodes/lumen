@@ -35,7 +35,6 @@ public:
     const std::vector<Entry>& entries() const noexcept { return list; }
 
     juce::String currentName() const;    // "Init" when the state has no name
-    juce::String currentCategory() const;
     int currentIndex() const;            // -1 when the name isn't in the list
 
     bool loadIndex (int index);
@@ -43,9 +42,10 @@ public:
     void step (int delta);               // < / > stepping, wraps around
 
     // Saves the live state (parameters + matrix/macros + Lens data) as a
-    // user .lumen file; overwrites same-named files. Empty category -> User.
-    bool saveUserPreset (const juce::String& name, const juce::String& category,
-                         const juce::String& author);
+    // user .lumen file at <Presets>/User/<Name>.lumen; overwrites same-named
+    // files. User presets always live in the "User" category (name only —
+    // there is no category or author prompt).
+    bool saveUserPreset (const juce::String& name);
 
 private:
     LumenAudioProcessor& processor;
