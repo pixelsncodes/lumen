@@ -267,6 +267,7 @@ EnvCard::EnvCard (const UiShared& shared)
     : CardPanel ("ENVELOPES", theme::neonYellow),
       tabs ({ "1", "2", "3" }, [this] (int index) { setActiveEnv (index); })
 {
+    tabs.setTooltip ("Show envelope 1, 2 or 3 (1 = volume, 2 = filter, 3 = free)");
     addAndMakeVisible (tabs);
 
     for (int e = 0; e < 3; ++e)
@@ -324,6 +325,7 @@ LfoCard::LfoCard (const UiShared& shared)
     : CardPanel ("LFOS", theme::neonYellow),
       tabs ({ "1", "2", "3" }, [this] (int index) { setActiveLfo (index); })
 {
+    tabs.setTooltip ("Show LFO 1, 2 or 3");
     addAndMakeVisible (tabs);
 
     for (int k = 0; k < 3; ++k)
@@ -540,6 +542,9 @@ HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewCh
 
     presetPrev.onClick = [this] { processor.presetManager().step (-1); };
     presetNext.onClick = [this] { processor.presetManager().step (1); };
+    presetPrev.setTooltip ("Previous preset");
+    presetNext.setTooltip ("Next preset");
+    viewTabs.setTooltip ("Play = perform view, Deep = full patch editor");
     for (auto* button : { &presetPrev, &presetNext })
         addAndMakeVisible (button);
 

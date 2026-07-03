@@ -112,6 +112,7 @@ target_sources(Lumen PRIVATE
     Source/State/MidiLearn.h
     Source/State/PresetManager.h
     Source/UI/Theme.h
+    Source/UI/Tooltips.h
     Source/UI/LumenLookAndFeel.h
     Source/UI/Controls.h
     Source/UI/WaterfallModel.h

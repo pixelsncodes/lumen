@@ -3,6 +3,7 @@
 #include "Lens/LensController.h"
 #include "State/MidiLearn.h"
 #include "UI/Theme.h"
+#include "UI/Tooltips.h"
 
 namespace
 {
@@ -208,6 +209,20 @@ void LumenAudioProcessorEditor::showPresetMenu()
 void LumenAudioProcessorEditor::showGearMenu()
 {
     header->showGearMenu();
+}
+
+bool LumenAudioProcessorEditor::showTooltipFor (const juce::String& paramId)
+{
+    for (auto* knob : knobRegistry)
+        if (knob->parameterID() == paramId && knob->isShowing())
+        {
+            const auto tip = tooltips::forParam (paramId);
+            if (tip.isEmpty())
+                return false;
+            tooltipWindow.displayTip (knob->getScreenBounds().getBottomLeft(), tip);
+            return true;
+        }
+    return false;
 }
 
 void LumenAudioProcessorEditor::setHudEnabled (bool enabled)

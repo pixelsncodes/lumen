@@ -2,6 +2,7 @@
 
 #include "State/MidiLearn.h"
 #include "State/ModState.h"
+#include "UI/Tooltips.h"
 #include "UI/LumenLookAndFeel.h"
 #include "UI/Theme.h"
 
@@ -87,6 +88,7 @@ ModKnob::ModKnob (const UiShared& sharedContext, const juce::String& paramID,
 
     slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     slider.setColour (juce::Slider::thumbColourId, accent);
+    slider.setTooltip (tooltips::forParam (paramId));
     slider.onContextMenu = [this] { showContextMenu(); };
     addAndMakeVisible (slider);
 
@@ -398,6 +400,7 @@ ChoiceCombo::ChoiceCombo (const UiShared& sharedContext, const juce::String& par
         for (int i = 0; i < choices.size(); ++i)
             box.addItem (choices[i], i + 1);
     }
+    box.setTooltip (tooltips::forParam (paramID));
     addAndMakeVisible (box);
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         sharedContext.apvts(), paramID, box);
@@ -410,6 +413,7 @@ ParamToggle::ParamToggle (const UiShared& sharedContext, const juce::String& par
     button.setComponentID (powerStyle ? "power" : "chip");
     button.setButtonText (text);
     button.setColour (juce::TextButton::buttonOnColourId, accentColour);
+    button.setTooltip (tooltips::forParam (paramID));
     addAndMakeVisible (button);
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         sharedContext.apvts(), paramID, button);
@@ -467,6 +471,12 @@ void TabsBar::resized()
     }
 }
 
+void TabsBar::setTooltip (const juce::String& tip)
+{
+    for (auto* button : buttons)
+        button->setTooltip (tip);
+}
+
 void TabsBar::setActive (int index, bool notify)
 {
     activeIndex = juce::jlimit (0, buttons.size() - 1, index);
@@ -481,6 +491,7 @@ ModSourceChip::ModSourceChip (const UiShared& sharedContext, int sourceIndex,
     : shared (sharedContext), source (sourceIndex), text (chipText), accent (accentColour)
 {
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    setTooltip ("Drag " + chipText + " onto any knob to modulate it");
 }
 
 void ModSourceChip::paint (juce::Graphics& g)

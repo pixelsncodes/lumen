@@ -139,6 +139,12 @@ public:
                 bgIndex >= 0 && bgIndex + 1 < args.size())
                 menuBg = args[bgIndex + 1];
 
+            // --tooltip <paramId> pins that knob's tooltip before the snap
+            // (tooltips pass proof).
+            if (const auto tipIndex = args.indexOf ("--tooltip");
+                tipIndex >= 0 && tipIndex + 1 < args.size())
+                tooltipParam = args[tipIndex + 1];
+
             harnessProcessor.reset (::createPluginFilter());
 
             // --lens-image: run the Lens engine before the editor opens so
@@ -421,6 +427,11 @@ private:
     void takeScreenshotAndQuit()
     {
         midiPump = nullptr;
+        if (tooltipParam.isNotEmpty())
+            if (auto* editor = dynamic_cast<LumenAudioProcessorEditor*> (harnessEditor.get()))
+                if (! editor->showTooltipFor (tooltipParam))
+                    printToStdout ("Warning: --tooltip found no visible knob for '"
+                                   + tooltipParam + "'\n");
         finishScreenshot (harnessEditor != nullptr && writeSnapshot (*harnessEditor));
     }
 
@@ -570,6 +581,7 @@ private:
     juce::File screenshotFile;
     juce::String menuMode; // "" | "preset" | "gear" for --screenshot --menu
     juce::String menuBg;   // "" | "bright" | "dark" backdrop for --menu-bg
+    juce::String tooltipParam; // paramId whose tooltip --tooltip pins
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<juce::AudioProcessorPlayer> player;

@@ -137,6 +137,7 @@ public:
     void resized() override;
     void setActive (int index, bool notify);
     int active() const noexcept { return activeIndex; }
+    void setTooltip (const juce::String& tip); // one description for the whole bar
 
 private:
     juce::OwnedArray<juce::TextButton> buttons;
@@ -146,7 +147,8 @@ private:
 
 // Draggable modulation-source grab handle (SPEC 9 UX). Glows with the live
 // source value from the engine tap.
-class ModSourceChip final : public juce::Component
+class ModSourceChip final : public juce::Component,
+                            public juce::SettableTooltipClient
 {
 public:
     ModSourceChip (const UiShared& sharedContext, int sourceIndex,

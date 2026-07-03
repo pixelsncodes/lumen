@@ -54,6 +54,10 @@ public:
     void showPresetMenu();
     void showGearMenu();
 
+    // Display a control's tooltip for a --screenshot run (tooltips pass):
+    // finds the knob attached to paramId and pins its tip next to it.
+    bool showTooltipFor (const juce::String& paramId);
+
     // Screenshot/headless runs skip the OpenGL context (software path only —
     // identical output by construction). Set before creating the editor.
     static bool disableOpenGL;
@@ -86,6 +90,7 @@ private:
     std::unique_ptr<HeaderBar> header;
     std::unique_ptr<DeepView> deepView;
     std::unique_ptr<PlayView> playView;
+    juce::TooltipWindow tooltipWindow { &content }; // parented: tips render inside the editor
 
     juce::OpenGLContext glContext;
     bool glAttached = false;

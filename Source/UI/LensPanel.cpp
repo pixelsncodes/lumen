@@ -253,12 +253,14 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
                   [this] (int index) { shared.processor.lensController().setTarget (index); })
 {
     addAndMakeVisible (image);
+    modeTabs.setTooltip ("Scan plays image rows as waveforms; Spectral reads it as a spectrogram");
+    targetTabs.setTooltip ("Which oscillator receives the image wavetable");
     addAndMakeVisible (modeTabs);
     addAndMakeVisible (targetTabs);
 
     colorsChip.setClickingTogglesState (false);
     colorsChip.setColour (juce::TextButton::buttonOnColourId, theme::accentMod);
-    colorsChip.setTooltip ("Set patch from colors");
+    colorsChip.setTooltip ("COLORS: an image drop also sets the patch from the image's colors");
     colorsChip.onClick = [this]
     {
         auto& lens = shared.processor.lensController();
