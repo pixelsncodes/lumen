@@ -28,7 +28,7 @@ juce::ValueTree ensureTree (juce::ValueTree& state)
     {
         lens = juce::ValueTree (kLens);
         lens.setProperty (kMode, 0, nullptr);
-        lens.setProperty (kChroma, 0, nullptr);
+        lens.setProperty (kChroma, 1, nullptr); // COLORS defaults ON (see chroma())
         lens.setProperty (kTarget, 0, nullptr);
         state.appendChild (lens, nullptr);
     }
@@ -47,7 +47,10 @@ int mode (const juce::ValueTree& state)
 
 bool chroma (const juce::ValueTree& state)
 {
-    return static_cast<int> (getTree (state).getProperty (kChroma, 0)) != 0;
+    // Default ON: a Lens tree with no explicit chroma property (a bare/init
+    // state) sets patch-from-colors for the first image drop. Factory presets
+    // and saved patches carry an explicit flag, so they are unaffected.
+    return static_cast<int> (getTree (state).getProperty (kChroma, 1)) != 0;
 }
 
 int target (const juce::ValueTree& state)

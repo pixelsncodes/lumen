@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h> // MidiKeyboardComponent
 
 #include "UI/LensPanel.h"
+#include "UI/LumenLookAndFeel.h"
 #include "UI/Visualizers.h"
 
 // SPEC section 14 Deep/Play view building blocks. The whole UI is laid out
@@ -156,30 +157,62 @@ private:
     ScopeView scope;
 };
 
-// Header: logo | preset strip (name + browser popup + < >) | Play/Deep |
-// master + meter. The strip reads the live preset name off the state tree
-// each animate tick, so DAW recall and factory loads stay in sync.
+// Small header glyph button (gear / minimize / close). Close-hover goes red.
+class HeaderIconButton final : public juce::Button
+{
+public:
+    enum class Glyph { gear, minimize, close };
+    HeaderIconButton (Glyph glyphToDraw, const juce::String& tip);
+
+    void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
+
+private:
+    Glyph glyph;
+};
+
+// Header: wordmark | preset strip (name + browser popup + < >) | Play/Deep |
+// gear | master + meter | window controls. The strip reads the live preset
+// name off the state tree each animate tick, so DAW recall and factory loads
+// stay in sync. In the standalone build the header IS the title bar: the gear
+// opens the audio/MIDI settings, minimize/close sit past the meter, and
+// dragging an empty region moves the window. In the plugin build the host owns
+// the frame — no window controls, and the gear opens a minimal settings menu.
 class HeaderBar final : public juce::Component
 {
 public:
-    HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange);
+    HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange,
+               bool standaloneChrome, std::function<void()> onOpenSettings);
 
     void resized() override;
     void paint (juce::Graphics& g) override;
     void animate();
     void setViewIndex (int index) { viewTabs.setActive (index, false); }
 
-private:
+    // Public for the --screenshot harness (SPEC 18): open the branded menus.
     void showBrowserMenu();
+    void showGearMenu();
+
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+
+private:
     void showSaveDialog();
 
     LumenAudioProcessor& processor;
+    bool standalone;
+    std::function<void()> openSettings;
+    LumenMenuLookAndFeel menuLnf;
+
     TabsBar viewTabs;
     juce::TextButton presetPrev { "<" }, presetNext { ">" };
     juce::TextButton presetName;
     juce::String shownName;
+    HeaderIconButton gear { HeaderIconButton::Glyph::gear, "Settings" };
     ModKnob master;
     MeterView meter;
+    HeaderIconButton minimizeButton { HeaderIconButton::Glyph::minimize, "Minimize" };
+    HeaderIconButton closeButton { HeaderIconButton::Glyph::close, "Close" };
+    juce::ComponentDragger windowDragger;
 };
 
 // Deep view: the SPEC 14 card grid + footer.

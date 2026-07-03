@@ -461,11 +461,68 @@ void FooterBar::animate()
 }
 
 // ---------------------------------------------------------------------------
+// HeaderIconButton
+// ---------------------------------------------------------------------------
+
+HeaderIconButton::HeaderIconButton (Glyph glyphToDraw, const juce::String& tip)
+    : juce::Button (tip), glyph (glyphToDraw)
+{
+    setTooltip (tip);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void HeaderIconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    const auto centre = bounds.getCentre();
+    const float s = juce::jmin (bounds.getWidth(), bounds.getHeight());
+
+    juce::Colour col = highlighted ? theme::textPrimary : theme::textSecondary;
+    if (glyph == Glyph::close && highlighted)
+        col = theme::meterHot; // close-hover = red (#FF3B30)
+    if (down)
+        col = col.brighter (0.2f);
+    g.setColour (col);
+
+    if (glyph == Glyph::gear)
+    {
+        const int teeth = 8, n = teeth * 4;
+        const float rO = s * 0.34f, rI = s * 0.20f;
+        juce::Path cog;
+        for (int k = 0; k <= n; ++k)
+        {
+            const float ang = juce::MathConstants<float>::twoPi * (float) k / (float) n;
+            const float rr = (k % 4 == 0 || k % 4 == 1) ? rO : rI;
+            const auto p = centre.getPointOnCircumference (rr, ang);
+            if (k == 0) cog.startNewSubPath (p); else cog.lineTo (p);
+        }
+        cog.closeSubPath();
+        g.strokePath (cog, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved,
+                                                 juce::PathStrokeType::rounded));
+        g.drawEllipse (juce::Rectangle<float> (s * 0.18f, s * 0.18f).withCentre (centre), 1.4f);
+    }
+    else if (glyph == Glyph::minimize)
+    {
+        const float y = centre.y + s * 0.14f;
+        g.drawLine (centre.x - s * 0.22f, y, centre.x + s * 0.22f, y, 1.4f);
+    }
+    else // close
+    {
+        const float d = s * 0.20f;
+        g.drawLine (centre.x - d, centre.y - d, centre.x + d, centre.y + d, 1.4f);
+        g.drawLine (centre.x + d, centre.y - d, centre.x - d, centre.y + d, 1.4f);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // HeaderBar
 // ---------------------------------------------------------------------------
 
-HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange)
+HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange,
+                      bool standaloneChrome, std::function<void()> onOpenSettings)
     : processor (shared.processor),
+      standalone (standaloneChrome),
+      openSettings (std::move (onOpenSettings)),
       viewTabs ({ "PLAY", "DEEP" }, std::move (onViewChange)),
       master (shared, "masterGain", "Main", theme::neonYellow),
       meter (shared)
@@ -486,16 +543,39 @@ HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewCh
     presetName.setTooltip ("Preset browser (click to open)");
     presetName.onClick = [this] { showBrowserMenu(); };
     addAndMakeVisible (presetName);
+
+    gear.onClick = [this] { showGearMenu(); };
+    addAndMakeVisible (gear);
+
+    // Window controls live in the header only in the standalone (borderless)
+    // build; the plugin host owns its frame.
+    minimizeButton.onClick = [this]
+    {
+        if (auto* peer = getTopLevelComponent()->getPeer())
+            peer->setMinimised (true);
+    };
+    closeButton.onClick = [this]
+    {
+        if (auto* peer = getTopLevelComponent()->getPeer())
+            peer->handleUserClosingWindow(); // routes to the window's save+quit
+    };
+    addChildComponent (minimizeButton);
+    addChildComponent (closeButton);
+    minimizeButton.setVisible (standalone);
+    closeButton.setVisible (standalone);
 }
 
 void HeaderBar::resized()
 {
-    presetPrev.setBounds (354, 14, 22, 20);
-    presetName.setBounds (380, 12, 240, 24);
-    presetNext.setBounds (624, 14, 22, 20);
-    viewTabs.setBounds (700, 13, 130, 22);
-    master.setBounds (848, 1, 46, 46);
-    meter.setBounds (910, 14, 120, 20);
+    presetPrev.setBounds (356, 14, 20, 20);
+    presetName.setBounds (380, 12, 232, 24);
+    presetNext.setBounds (616, 14, 20, 20);
+    viewTabs.setBounds (648, 13, 118, 22);
+    gear.setBounds (774, 12, 24, 24);
+    master.setBounds (808, 1, 46, 46);
+    meter.setBounds (864, 14, 104, 20);
+    minimizeButton.setBounds (978, 14, 22, 20);
+    closeButton.setBounds (1006, 14, 22, 20);
 }
 
 void HeaderBar::paint (juce::Graphics& g)
@@ -506,14 +586,53 @@ void HeaderBar::paint (juce::Graphics& g)
 
     g.setColour (theme::textPrimary);
     g.setFont (theme::semiBold (22.0f));
-    g.drawText ("LUMEN", 24, 0, 160, getHeight(), juce::Justification::centredLeft);
+    theme::drawTrackedText (g, "LUMEN", { 24, 0, 240, getHeight() },
+                            juce::Justification::centredLeft, 0.34f);
 
     // Preset strip well; the name button sits transparently on top.
-    const auto strip = juce::Rectangle<float> (350.0f, 12.0f, 300.0f, 24.0f);
+    const auto strip = juce::Rectangle<float> (350.0f, 12.0f, 290.0f, 24.0f);
     g.setColour (theme::panel);
     g.fillRoundedRectangle (strip, 5.0f);
     g.setColour (theme::hairline);
     g.drawRoundedRectangle (strip, 5.0f, 1.0f);
+}
+
+void HeaderBar::mouseDown (const juce::MouseEvent& e)
+{
+    // Standalone: the header is the title bar — drag an empty region to move
+    // the borderless window (child buttons/knobs consume their own events).
+    if (standalone)
+        windowDragger.startDraggingComponent (getTopLevelComponent(), e);
+}
+
+void HeaderBar::mouseDrag (const juce::MouseEvent& e)
+{
+    if (standalone)
+        windowDragger.dragComponent (getTopLevelComponent(), e, nullptr);
+}
+
+void HeaderBar::showGearMenu()
+{
+    // Standalone: the gear opens the audio/MIDI device settings dialog.
+    if (standalone)
+    {
+        if (openSettings != nullptr)
+            openSettings();
+        return;
+    }
+
+    // Plugin: a minimal branded menu (about/version for now — MIDI Learn +
+    // tooltips populate it later).
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&menuLnf);
+    menu.addSectionHeader ("Lumen");
+    menu.addItem (1, "Version " + juce::String (JucePlugin_VersionString), false, false);
+    menu.addSeparator();
+    menu.addItem (2, "MIDI Learn", false, false);
+    menu.addItem (3, "Tooltips", false, false);
+    menu.showMenuAsync (juce::PopupMenu::Options()
+                            .withTargetComponent (gear)
+                            .withMinimumWidth (190));
 }
 
 void HeaderBar::showBrowserMenu()
@@ -522,6 +641,7 @@ void HeaderBar::showBrowserMenu()
     manager.refresh();
 
     juce::PopupMenu menu;
+    menu.setLookAndFeel (&menuLnf);
     const int current = manager.currentIndex();
     juce::String lastCategory;
     for (int i = 0; i < static_cast<int> (manager.entries().size()); ++i)

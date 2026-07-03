@@ -236,3 +236,117 @@ void LumenLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool 
         g.drawLine ((float) w - off, (float) h - 1.0f, (float) w - 1.0f, (float) h - off, 1.2f);
     }
 }
+
+// ---------------------------------------------------------------------------
+// LumenMenuLookAndFeel — branded popup menus (preset browser + gear menu)
+// ---------------------------------------------------------------------------
+
+void LumenMenuLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+{
+    const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
+    g.setColour (theme::menuPanel);
+    g.fillRoundedRectangle (bounds, theme::menuRadius);
+    g.setColour (theme::menuBorder);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), theme::menuRadius, 1.0f);
+}
+
+int LumenMenuLookAndFeel::getPopupMenuBorderSize()
+{
+    return 8; // keeps items clear of the rounded corners
+}
+
+void LumenMenuLookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator,
+                                                      int standardMenuItemHeight,
+                                                      int& idealWidth, int& idealHeight)
+{
+    if (isSeparator)
+    {
+        idealWidth = 60;
+        idealHeight = 11;
+        return;
+    }
+
+    auto font = getPopupMenuFont();
+    idealHeight = standardMenuItemHeight > 0 ? juce::jmax (standardMenuItemHeight, 26)
+                                             : juce::roundToInt (font.getHeight() * 1.9f);
+    idealWidth = juce::GlyphArrangement::getStringWidthInt (font, text) + idealHeight + 40;
+}
+
+void LumenMenuLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                              bool isSeparator, bool isActive, bool isHighlighted,
+                                              bool isTicked, bool hasSubMenu, const juce::String& text,
+                                              const juce::String& shortcutKeyText,
+                                              const juce::Drawable*, const juce::Colour* textColour)
+{
+    if (isSeparator)
+    {
+        auto r = area.reduced (10, 0);
+        g.setColour (theme::menuBorder);
+        g.fillRect (r.withHeight (1).withY (area.getCentreY()));
+        return;
+    }
+
+    auto r = area.reduced (4, 1);
+
+    if (isHighlighted && isActive)
+    {
+        g.setColour (theme::neonYellow.withAlpha (0.10f));
+        g.fillRoundedRectangle (r.toFloat(), 5.0f);
+    }
+
+    auto contentColour = isTicked ? theme::neonYellow
+                                  : (textColour != nullptr ? *textColour : theme::menuItem);
+    if (! isActive)
+        contentColour = contentColour.withMultipliedAlpha (0.4f);
+
+    r.reduce (6, 0);
+    auto tickArea = r.removeFromLeft (18);
+    if (isTicked)
+    {
+        juce::Path tick;
+        const auto t = tickArea.toFloat().reduced (tickArea.getWidth() * 0.28f,
+                                                   tickArea.getHeight() * 0.34f);
+        tick.startNewSubPath (t.getX(), t.getCentreY() + t.getHeight() * 0.05f);
+        tick.lineTo (t.getCentreX() - t.getWidth() * 0.12f, t.getBottom());
+        tick.lineTo (t.getRight(), t.getY());
+        g.setColour (theme::neonYellow);
+        g.strokePath (tick, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+    }
+
+    if (hasSubMenu)
+    {
+        const float arrowH = 0.55f * getPopupMenuFont().getAscent();
+        const float x = (float) r.removeFromRight ((int) arrowH).getX();
+        const float halfH = (float) r.getCentreY();
+        juce::Path arrow;
+        arrow.startNewSubPath (x, halfH - arrowH * 0.5f);
+        arrow.lineTo (x + arrowH * 0.55f, halfH);
+        arrow.lineTo (x, halfH + arrowH * 0.5f);
+        g.setColour (contentColour);
+        g.strokePath (arrow, juce::PathStrokeType (1.6f));
+    }
+
+    g.setColour (contentColour);
+    g.setFont (getPopupMenuFont());
+    g.drawFittedText (text, r, juce::Justification::centredLeft, 1);
+
+    if (shortcutKeyText.isNotEmpty())
+    {
+        g.setColour (theme::menuHeader);
+        g.setFont (theme::font (11.0f));
+        g.drawText (shortcutKeyText, r, juce::Justification::centredRight, true);
+    }
+}
+
+void LumenMenuLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g,
+                                                       const juce::Rectangle<int>& area,
+                                                       const juce::String& sectionName)
+{
+    g.setColour (theme::menuHeader);
+    g.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
+                                              10.0f, juce::Font::plain)));
+    theme::drawTrackedText (g, sectionName.toUpperCase(),
+                            area.reduced (12, 0).withTrimmedTop (4),
+                            juce::Justification::centredLeft, 0.22f);
+}

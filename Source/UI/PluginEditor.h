@@ -6,6 +6,7 @@
 #include "UI/LumenLookAndFeel.h"
 
 #include <atomic>
+#include <functional>
 
 // Phase 5 editor: Play + Deep views (SPEC 14), OpenGL-accelerated with an
 // identical software paint path (all drawing goes through paint(), so
@@ -49,9 +50,23 @@ public:
     FrameStats getFrameStats() const;
     juce::StringArray missingParameterIds() const; // --check-params
 
+    // Open the branded header menus for a --screenshot run (SPEC 18).
+    void showPresetMenu();
+    void showGearMenu();
+
     // Screenshot/headless runs skip the OpenGL context (software path only —
     // identical output by construction). Set before creating the editor.
     static bool disableOpenGL;
+
+    // Header chrome: -1 = auto (standalone app -> window controls, plugin ->
+    // none), 0 = force plugin chrome, 1 = force standalone chrome. The
+    // --screenshot harness forces a value to capture either header. Set before
+    // creating the editor.
+    static int chromeOverride;
+
+    // Set by the standalone app so the header gear can open the audio/MIDI
+    // settings dialog without the shared UI depending on standalone headers.
+    static std::function<void()> standaloneSettingsHook;
 
 private:
     void timerCallback() override;

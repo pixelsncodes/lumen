@@ -16,6 +16,8 @@ namespace
 } // namespace
 
 bool LumenAudioProcessorEditor::disableOpenGL = false;
+int LumenAudioProcessorEditor::chromeOverride = -1;
+std::function<void()> LumenAudioProcessorEditor::standaloneSettingsHook = nullptr;
 
 LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& processorToUse)
     : juce::AudioProcessorEditor (&processorToUse),
@@ -24,7 +26,12 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
 {
     setLookAndFeel (&lumenLnf);
 
-    header = std::make_unique<HeaderBar> (shared, [this] (int index) { setView (index); });
+    const bool standaloneChrome = chromeOverride < 0
+        ? juce::JUCEApplicationBase::isStandaloneApp()
+        : chromeOverride == 1;
+
+    header = std::make_unique<HeaderBar> (shared, [this] (int index) { setView (index); },
+                                          standaloneChrome, standaloneSettingsHook);
     deepView = std::make_unique<DeepView> (shared, history);
     playView = std::make_unique<PlayView> (shared, history, keyboardState);
 
@@ -190,6 +197,16 @@ void LumenAudioProcessorEditor::setView (int index)
     playView->setVisible (! deep);
     header->setViewIndex (deep ? 1 : 0);
     processor.apvts.state.setProperty ("uiView", deep ? "deep" : "play", nullptr);
+}
+
+void LumenAudioProcessorEditor::showPresetMenu()
+{
+    header->showBrowserMenu();
+}
+
+void LumenAudioProcessorEditor::showGearMenu()
+{
+    header->showGearMenu();
 }
 
 void LumenAudioProcessorEditor::setHudEnabled (bool enabled)

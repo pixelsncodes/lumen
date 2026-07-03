@@ -4,7 +4,7 @@
 
 // SPEC section 14 look: flat, OP-1 Field-inspired but original. Dark panels,
 // hairline strokes, per-module accent colors, Inter embedded via BinaryData.
-class LumenLookAndFeel final : public juce::LookAndFeel_V4
+class LumenLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     LumenLookAndFeel();
@@ -43,4 +43,29 @@ public:
     // Rotary sweep used everywhere: -135 deg .. +135 deg around 12 o'clock.
     static constexpr float rotaryStart = juce::MathConstants<float>::pi * 1.25f;
     static constexpr float rotaryEnd   = juce::MathConstants<float>::pi * 2.75f;
+};
+
+// Branded PopupMenu look, reused by the preset browser and the gear menu:
+// rounded #151518 panel with a #2a2a2f border, uppercase mono section
+// headers, #d8d5cc items, a neon-yellow hover row + ticked current item, and
+// hairline separators. Inherits every other control style from LumenLookAndFeel
+// so a menu shown with it set still matches the rest of the plugin.
+class LumenMenuLookAndFeel final : public LumenLookAndFeel
+{
+public:
+    void drawPopupMenuBackground (juce::Graphics& g, int width, int height) override;
+    int getPopupMenuBorderSize() override;
+
+    void getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator,
+                                    int standardMenuItemHeight,
+                                    int& idealWidth, int& idealHeight) override;
+
+    void drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
+                            bool isSeparator, bool isActive, bool isHighlighted, bool isTicked,
+                            bool hasSubMenu, const juce::String& text,
+                            const juce::String& shortcutKeyText,
+                            const juce::Drawable* icon, const juce::Colour* textColour) override;
+
+    void drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                     const juce::String& sectionName) override;
 };

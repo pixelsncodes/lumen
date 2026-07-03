@@ -76,4 +76,49 @@ inline juce::Font semiBold (float height)  { return juce::Font (juce::FontOption
 // Flat design, 8-10 px corner radius (SPEC 14).
 inline constexpr float cornerRadius = 8.0f;
 inline constexpr float wellRadius = 6.0f;
+
+// Branded popup-menu palette (preset browser + gear menu share one look).
+inline const juce::Colour menuPanel   { 0xff151518 };
+inline const juce::Colour menuBorder  { 0xff2a2a2f };
+inline const juce::Colour menuItem     { 0xffd8d5cc };
+inline const juce::Colour menuHeader   { 0xff6f6d64 };
+inline constexpr float menuRadius = 10.0f;
+
+// Draws a single styled string with extra inter-letter tracking (em is the
+// font height), e.g. the "L U M E N" wordmark and menu section headers. One
+// string, not literal spaces — advances each glyph by its own width so the
+// kerning stays even. Text is vertically centred in `area`.
+inline void drawTrackedText (juce::Graphics& g, const juce::String& text,
+                             juce::Rectangle<int> area, juce::Justification just,
+                             float trackingEm)
+{
+    const auto f = g.getCurrentFont();
+    const float tracking = trackingEm * f.getHeight();
+
+    float total = -tracking;
+    juce::Array<float> advances;
+    for (auto c : text)
+    {
+        const float w = juce::GlyphArrangement::getStringWidth (f, juce::String::charToString (c))
+                        + tracking;
+        advances.add (w);
+        total += w;
+    }
+
+    float x = (float) area.getX();
+    if (just.testFlags (juce::Justification::horizontallyCentred))
+        x = area.getCentreX() - total * 0.5f;
+    else if (just.testFlags (juce::Justification::right))
+        x = (float) area.getRight() - total;
+
+    const int baseline = juce::roundToInt (
+        area.getY() + (area.getHeight() + f.getAscent() - f.getDescent()) * 0.5f);
+
+    int i = 0;
+    for (auto c : text)
+    {
+        g.drawSingleLineText (juce::String::charToString (c), juce::roundToInt (x), baseline);
+        x += advances[i++];
+    }
+}
 } // namespace lumen::theme

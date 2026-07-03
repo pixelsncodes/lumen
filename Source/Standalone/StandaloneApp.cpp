@@ -24,6 +24,8 @@
 
 #include "Lens/LensController.h"
 #include "PluginProcessor.h"
+#include "State/PresetManager.h"
+#include "UI/LumenLookAndFeel.h"
 #include "UI/PluginEditor.h"
 
 #include <cstdio>
@@ -46,6 +48,22 @@ namespace
             return args[viewIndex + 1] == "deep" ? 1 : 0;
         return 0;
     }
+
+    // Borderless standalone window: the app header IS the title bar. Dropping
+    // the JUCE title bar to height 0 removes both the drawn title strip and the
+    // StandaloneFilterWindow "Options" button; the header's gear/minimize/close
+    // take over and dragging an empty header region moves the window.
+    class LumenStandaloneWindow final : public juce::StandaloneFilterWindow
+    {
+    public:
+        LumenStandaloneWindow (const juce::String& title, juce::Colour backgroundColour,
+                               juce::PropertySet* settingsToUse, bool takeOwnershipOfSettings)
+            : juce::StandaloneFilterWindow (title, backgroundColour,
+                                            settingsToUse, takeOwnershipOfSettings)
+        {
+            setTitleBarHeight (0);
+        }
+    };
 } // namespace
 
 class LumenStandaloneApp final : public juce::JUCEApplication
@@ -101,6 +119,19 @@ public:
             // Software rendering only: identical paint path (SPEC section 2).
             LumenAudioProcessorEditor::disableOpenGL = true;
 
+            // --chrome plugin|standalone forces the header style so both the
+            // borderless standalone header and the frameless plugin header can
+            // be captured from this one binary (default: auto = standalone).
+            if (const auto chromeIndex = args.indexOf ("--chrome");
+                chromeIndex >= 0 && chromeIndex + 1 < args.size())
+                LumenAudioProcessorEditor::chromeOverride =
+                    args[chromeIndex + 1] == "plugin" ? 0 : 1;
+
+            // --menu preset|gear opens the branded header menu before the snap.
+            if (const auto menuIndex = args.indexOf ("--menu");
+                menuIndex >= 0 && menuIndex + 1 < args.size())
+                menuMode = args[menuIndex + 1];
+
             harnessProcessor.reset (::createPluginFilter());
 
             // --lens-image: run the Lens engine before the editor opens so
@@ -155,7 +186,10 @@ public:
             }
 
             // Let first paints and timers run before snapshotting (SPEC section 18).
-            juce::Timer::callAfterDelay (700, [this] { takeScreenshotAndQuit(); });
+            if (menuMode.isNotEmpty())
+                juce::Timer::callAfterDelay (700, [this] { captureMenuAndQuit(); });
+            else
+                juce::Timer::callAfterDelay (700, [this] { takeScreenshotAndQuit(); });
             return;
         }
 
@@ -166,10 +200,18 @@ public:
         options.osxLibrarySubFolder = "Application Support";
         properties.setStorageParameters (options);
 
-        window = std::make_unique<juce::StandaloneFilterWindow> (getApplicationName(),
-                                                                 juce::Colour (0xff1c1c1f),
-                                                                 properties.getUserSettings(),
-                                                                 false);
+        // The borderless header's gear opens the audio/MIDI settings dialog.
+        // Resolved lazily so the shared UI never links standalone headers.
+        LumenAudioProcessorEditor::standaloneSettingsHook = []
+        {
+            if (auto* holder = juce::StandalonePluginHolder::getInstance())
+                holder->showAudioSettingsDialog();
+        };
+
+        window = std::make_unique<LumenStandaloneWindow> (getApplicationName(),
+                                                          juce::Colour (0xff1c1c1f),
+                                                          properties.getUserSettings(),
+                                                          false);
         window->setVisible (true);
     }
 
@@ -345,28 +387,117 @@ private:
     };
 
     // --- --screenshot -------------------------------------------------------
-    void takeScreenshotAndQuit()
+    bool writeSnapshot (juce::Component& component)
     {
-        midiPump = nullptr;
-        bool ok = false;
+        const auto image = component.createComponentSnapshot (component.getLocalBounds(), true, 1.0f);
+        if (! image.isValid())
+            return false;
+        screenshotFile.deleteFile();
+        juce::FileOutputStream stream (screenshotFile);
+        return stream.openedOk() && juce::PNGImageFormat().writeImageToStream (image, stream);
+    }
 
-        if (harnessEditor != nullptr)
-        {
-            const auto image = harnessEditor->createComponentSnapshot (
-                harnessEditor->getLocalBounds(), true, 1.0f);
-
-            if (image.isValid())
-            {
-                screenshotFile.deleteFile();
-                juce::FileOutputStream stream (screenshotFile);
-                ok = stream.openedOk() && juce::PNGImageFormat().writeImageToStream (image, stream);
-            }
-        }
-
+    void finishScreenshot (bool ok)
+    {
         printToStdout (ok ? "Screenshot written: " + screenshotFile.getFullPathName() + "\n"
                           : "Screenshot FAILED: " + screenshotFile.getFullPathName() + "\n");
         setApplicationReturnValue (ok ? 0 : 1);
         quit();
+    }
+
+    void takeScreenshotAndQuit()
+    {
+        midiPump = nullptr;
+        finishScreenshot (harnessEditor != nullptr && writeSnapshot (*harnessEditor));
+    }
+
+    // Renders the branded menu through LumenMenuLookAndFeel's own draw methods
+    // (the exact code that styles the live popup) into an offscreen image. A
+    // real async popup can't be snapshotted headlessly — with no pointer over
+    // it the message loop dismisses it before it paints — so this drives the
+    // same LnF directly, which is what needs verifying.
+    juce::Image renderBrandedMenu (bool gear)
+    {
+        struct Row { int type; juce::String text; bool ticked, highlighted; int height; };
+        enum { kHeader, kItem, kSeparator };
+
+        LumenMenuLookAndFeel lnf;
+        std::vector<Row> rows;
+        int width = 210;
+
+        auto measure = [&] (const juce::String& t)
+        {
+            int iw = 0, ih = 0;
+            lnf.getIdealPopupMenuItemSize (t, false, 26, iw, ih);
+            width = juce::jmax (width, iw);
+            return ih;
+        };
+
+        if (gear)
+        {
+            rows.push_back ({ kHeader, "Lumen", false, false, 24 });
+            rows.push_back ({ kItem, "Version " + juce::String (JucePlugin_VersionString), false, false,
+                              measure ("Version " + juce::String (JucePlugin_VersionString)) });
+            rows.push_back ({ kSeparator, {}, false, false, 11 });
+            rows.push_back ({ kItem, "MIDI Learn", false, true, measure ("MIDI Learn") });
+            rows.push_back ({ kItem, "Tooltips", false, false, measure ("Tooltips") });
+        }
+        else if (auto* lumen = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
+        {
+            auto& pm = lumen->presetManager();
+            pm.refresh();
+            const auto& entries = pm.entries();
+            const int current = pm.currentIndex();
+            juce::String lastCat;
+            int hoverRow = -1;
+            for (int i = 0; i < (int) entries.size(); ++i)
+            {
+                const auto& e = entries[(size_t) i];
+                if (e.category != lastCat) { rows.push_back ({ kHeader, e.category, false, false, 24 }); lastCat = e.category; }
+                if (hoverRow < 0 && i != current) hoverRow = (int) rows.size();
+                rows.push_back ({ kItem, e.name, i == current, false, measure (e.name) });
+            }
+            if (hoverRow >= 0) rows[(size_t) hoverRow].highlighted = true; // demo the hover row
+            rows.push_back ({ kSeparator, {}, false, false, 11 });
+            rows.push_back ({ kItem, "Save Preset...", false, false, measure ("Save Preset...") });
+        }
+
+        width = juce::jlimit (210, 320, width);
+        const int border = lnf.getPopupMenuBorderSize();
+        int total = border * 2;
+        for (const auto& r : rows) total += r.height;
+
+        juce::Image img (juce::Image::ARGB, width, total, true);
+        juce::Graphics g (img);
+        lnf.drawPopupMenuBackground (g, width, total);
+
+        int y = border;
+        for (const auto& r : rows)
+        {
+            const juce::Rectangle<int> area (border, y, width - border * 2, r.height);
+            if (r.type == kHeader)
+                lnf.drawPopupMenuSectionHeader (g, area, r.text);
+            else if (r.type == kSeparator)
+                lnf.drawPopupMenuItem (g, area, true, false, false, false, false, {}, {}, nullptr, nullptr);
+            else
+                lnf.drawPopupMenuItem (g, area, false, true, r.highlighted, r.ticked, false,
+                                       r.text, {}, nullptr, nullptr);
+            y += r.height;
+        }
+        return img;
+    }
+
+    void captureMenuAndQuit()
+    {
+        const auto menu = renderBrandedMenu (menuMode == "gear");
+        bool ok = false;
+        if (menu.isValid())
+        {
+            screenshotFile.deleteFile();
+            juce::FileOutputStream stream (screenshotFile);
+            ok = stream.openedOk() && juce::PNGImageFormat().writeImageToStream (menu, stream);
+        }
+        finishScreenshot (ok);
     }
 
     void releaseHarnessObjects()
@@ -384,6 +515,7 @@ private:
     std::unique_ptr<juce::AudioProcessor> harnessProcessor;
     std::unique_ptr<juce::AudioProcessorEditor> harnessEditor;
     juce::File screenshotFile;
+    juce::String menuMode; // "" | "preset" | "gear" for --screenshot --menu
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<juce::AudioProcessorPlayer> player;
