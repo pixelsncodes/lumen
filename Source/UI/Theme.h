@@ -28,6 +28,7 @@ inline constexpr juce::uint32 kAccentRgb = 0xFAFF00;
 inline const juce::Colour neonYellow { 0xff000000 | kAccentRgb };
 inline const juce::Colour neonPink   { 0xffff2e9f };
 inline const juce::Colour neonCyan   { 0xff19e3e3 };
+inline const juce::Colour meterHot   { 0xffff3b30 }; // meter clip/hot zone, >= -3 dBFS
 
 // Accents (module colors)
 inline const juce::Colour accentA      = neonPink;    // Osc A, Macro 1

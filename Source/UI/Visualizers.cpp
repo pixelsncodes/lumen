@@ -1062,11 +1062,28 @@ void MeterView::paint (juce::Graphics& g)
             holdTime[channel] = now;
         }
 
+        // Hot zone: the top -3 dBFS..0 of the scale renders red — as a faint
+        // marker on the empty track and as the fill/peak color once the
+        // signal reaches it. Everything below stays accent yellow.
+        constexpr float kHotDb = -3.0f;
+        const float hotFrac = dbToFrac (kHotDb);
+        const auto hotZone = bar.withTrimmedLeft (bar.getWidth() * hotFrac);
+
         g.setColour (theme::hairline);
         g.fillRoundedRectangle (bar, 2.0f);
+        g.setColour (theme::meterHot.withAlpha (0.22f));
+        g.fillRect (hotZone);
+
+        const float rmsFrac = dbToFrac (toDb (rms[channel]));
         g.setColour (theme::accentFilter.withAlpha (0.55f));
-        g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * dbToFrac (toDb (rms[channel]))), 2.0f);
-        g.setColour (theme::accentFilter);
+        g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jmin (rmsFrac, hotFrac)), 2.0f);
+        if (rmsFrac > hotFrac)
+        {
+            g.setColour (theme::meterHot.withAlpha (0.75f));
+            g.fillRect (hotZone.withWidth (bar.getWidth() * (rmsFrac - hotFrac)));
+        }
+
+        g.setColour (peakDb >= kHotDb ? theme::meterHot : theme::accentFilter);
         const float peakX = bar.getX() + bar.getWidth() * dbToFrac (peakDb);
         g.fillRect (juce::Rectangle<float> (peakX - 1.0f, bar.getY(), 2.0f, bar.getHeight()));
 
