@@ -255,14 +255,14 @@ void FxRack::paint (juce::Graphics& g)
 // ---------------------------------------------------------------------------
 
 EnvCard::EnvCard (const UiShared& shared)
-    : CardPanel ("ENVELOPES", theme::accentMod),
+    : CardPanel ("ENVELOPES", theme::neonYellow),
       tabs ({ "1", "2", "3" }, [this] (int index) { setActiveEnv (index); })
 {
     addAndMakeVisible (tabs);
 
     for (int e = 0; e < 3; ++e)
     {
-        addChildComponent (editors.add (new EnvelopeEditor (shared, e, theme::accentMod)));
+        addChildComponent (editors.add (new EnvelopeEditor (shared, e, theme::neonYellow)));
 
         auto* set = knobSets.add (new juce::OwnedArray<ModKnob>());
         const juce::String prefix = "env" + juce::String (e + 1);
@@ -272,7 +272,7 @@ EnvCard::EnvCard (const UiShared& shared)
         };
         for (const auto& [suffix, label] : knobDefs)
         {
-            auto* knob = set->add (new ModKnob (shared, prefix + suffix, label, theme::accentMod));
+            auto* knob = set->add (new ModKnob (shared, prefix + suffix, label, theme::neonYellow));
             addChildComponent (knob);
         }
     }
@@ -312,7 +312,7 @@ void EnvCard::animate()
 // ---------------------------------------------------------------------------
 
 LfoCard::LfoCard (const UiShared& shared)
-    : CardPanel ("LFOS", theme::accentMod),
+    : CardPanel ("LFOS", theme::neonYellow),
       tabs ({ "1", "2", "3" }, [this] (int index) { setActiveLfo (index); })
 {
     addAndMakeVisible (tabs);
@@ -322,14 +322,14 @@ LfoCard::LfoCard (const UiShared& shared)
         auto& set = sets[k];
         const juce::String prefix = "lfo" + juce::String (k + 1);
 
-        set.view = std::make_unique<LfoView> (shared, k, theme::accentMod);
+        set.view = std::make_unique<LfoView> (shared, k, theme::neonYellow);
         set.shape = std::make_unique<ChoiceCombo> (shared, prefix + "Shape");
         set.mode = std::make_unique<ChoiceCombo> (shared, prefix + "Mode");
         set.syncDiv = std::make_unique<ChoiceCombo> (shared, prefix + "SyncDiv");
-        set.sync = std::make_unique<ParamToggle> (shared, prefix + "Sync", "SYNC", theme::accentMod);
-        set.knobs.add (new ModKnob (shared, prefix + "Rate", "Rate", theme::accentMod));
-        set.knobs.add (new ModKnob (shared, prefix + "Phase", "Phase", theme::accentMod));
-        set.knobs.add (new ModKnob (shared, prefix + "Fade", "Fade", theme::accentMod));
+        set.sync = std::make_unique<ParamToggle> (shared, prefix + "Sync", "SYNC", theme::neonYellow);
+        set.knobs.add (new ModKnob (shared, prefix + "Rate", "Rate", theme::neonYellow));
+        set.knobs.add (new ModKnob (shared, prefix + "Phase", "Phase", theme::neonYellow));
+        set.knobs.add (new ModKnob (shared, prefix + "Fade", "Fade", theme::neonYellow));
 
         addChildComponent (*set.view);
         addChildComponent (*set.shape);
@@ -468,7 +468,7 @@ void FooterBar::animate()
 
 HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange)
     : viewTabs ({ "PLAY", "DEEP" }, std::move (onViewChange)),
-      master (shared, "masterGain", "Main", theme::accentMod),
+      master (shared, "masterGain", "Main", theme::neonYellow),
       meter (shared)
 {
     addAndMakeVisible (viewTabs);

@@ -187,6 +187,31 @@ private:
     FooterBar footer;
 };
 
+// 2-octave mouse keyboard with flat sharp keys: JUCE's default drawBlackNote
+// paints the key face with colour.brighter(), which caps how dark a sharp
+// can render — this fills the exact blackNoteColourId and applies the
+// down/over overlays flat (recolor pass: sharps #3A3A3A, pressed = kAccent).
+class FlatKeyboard final : public juce::MidiKeyboardComponent
+{
+public:
+    using juce::MidiKeyboardComponent::MidiKeyboardComponent;
+
+    void drawBlackNote (int, juce::Graphics& g, juce::Rectangle<float> area,
+                        bool isDown, bool isOver, juce::Colour noteFillColour) override
+    {
+        g.setColour (noteFillColour);
+        g.fillRect (area);
+
+        if (isDown)
+            g.setColour (findColour (keyDownOverlayColourId));
+        else if (isOver)
+            g.setColour (findColour (mouseOverKeyOverlayColourId));
+        else
+            return;
+        g.fillRect (area);
+    }
+};
+
 // Play view: one large context visualizer, Lens drop zone, big macros,
 // 2-octave mouse keyboard (SPEC 14).
 class PlayView final : public juce::Component
@@ -204,7 +229,7 @@ private:
     WavetableStackView stackA, stackB;
     WaterfallView waterfall; // the "audio active" visual (WATERFALL_SPEC.md)
     juce::OwnedArray<ModKnob> macroKnobs;
-    juce::MidiKeyboardComponent keyboard;
+    FlatKeyboard keyboard;
     juce::Rectangle<int> lensZone;
     // Waterfall stays up 44 frames (~0.73 s) after audio stops — exactly one
     // full drain of the history ring before handing back to the idle visual.

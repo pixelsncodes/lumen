@@ -19,11 +19,21 @@ inline const juce::Colour textPrimary  { 0xffe8e6e3 };
 inline const juce::Colour textSecondary{ 0xff9a9aa2 };
 inline const juce::Colour textMuted    { 0xff6f6f76 };
 
-// Accents (module colors, SPEC section 14)
-inline const juce::Colour accentA      { 0xffff7a45 }; // orange: Osc A, Macro 1
-inline const juce::Colour accentB      { 0xff4aa8ff }; // blue:   Osc B, Macro 2
-inline const juce::Colour accentFilter { 0xff3ddc84 }; // green:  filter + FX, Macro 3
-inline const juce::Colour accentMod    { 0xffc9c9cf }; // warm gray: modulation, Macro 4
+// Neon accent trio (recolor pass — user-directed deviation from the SPEC
+// section 14 hexes, DECISIONS.md). Each neon is exactly one named constant;
+// kAccentRgb is THE yellow — the waterfall derives its entire
+// WATERFALL_SPEC section 5 palette from it (Visualizers.h), so retuning any
+// neon is a one-liner here.
+inline constexpr juce::uint32 kAccentRgb = 0xFAFF00;
+inline const juce::Colour neonYellow { 0xff000000 | kAccentRgb };
+inline const juce::Colour neonPink   { 0xffff2e9f };
+inline const juce::Colour neonCyan   { 0xff19e3e3 };
+
+// Accents (module colors)
+inline const juce::Colour accentA      = neonPink;    // Osc A, Macro 1
+inline const juce::Colour accentB      = neonCyan;    // Osc B, Macro 2
+inline const juce::Colour accentFilter = neonYellow;  // filter + FX + meter, Macro 3
+inline const juce::Colour accentMod    { 0xffc9c9cf }; // warm gray: mod chips/scope, Macro 4
 
 inline juce::Colour macroAccent (int index)
 {

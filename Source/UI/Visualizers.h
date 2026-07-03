@@ -3,6 +3,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "UI/Controls.h"
+#include "UI/Theme.h"
 #include "UI/WaterfallModel.h"
 
 // SPEC section 15 visualizers. All audio data arrives through the
@@ -120,7 +121,10 @@ namespace lumen::waterfall
              |  mixChannel (a & 0xff, b & 0xff, t);
     }
 
-    constexpr juce::uint32 kAccentRgb   = 0xFAFF00;
+    // The one neon yellow: shared with the rest of the UI via theme::kAccentRgb.
+    // The static_asserts pin the WATERFALL_SPEC section 5 table — retuning the
+    // theme yellow means updating that table (and these asserts) too.
+    constexpr juce::uint32 kAccentRgb   = theme::kAccentRgb;
     constexpr juce::uint32 kBrightRgb   = mixRgb (kAccentRgb, 0xFFFFFF, 0.5);
     constexpr juce::uint32 kDimRgb      = mixRgb (kAccentRgb, 0x04060A, 0.78);
     constexpr juce::uint32 kDarkBaseRgb = mixRgb (kDimRgb, 0x000000, 0.55);

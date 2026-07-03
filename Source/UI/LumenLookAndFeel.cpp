@@ -39,11 +39,13 @@ LumenLookAndFeel::LumenLookAndFeel()
     setColour (juce::BubbleComponent::backgroundColourId, theme::panel);
     setColour (juce::BubbleComponent::outlineColourId, theme::hairlineLight);
 
-    setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour (0xffd8d6d2));
-    setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour (0xff232326));
+    setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour (0xffc6c6c6));
+    setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour (0xff3a3a3a));
     setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, theme::hairline);
-    setColour (juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, theme::accentA.withAlpha (0.25f));
-    setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, theme::accentA.withAlpha (0.6f));
+    // Pressed/hovered keys light neon yellow from the one kAccent source —
+    // the intentional exception to the pink rule (recolor pass, DECISIONS.md).
+    setColour (juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, theme::neonYellow.withAlpha (0.25f));
+    setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, theme::neonYellow.withAlpha (0.8f));
     setColour (juce::MidiKeyboardComponent::textLabelColourId, theme::textMuted);
     setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::transparentBlack);
 
