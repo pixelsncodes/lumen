@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace lumen { class LensController; }
+namespace lumen { class LensController; class PresetManager; }
 
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
@@ -42,7 +42,15 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // Replace the whole patch (parameters + matrix/macros + Lens tables)
+    // with a preset/DAW state tree — the one shared load path (Phase 7).
+    // Message thread only.
+    void loadPresetState (juce::ValueTree newState);
+
     juce::AudioProcessorValueTreeState apvts;
+
+    // Preset browser/loader (Phase 7). Message thread only.
+    lumen::PresetManager& presetManager() noexcept { return *presets; }
 
     // ------------------------------------------------------------------
     // UI bridge (SPEC sections 10/15): everything below is lock-free.
@@ -107,6 +115,7 @@ private:
 
     lumen::SynthEngine engine;
     std::unique_ptr<lumen::LensController> lens;
+    std::unique_ptr<lumen::PresetManager> presets;
 
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;

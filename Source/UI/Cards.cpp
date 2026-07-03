@@ -1,6 +1,7 @@
 #include "UI/Cards.h"
 
 #include "Lens/LensController.h"
+#include "State/PresetManager.h"
 #include "UI/Theme.h"
 
 using namespace lumen;
@@ -464,7 +465,8 @@ void FooterBar::animate()
 // ---------------------------------------------------------------------------
 
 HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewChange)
-    : viewTabs ({ "PLAY", "DEEP" }, std::move (onViewChange)),
+    : processor (shared.processor),
+      viewTabs ({ "PLAY", "DEEP" }, std::move (onViewChange)),
       master (shared, "masterGain", "Main", theme::neonYellow),
       meter (shared)
 {
@@ -472,16 +474,24 @@ HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewCh
     addAndMakeVisible (master);
     addAndMakeVisible (meter);
 
+    presetPrev.onClick = [this] { processor.presetManager().step (-1); };
+    presetNext.onClick = [this] { processor.presetManager().step (1); };
     for (auto* button : { &presetPrev, &presetNext })
-    {
-        button->setEnabled (false); // preset browser arrives in Phase 7
         addAndMakeVisible (button);
-    }
+
+    presetName.setButtonText (processor.presetManager().currentName());
+    presetName.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    presetName.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    presetName.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
+    presetName.setTooltip ("Preset browser (click to open)");
+    presetName.onClick = [this] { showBrowserMenu(); };
+    addAndMakeVisible (presetName);
 }
 
 void HeaderBar::resized()
 {
     presetPrev.setBounds (354, 14, 22, 20);
+    presetName.setBounds (380, 12, 240, 24);
     presetNext.setBounds (624, 14, 22, 20);
     viewTabs.setBounds (700, 13, 130, 22);
     master.setBounds (848, 1, 46, 46);
@@ -498,20 +508,81 @@ void HeaderBar::paint (juce::Graphics& g)
     g.setFont (theme::semiBold (22.0f));
     g.drawText ("LUMEN", 24, 0, 160, getHeight(), juce::Justification::centredLeft);
 
-    // Preset strip (placeholder until Phase 7).
+    // Preset strip well; the name button sits transparently on top.
     const auto strip = juce::Rectangle<float> (350.0f, 12.0f, 300.0f, 24.0f);
     g.setColour (theme::panel);
     g.fillRoundedRectangle (strip, 5.0f);
     g.setColour (theme::hairline);
     g.drawRoundedRectangle (strip, 5.0f, 1.0f);
-    g.setColour (theme::textSecondary);
-    g.setFont (theme::medium (13.0f));
-    g.drawText ("Init", strip.toNearestInt(), juce::Justification::centred);
+}
+
+void HeaderBar::showBrowserMenu()
+{
+    auto& manager = processor.presetManager();
+    manager.refresh();
+
+    juce::PopupMenu menu;
+    const int current = manager.currentIndex();
+    juce::String lastCategory;
+    for (int i = 0; i < static_cast<int> (manager.entries().size()); ++i)
+    {
+        const auto& entry = manager.entries()[static_cast<size_t> (i)];
+        if (entry.category != lastCategory)
+        {
+            menu.addSectionHeader (entry.category);
+            lastCategory = entry.category;
+        }
+        menu.addItem (i + 2, entry.name, true, i == current);
+    }
+    menu.addSeparator();
+    menu.addItem (1, "Save Preset...");
+
+    menu.showMenuAsync (juce::PopupMenu::Options()
+                            .withTargetComponent (presetName)
+                            .withMinimumWidth (presetName.getWidth()),
+                        [this] (int result)
+                        {
+                            if (result == 1)
+                                showSaveDialog();
+                            else if (result >= 2)
+                                processor.presetManager().loadIndex (result - 2);
+                        });
+}
+
+void HeaderBar::showSaveDialog()
+{
+    auto& manager = processor.presetManager();
+    auto* window = new juce::AlertWindow ("Save Preset",
+                                          "Stores the patch in Documents/Lumen/Presets.",
+                                          juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor ("name", manager.currentName(), "Name");
+    window->addTextEditor ("category", manager.currentCategory().isNotEmpty()
+                                           ? manager.currentCategory()
+                                           : juce::String ("User"), "Category");
+    window->addTextEditor ("author", "", "Author");
+    window->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    window->enterModalState (true, juce::ModalCallbackFunction::create (
+        [this, window] (int result)
+        {
+            if (result == 1)
+                processor.presetManager().saveUserPreset (
+                    window->getTextEditorContents ("name"),
+                    window->getTextEditorContents ("category"),
+                    window->getTextEditorContents ("author"));
+        }), true);
 }
 
 void HeaderBar::animate()
 {
     meter.animate();
+
+    const auto name = processor.presetManager().currentName();
+    if (name != shownName)
+    {
+        shownName = name;
+        presetName.setButtonText (name);
+    }
 }
 
 // ---------------------------------------------------------------------------

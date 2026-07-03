@@ -1,10 +1,14 @@
 // lumen_render — headless render/verification harness (SPEC section 18).
 //
-//   lumen_render --preset init --note 60 --vel 100 --dur 2 --tail 2
+//   lumen_render --preset <name|path|init> --note 60 --vel 100 --dur 2 --tail 2
 //                --sr 48000 --out out.wav [--analyze] [--bench] [--no-fx]
 //                [--measure-mod] [--measure-echo] [--set param=value ...]
 //                [--image <png|jpg>] [--mode scan|spectral] [--lens-target A|B]
 //                [--chroma] [--gen-image gradient|stripes|checker|warm|busy]
+//
+// --preset resolves factory names first (case-insensitive, "init" included),
+// then .lumen files (full APVTS state XML: parameters + matrix/macros +
+// stored Lens wavetables). --set/--mod/--macro/--image still override.
 //
 // --analyze writes <out>.json with peak_dbfs, rms_dbfs, dc_offset, nan_count,
 // f0_hz, f0_cents_error, alias_floor_db, attack_ms_measured,
@@ -24,6 +28,8 @@
 #include "Lens/LensEngine.h"
 #include "Lens/TestImages.h"
 #include "State/EngineBindings.h"
+#include "State/FactoryPresets.h"
+#include "State/LensState.h"
 #include "State/ModState.h"
 
 #include <chrono>
@@ -129,13 +135,6 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
         }
     }
 
-    if (options.preset != "init")
-    {
-        std::cerr << "Presets arrive in Phase 7; only --preset init is supported (got '"
-                  << options.preset << "')\n";
-        return false;
-    }
-
     if (options.note < 0 || options.note > 127 || options.velocity < 1 || options.velocity > 127
         || options.durationSeconds <= 0.0 || options.tailSeconds < 0.0 || options.sampleRate < 8000.0)
     {
@@ -193,7 +192,8 @@ void applyChromaLfoSlot (lumen::mod::Config& config, const lumen::lens::PatchTar
 }
 
 bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& params,
-                        const lumen::lens::PatchTargets* chromaTargets)
+                        const lumen::lens::PatchTargets* chromaTargets,
+                        bool presetProvidedMods)
 {
     // Chroma first: explicit --set overrides must win over the color map.
     if (chromaTargets != nullptr)
@@ -210,10 +210,13 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
 
     params.bpm = options.bpm;
 
-    // The shipped Init patch includes the default modulation set. Any explicit
-    // --mod/--macro flag replaces the whole config (measurement isolation —
-    // the Phase 3 gates measure exactly one route at a time).
-    if (options.modRoutes.empty() && options.macroMaps.empty())
+    // Modulation config precedence: an explicit --mod/--macro flag replaces
+    // the whole config (measurement isolation — the Phase 3 gates measure
+    // exactly one route at a time); otherwise the loaded preset's config
+    // stands; otherwise the shipped Init modulation defaults.
+    if (! options.modRoutes.empty() || ! options.macroMaps.empty())
+        params.mod = {};
+    else if (! presetProvidedMods)
         lumen::modstate::applyInitModDefaults (params.mod);
 
     int slotIndex = 0;
@@ -255,6 +258,38 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
     if (chromaTargets != nullptr)
         applyChromaLfoSlot (params.mod, *chromaTargets, options.lensTarget);
 
+    return true;
+}
+
+// .lumen preset file (SPEC section 16: the full APVTS state as XML) ->
+// EngineParams + stored Lens frames. Unknown parameter ids are ignored
+// (forward compatibility: "loading newer states: ignore unknown keys").
+bool applyPresetFile (const juce::File& file, lumen::EngineParams& params,
+                      std::vector<float>& lensFramesA, std::vector<float>& lensFramesB,
+                      bool& haveLensA, bool& haveLensB)
+{
+    const auto xml = juce::parseXML (file);
+    if (xml == nullptr || ! xml->hasTagName ("PARAMS"))
+    {
+        std::cerr << "--preset: '" << file.getFullPathName()
+                  << "' is not a Lumen preset (PARAMS state XML)\n";
+        return false;
+    }
+
+    const auto state = juce::ValueTree::fromXml (*xml);
+    for (const auto& child : state)
+    {
+        if (! child.hasType ("PARAM"))
+            continue;
+        const auto id = child["id"].toString();
+        const float value = static_cast<float> (static_cast<double> (child["value"]));
+        if (! lumen::bindings::set (params, id, value))
+            std::cerr << "note: ignoring unknown preset parameter '" << id << "'\n";
+    }
+
+    lumen::modstate::buildConfig (state, params.mod);
+    haveLensA = lumen::lensstate::loadImageFrames (state, 0, lensFramesA);
+    haveLensB = lumen::lensstate::loadImageFrames (state, 1, lensFramesB);
     return true;
 }
 
@@ -794,6 +829,62 @@ int main (int argc, char* argv[])
     }
 
     lumen::EngineParams params;
+
+    // --preset: factory names first, then .lumen state files (Phase 7).
+    bool presetProvidedMods = false;
+    lumen::Wavetable presetTables[2];
+    bool havePresetTable[2] = { false, false };
+
+    if (const auto* factory = lumen::presets::find (options.preset))
+    {
+        lumen::presets::applyToEngine (*factory, params);
+        presetProvidedMods = true;
+        if (factory->hasLens())
+        {
+            const auto frames = lumen::presets::buildLensFrames (*factory);
+            if (frames.empty())
+            {
+                std::cerr << "--preset: Lens build failed for '" << factory->name << "'\n";
+                return 1;
+            }
+            const int osc = factory->lens.targetOsc == 1 ? 1 : 0;
+            presetTables[osc].build (frames.data(), lumen::lens::kNumFrames,
+                                     lumen::lens::kHarmonicCap, lumen::lens::kPeakTarget);
+            havePresetTable[osc] = true;
+            std::cout << "preset_lens_sha256="
+                      << lumen::lens::sha256Hex (frames.data(), frames.size() * sizeof (float))
+                      << "\n";
+        }
+        std::cout << "preset=" << factory->name << " (factory, " << factory->category << ")\n";
+    }
+    else if (options.preset != "init")
+    {
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (options.preset);
+        if (! file.existsAsFile())
+        {
+            std::cerr << "--preset: no factory preset or file named '" << options.preset << "'\n";
+            return 2;
+        }
+        std::vector<float> framesA, framesB;
+        bool haveA = false, haveB = false;
+        if (! applyPresetFile (file, params, framesA, framesB, haveA, haveB))
+            return 2;
+        presetProvidedMods = true;
+        if (haveA)
+        {
+            presetTables[0].build (framesA.data(), lumen::lens::kNumFrames,
+                                   lumen::lens::kHarmonicCap, lumen::lens::kPeakTarget);
+            havePresetTable[0] = true;
+        }
+        if (haveB)
+        {
+            presetTables[1].build (framesB.data(), lumen::lens::kNumFrames,
+                                   lumen::lens::kHarmonicCap, lumen::lens::kPeakTarget);
+            havePresetTable[1] = true;
+        }
+        std::cout << "preset=" << file.getFileNameWithoutExtension() << " (file)\n";
+    }
+
     if (haveImage)
     {
         // The image loads into the target osc's Image slot (SPEC 13.6);
@@ -803,14 +894,18 @@ int main (int argc, char* argv[])
         targetOsc.enabled = true;
     }
     if (! buildEngineParams (options, params,
-                             options.chroma && haveImage ? &lensTargets : nullptr))
+                             options.chroma && haveImage ? &lensTargets : nullptr,
+                             presetProvidedMods))
         return 2;
 
     lumen::SynthEngine engine;
     engine.prepare (options.sampleRate, kBlockSize);
     engine.setFxEnabled (! options.noFx);
+    for (int osc = 0; osc < 2; ++osc)
+        if (havePresetTable[osc])
+            engine.setImageTable (osc, &presetTables[osc]);
     if (haveImage)
-        engine.setImageTable (options.lensTarget, &lensTable);
+        engine.setImageTable (options.lensTarget, &lensTable); // --image wins
     engine.setParams (params);
 
     if (options.bench)
@@ -881,9 +976,25 @@ int main (int argc, char* argv[])
             : 0.0;
         const auto timing = measureEnvelope (mid, options.sampleRate, nominalHz, noteOffSample);
 
+        // Held-note RMS (stereo, note-on to note-off, latency-aligned): the
+        // Phase 7 preset loudness gate — whole-buffer RMS would punish short
+        // envelopes for their silent tail (DECISIONS.md).
+        double heldSumSquares = 0.0;
+        juce::int64 heldCount = 0;
+        const int heldEnd = juce::jmin (buffer.getNumSamples(), latency + noteOffSample);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            const float* d = buffer.getReadPointer (ch);
+            for (int i = latency; i < heldEnd; ++i)
+                heldSumSquares += static_cast<double> (d[i]) * d[i];
+            heldCount += juce::jmax (0, heldEnd - latency);
+        }
+        const double rmsHeld = heldCount > 0 ? std::sqrt (heldSumSquares / static_cast<double> (heldCount)) : 0.0;
+
         auto* json = new juce::DynamicObject();
         json->setProperty ("peak_dbfs", juce::Decibels::gainToDecibels (stats.peak, -144.0f));
         json->setProperty ("rms_dbfs", juce::Decibels::gainToDecibels (stats.rms, -144.0));
+        json->setProperty ("rms_held_dbfs", juce::Decibels::gainToDecibels (rmsHeld, -144.0));
         json->setProperty ("dc_offset", stats.dcOffset);
         json->setProperty ("nan_count", stats.nanCount);
         json->setProperty ("f0_hz", f0.valid ? f0.f0 : 0.0);

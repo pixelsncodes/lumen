@@ -3,6 +3,7 @@
 #include "Lens/LensController.h"
 #include "State/EngineBindings.h"
 #include "State/ModState.h"
+#include "State/PresetManager.h"
 #include "UI/PluginEditor.h"
 
 #include <algorithm>
@@ -26,6 +27,11 @@ LumenAudioProcessor::LumenAudioProcessor()
 
     initializeModState();
     lens = std::make_unique<lumen::LensController> (apvts, engine);
+
+    // Default patch = Neon Tide (SPEC section 16). Hosts overwrite this via
+    // setStateInformation right after construction when restoring a session.
+    presets = std::make_unique<lumen::PresetManager> (*this);
+    presets->loadFactory ("Neon Tide");
 }
 
 LumenAudioProcessor::~LumenAudioProcessor()
@@ -270,16 +276,19 @@ void LumenAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 void LumenAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
-    {
         if (xml->hasTagName (apvts.state.getType()))
-        {
-            apvts.state.removeListener (this);
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
-            initializeModState(); // re-ensure trees, republish, re-listen
-            if (lens != nullptr)
-                lens->applyStateToEngine(); // rebuild Lens tables from the state
-        }
-    }
+            loadPresetState (juce::ValueTree::fromXml (*xml));
+}
+
+void LumenAudioProcessor::loadPresetState (juce::ValueTree newState)
+{
+    if (! newState.hasType (apvts.state.getType()))
+        return;
+    apvts.state.removeListener (this);
+    apvts.replaceState (std::move (newState));
+    initializeModState(); // re-ensure trees, republish, re-listen
+    if (lens != nullptr)
+        lens->applyStateToEngine(); // rebuild Lens tables from the state
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

@@ -156,7 +156,9 @@ private:
     ScopeView scope;
 };
 
-// Header: logo | preset strip (Phase 7 placeholder) | Play/Deep | master + meter.
+// Header: logo | preset strip (name + browser popup + < >) | Play/Deep |
+// master + meter. The strip reads the live preset name off the state tree
+// each animate tick, so DAW recall and factory loads stay in sync.
 class HeaderBar final : public juce::Component
 {
 public:
@@ -168,8 +170,14 @@ public:
     void setViewIndex (int index) { viewTabs.setActive (index, false); }
 
 private:
+    void showBrowserMenu();
+    void showSaveDialog();
+
+    LumenAudioProcessor& processor;
     TabsBar viewTabs;
     juce::TextButton presetPrev { "<" }, presetNext { ">" };
+    juce::TextButton presetName;
+    juce::String shownName;
     ModKnob master;
     MeterView meter;
 };

@@ -16,6 +16,8 @@
 #include "Engine/Wavetable.h"
 #include "Lens/LensEngine.h"
 #include "Lens/TestImages.h"
+#include "State/EngineBindings.h"
+#include "State/FactoryPresets.h"
 #include "State/LensState.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
@@ -1233,6 +1235,338 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Phase 7: factory preset bank
+// ---------------------------------------------------------------------------
+
+namespace presettest
+{
+    // Render half a second of note 60 at velocity 100 — the bit-exact
+    // comparison signal for the two preset application paths.
+    void renderParams (const lumen::EngineParams& params,
+                       const lumen::Wavetable* tableA, const lumen::Wavetable* tableB,
+                       std::vector<float>& l, std::vector<float>& r)
+    {
+        lumen::SynthEngine engine;
+        engine.prepare (48000.0, 512);
+        if (tableA != nullptr)
+            engine.setImageTable (0, tableA);
+        if (tableB != nullptr)
+            engine.setImageTable (1, tableB);
+        engine.setParams (params);
+        engine.noteOn (60, 100.0f / 127.0f);
+        l.assign (24000, 0.0f);
+        r.assign (24000, 0.0f);
+        engine.render (l.data(), r.data(), 24000);
+    }
+} // namespace presettest
+
+class FactoryPresetBankTest final : public juce::UnitTest
+{
+public:
+    FactoryPresetBankTest() : juce::UnitTest ("Factory preset bank shape + validity", "Presets") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("32 presets, exact SPEC section 16 names and categories");
+        struct Expected { const char* category; std::vector<const char*> names; };
+        const Expected expected[] = {
+            { "Bass",     { "Sub Zero", "Rubber", "Neon Growl", "Deep Field", "Knuckle", "Tape Bass" } },
+            { "Leads",    { "Laser", "Glass Whistle", "Saw Hero", "Vapor", "Chrome", "Solar Flare" } },
+            { "Pads",     { "Neon Tide", "Slow Aurora", "Warm Fog", "Choir Ghost", "Polar Drift", "Amber Haze" } },
+            { "Keys",     { "Dial Tone", "Marble Pluck", "Music Box", "Soft EP", "Pixel Pluck", "Kalimba Dust", "Bell Garden" } },
+            { "Textures", { "Static Bloom", "Scanline", "Radio Sky", "Machine Hum", "Wind Tunnel", "Photograph", "Init" } },
+        };
+        expectEquals (static_cast<int> (presets::bank().size()), presets::kNumPresets);
+        size_t index = 0;
+        for (const auto& group : expected)
+            for (const auto* expectedName : group.names)
+            {
+                if (index >= presets::bank().size())
+                    break;
+                const auto& preset = presets::bank()[index++];
+                expectEquals (juce::String (preset.name), juce::String (expectedName));
+                expectEquals (juce::String (preset.category), juce::String (group.category));
+            }
+
+        beginTest ("names unique, find() resolves case-insensitively");
+        for (const auto& preset : presets::bank())
+        {
+            const auto* found = presets::find (juce::String (preset.name).toUpperCase());
+            expect (found == &preset, juce::String (preset.name) + " resolves to itself");
+        }
+        expect (presets::find ("init") != nullptr, "lumen_render's --preset init still resolves");
+        expect (presets::find ("No Such Patch") == nullptr);
+
+        beginTest ("every setting id exists, is engine-bound, and sits on the range grid");
+        NullProcessor processor;
+        for (const auto& preset : presets::bank())
+        {
+            for (const auto& setting : preset.settings)
+            {
+                auto* parameter = processor.apvts.getParameter (setting.id);
+                expect (parameter != nullptr, juce::String (preset.name) + ": unknown id "
+                                              + setting.id);
+                if (parameter == nullptr)
+                    continue;
+                const float snapped = parameter->convertFrom0to1 (
+                    parameter->convertTo0to1 (setting.value));
+                // Values must survive range clamp + interval snap: engine
+                // (raw) and plugin (snapped) paths may differ only by
+                // conversion noise, never by a grid step.
+                expectWithinAbsoluteError (snapped, setting.value,
+                    juce::jmax (0.002f, std::abs (setting.value) * 0.001f));
+
+                lumen::EngineParams scratch;
+                expect (bindings::set (scratch, setting.id, setting.value),
+                        juce::String (preset.name) + ": id not engine-bound: " + setting.id);
+            }
+
+            for (const auto& route : preset.routes)
+            {
+                expect (modstate::sourceFromToken (route.source) >= 0,
+                        juce::String (preset.name) + ": bad source " + route.source);
+                expect (modstate::destFromToken (route.dest) >= 0,
+                        juce::String (preset.name) + ": bad dest " + route.dest);
+                expect (std::abs (route.depth) <= 1.0f);
+            }
+            expect (static_cast<int> (preset.routes.size()) <= mod::kNumSlots);
+        }
+
+        beginTest ("all four macros meaningfully pre-mapped on every preset");
+        for (const auto& preset : presets::bank())
+        {
+            if (preset.initMods)
+                continue; // Init's stock macro set is gated by InitModDefaultsTest
+
+            int mapsPerMacro[4] {};
+            float strongestSpan[4] {};
+            for (const auto& map : preset.maps)
+            {
+                expect (map.macro >= 0 && map.macro < 4);
+                expect (modstate::destFromToken (map.dest) >= 0,
+                        juce::String (preset.name) + ": bad map dest " + map.dest);
+                float rangeMin = 0.0f, rangeMax = 0.0f;
+                presets::macroMapRange (preset, map, rangeMin, rangeMax);
+                expect (rangeMin >= -1.0f && rangeMax <= 1.0f && rangeMin < rangeMax,
+                        juce::String (preset.name) + ": degenerate map range for " + map.dest);
+                ++mapsPerMacro[map.macro];
+                strongestSpan[map.macro] = juce::jmax (strongestSpan[map.macro],
+                                                       std::abs (map.span));
+            }
+            for (int m = 0; m < 4; ++m)
+            {
+                expect (mapsPerMacro[m] >= 1, juce::String (preset.name)
+                        + ": macro " + juce::String (m + 1) + " unmapped");
+                expect (mapsPerMacro[m] <= mod::kMaxMacroMaps);
+                expectGreaterOrEqual (strongestSpan[m], 0.15f);
+            }
+        }
+
+        beginTest ("Lens presets: Photograph = gradient/scan, Scanline = stripes/spectral");
+        const auto* photograph = presets::find ("Photograph");
+        const auto* scanline = presets::find ("Scanline");
+        expect (photograph != nullptr && photograph->hasLens());
+        expect (scanline != nullptr && scanline->hasLens());
+        if (photograph != nullptr && scanline != nullptr)
+        {
+            expectEquals (juce::String (photograph->lens.image), juce::String ("gradient"));
+            expectEquals (photograph->lens.mode, 0);
+            expectEquals (juce::String (scanline->lens.image), juce::String ("stripes"));
+            expectEquals (scanline->lens.mode, 1);
+
+            const auto frames1 = presets::buildLensFrames (*photograph);
+            const auto frames2 = presets::buildLensFrames (*photograph);
+            expectEquals (static_cast<int> (frames1.size()),
+                          lens::kNumFrames * lens::kFrameLength);
+            expect (frames1 == frames2, "Lens preset frames deterministic");
+        }
+    }
+};
+
+class FactoryPresetAgreementTest final : public juce::UnitTest
+{
+public:
+    FactoryPresetAgreementTest()
+        : juce::UnitTest ("Factory presets: engine path == state path (rendered)", "Presets") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        for (const auto& preset : presets::bank())
+        {
+            beginTest (juce::String (preset.name));
+
+            // Engine path (lumen_render). Every parameter value is passed
+            // through the APVTS range normalize/denormalize round-trip so
+            // both paths see identical floats — raw vs. snapped values may
+            // differ by sub-grid conversion noise (bounded to 0.002 by the
+            // bank validity test), which this comparison is not about: it
+            // checks that structure (mod config, Lens tables, defaults)
+            // renders bit-identically.
+            EngineParams engineParams;
+            presets::applyToEngine (preset, engineParams);
+            for (auto* raw : processor.getParameters())
+            {
+                auto* parameter = dynamic_cast<juce::RangedAudioParameter*> (raw);
+                if (parameter == nullptr)
+                    continue;
+                float natural = parameter->convertFrom0to1 (parameter->getDefaultValue());
+                for (const auto& setting : preset.settings)
+                    if (parameter->paramID == setting.id)
+                        natural = parameter->convertFrom0to1 (
+                            parameter->convertTo0to1 (setting.value));
+                bindings::set (engineParams, parameter->paramID, natural);
+            }
+
+            // State path (the plugin): buildState -> PARAM values + trees.
+            auto state = presets::buildState (preset, processor.apvts);
+            EngineParams stateParams;
+            for (const auto& child : state)
+                if (child.hasType ("PARAM"))
+                    expect (bindings::set (stateParams, child["id"].toString(),
+                                           static_cast<float> (static_cast<double> (child["value"]))),
+                            "state param binds: " + child["id"].toString());
+            if (preset.initMods)
+                modstate::ensureTrees (state); // what loadPresetState() does
+            modstate::buildConfig (state, stateParams.mod);
+
+            // Lens tables from both paths must be bit-identical too.
+            Wavetable engineTable, stateTable;
+            const Wavetable* tableA1 = nullptr;
+            const Wavetable* tableA2 = nullptr;
+            if (preset.hasLens())
+            {
+                const auto engineFrames = presets::buildLensFrames (preset);
+                std::vector<float> stateFrames;
+                expect (lensstate::loadImageFrames (state, preset.lens.targetOsc, stateFrames),
+                        "state stores the Lens frames");
+                expect (engineFrames == stateFrames, "Lens frames agree across paths");
+                engineTable.build (engineFrames.data(), lens::kNumFrames,
+                                   lens::kHarmonicCap, lens::kPeakTarget);
+                stateTable.build (stateFrames.data(), lens::kNumFrames,
+                                  lens::kHarmonicCap, lens::kPeakTarget);
+                tableA1 = &engineTable;
+                tableA2 = &stateTable;
+            }
+
+            std::vector<float> l1, r1, l2, r2;
+            presettest::renderParams (engineParams, tableA1, nullptr, l1, r1);
+            presettest::renderParams (stateParams, tableA2, nullptr, l2, r2);
+            expect (l1 == l2 && r1 == r2, "bit-identical render across paths");
+
+            float peak = 0.0f;
+            for (const float v : l1)
+                peak = juce::jmax (peak, std::abs (v));
+            expectGreaterThan (peak, 0.001f, "preset is audible");
+        }
+    }
+};
+
+class FactoryPresetStateTest final : public juce::UnitTest
+{
+public:
+    FactoryPresetStateTest()
+        : juce::UnitTest ("Factory presets: bit-exact state round-trip + tolerance", "Presets") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+
+        beginTest ("metadata + XML round-trip stability for all 32");
+        for (const auto& preset : presets::bank())
+        {
+            const auto state = presets::buildState (preset, processor.apvts);
+            expectEquals (state.getProperty ("presetName").toString(), juce::String (preset.name));
+            expectEquals (state.getProperty ("presetCategory").toString(),
+                          juce::String (preset.category));
+            expectEquals (state.getProperty ("presetAuthor").toString(),
+                          juce::String (presets::kFactoryAuthor));
+            expectEquals (static_cast<int> (state.getProperty ("stateVersion")), 1);
+
+            const auto xml1 = state.toXmlString();
+            const auto xml2 = juce::ValueTree::fromXml (xml1).toXmlString();
+            expect (xml1 == xml2, juce::String (preset.name) + ": XML round-trip unstable");
+        }
+
+        beginTest ("save/recall through the real APVTS is a bit-exact fixed point");
+        for (const auto* presetName : { "Neon Tide", "Photograph", "Scanline", "Sub Zero", "Init" })
+        {
+            const auto* preset = presets::find (presetName);
+            expect (preset != nullptr);
+            if (preset == nullptr)
+                continue;
+
+            auto loaded = presets::buildState (*preset, processor.apvts);
+            modstate::ensureTrees (loaded); // loadPresetState() does this after replaceState
+            processor.apvts.replaceState (loaded);
+            const auto saved1 = processor.apvts.copyState().toXmlString();
+
+            processor.apvts.replaceState (juce::ValueTree::fromXml (saved1));
+            const auto saved2 = processor.apvts.copyState().toXmlString();
+            expect (saved1 == saved2, juce::String (presetName) + ": APVTS recall not bit-exact");
+        }
+
+        beginTest ("Lens preset frames survive the state round-trip bit-exactly");
+        for (const auto* presetName : { "Photograph", "Scanline" })
+        {
+            const auto* preset = presets::find (presetName);
+            if (preset == nullptr)
+                continue;
+            const auto state = presets::buildState (*preset, processor.apvts);
+            const auto restored = juce::ValueTree::fromXml (state.toXmlString());
+            std::vector<float> frames;
+            expect (lensstate::loadImageFrames (restored, preset->lens.targetOsc, frames));
+            expect (frames == presets::buildLensFrames (*preset), "frames bit-identical");
+            expect (lensstate::loadThumbnail (restored, preset->lens.targetOsc).isValid(),
+                    "thumbnail present");
+        }
+
+        beginTest (".lumen file write/read round-trip");
+        {
+            const auto* preset = presets::find ("Neon Tide");
+            const auto state = presets::buildState (*preset, processor.apvts);
+            const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("lumen_test_preset.lumen");
+            file.deleteFile();
+            const auto xml = state.createXml();
+            expect (xml != nullptr && xml->writeTo (file), "preset file written");
+            const auto reparsed = juce::parseXML (file);
+            expect (reparsed != nullptr, "preset file parses");
+            if (reparsed != nullptr)
+                expect (juce::ValueTree::fromXml (*reparsed).toXmlString()
+                            == state.toXmlString(), "file round-trip bit-exact");
+            file.deleteFile();
+        }
+
+        beginTest ("unknown keys are tolerated (forward compatibility)");
+        {
+            const auto* preset = presets::find ("Neon Tide");
+            auto state = presets::buildState (*preset, processor.apvts);
+            state.setProperty ("futureProperty", "hello", nullptr);
+            juce::ValueTree unknownChild ("FUTURETREE");
+            unknownChild.setProperty ("x", 42, nullptr);
+            state.appendChild (unknownChild, nullptr);
+            juce::ValueTree unknownParam ("PARAM");
+            unknownParam.setProperty ("id", "futureParam", nullptr);
+            unknownParam.setProperty ("value", 1.0, nullptr);
+            state.appendChild (unknownParam, nullptr);
+
+            processor.apvts.replaceState (state);
+            auto* cutoff = processor.apvts.getRawParameterValue ("filterCutoff");
+            expect (cutoff != nullptr);
+            if (cutoff != nullptr)
+                expectWithinAbsoluteError (cutoff->load(), 2400.0f, 2.0f);
+        }
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
@@ -1248,6 +1582,9 @@ LensDeterminismTest lensDeterminismTest;
 LensCentroidTest lensCentroidTest;
 LensStripeBinsTest lensStripeBinsTest;
 LensChromaTest lensChromaTest;
+FactoryPresetBankTest factoryPresetBankTest;
+FactoryPresetAgreementTest factoryPresetAgreementTest;
+FactoryPresetStateTest factoryPresetStateTest;
 } // namespace
 
 class ConsoleTestRunner final : public juce::UnitTestRunner

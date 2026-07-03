@@ -69,6 +69,7 @@ set(LUMEN_ENGINE_SOURCES
     Source/State/EngineBindings.cpp
     Source/State/ModState.cpp
     Source/State/LensState.cpp
+    Source/State/FactoryPresets.cpp
 )
 set(LUMEN_ENGINE_HEADERS
     Source/Engine/EngineParams.h
@@ -85,6 +86,7 @@ set(LUMEN_ENGINE_HEADERS
     Source/Lens/LensEngine.h
     Source/Lens/TestImages.h
     Source/State/EngineBindings.h
+    Source/State/FactoryPresets.h
     Source/State/LensState.h
     Source/State/ModState.h
     Source/State/Parameters.h
@@ -93,6 +95,7 @@ set(LUMEN_ENGINE_HEADERS
 set(LUMEN_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
     Source/Lens/LensController.cpp
+    Source/State/PresetManager.cpp
     Source/UI/LumenLookAndFeel.cpp
     Source/UI/Controls.cpp
     Source/UI/Visualizers.cpp
@@ -105,6 +108,7 @@ target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
     Source/PluginProcessor.h
     Source/Lens/LensController.h
+    Source/State/PresetManager.h
     Source/UI/Theme.h
     Source/UI/LumenLookAndFeel.h
     Source/UI/Controls.h
