@@ -101,6 +101,9 @@ private:
 
     // Modulation state
     Lfo monoLfo[3];
+    LfoParams effLfo[3] {};        // current.lfo with the modulated rate applied
+    float effLfoRateHz[3] {};      // written by the dest loop, consumed next chunk
+    bool  lfoRateModActive[3] {};
     float modWheel = 0.0f, aftertouch = 0.0f, pitchBend = 0.0f;
     float destExponent[mod::kNumDests] {};
     float globalNormSum[mod::kNumDests] {};

@@ -125,6 +125,12 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
 
     params.bpm = options.bpm;
 
+    // The shipped Init patch includes the default modulation set. Any explicit
+    // --mod/--macro flag replaces the whole config (measurement isolation —
+    // the Phase 3 gates measure exactly one route at a time).
+    if (options.modRoutes.empty() && options.macroMaps.empty())
+        lumen::modstate::applyInitModDefaults (params.mod);
+
     int slotIndex = 0;
     for (const auto& route : options.modRoutes)
     {

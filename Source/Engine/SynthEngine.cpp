@@ -56,7 +56,11 @@ void SynthEngine::prepare (double sr, int maxBlockSize)
     }
 
     for (int k = 0; k < 3; ++k)
+    {
         monoLfo[k].prepare (sr, 0xC001D00Du ^ (static_cast<uint32_t> (k + 1) * 0x9E3779B9u));
+        effLfoRateHz[k] = 0.0f;
+        lfoRateModActive[k] = false;
+    }
 
     for (auto* buffer : { &bufMorphA, &bufLevelA, &bufMorphB, &bufLevelB,
                           &bufSubLevel, &bufNoiseLin, &bufCutoff, &bufRes,
@@ -203,6 +207,9 @@ float SynthEngine::baseNaturalFor (int dest) const noexcept
         case D::reverbSize:    return current.fx.reverbSize;
         case D::reverbDamp:    return current.fx.reverbDamp;
         case D::reverbWidth:   return current.fx.reverbWidth;
+        case D::lfo1Rate:      return current.lfo[0].rateHz;
+        case D::lfo2Rate:      return current.lfo[1].rateHz;
+        case D::lfo3Rate:      return current.lfo[2].rateHz;
         case D::count: break;
     }
     return 0.0f;
@@ -287,14 +294,20 @@ void SynthEngine::applyGlobalModulation (int numSamples)
     values[static_cast<int> (S::aftertouch)] = aftertouch; active[static_cast<int> (S::aftertouch)] = true;
     values[static_cast<int> (S::pitchBend)] = pitchBend;   active[static_cast<int> (S::pitchBend)] = true;
 
+    // LFO values are read before this chunk's destination sums exist, so a
+    // modulated rate (Dest::lfoNRate) takes effect one chunk late.
     for (int k = 0; k < 3; ++k)
     {
-        if (current.lfo[k].mono)
+        effLfo[k] = current.lfo[k];
+        if (lfoRateModActive[k])
+            effLfo[k].rateHz = effLfoRateHz[k];
+
+        if (effLfo[k].mono)
         {
-            values[static_cast<int> (S::lfo1) + k] = monoLfo[k].value (current.lfo[k]);
+            values[static_cast<int> (S::lfo1) + k] = monoLfo[k].value (effLfo[k]);
             active[static_cast<int> (S::lfo1) + k] = true;
         }
-        monoLfo[k].advance (current.lfo[k], current.bpm, numSamples);
+        monoLfo[k].advance (effLfo[k], current.bpm, numSamples);
     }
 
     for (auto& sum : globalNormSum) sum = 0.0f;
@@ -349,6 +362,13 @@ void SynthEngine::applyGlobalModulation (int numSamples)
         {
             setTarget (*smoother, dest == mod::Dest::noiseLevel ? noiseDbToLinear (natural) : natural, snap);
         }
+        else if (d >= static_cast<int> (mod::Dest::lfo1Rate)
+              && d <= static_cast<int> (mod::Dest::lfo3Rate))
+        {
+            const int k = d - static_cast<int> (mod::Dest::lfo1Rate);
+            effLfoRateHz[k] = natural; // consumed at the top of the next chunk
+            lfoRateModActive[k] = globalActive[d];
+        }
         else
         {
             using D = mod::Dest;
@@ -394,8 +414,8 @@ void SynthEngine::applyPolyModulation (int voiceIndex, VoiceBlockGlobals& global
     values[static_cast<int> (S::env2)] = voice.envValue (1);
     values[static_cast<int> (S::env3)] = voice.envValue (2);
     for (int k = 0; k < 3; ++k)
-        if (! current.lfo[k].mono)
-            values[static_cast<int> (S::lfo1) + k] = voice.polyLfoValue (k, current.lfo[k]);
+        if (! effLfo[k].mono)
+            values[static_cast<int> (S::lfo1) + k] = voice.polyLfoValue (k, effLfo[k]);
     values[static_cast<int> (S::velocity)] = voice.velocityNorm();
     values[static_cast<int> (S::keytrack)] = voice.keytrackNorm();
     values[static_cast<int> (S::randomPerNote)] = voice.randomNorm();
@@ -612,7 +632,7 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
 
         v.startBlock (voiceGlobals, numSamples);
         v.render (outL, outR, numSamples, voiceBuffers);
-        v.advancePolyLfos (current.lfo, current.bpm, numSamples);
+        v.advancePolyLfos (effLfo, current.bpm, numSamples);
     }
 
     publishUiTap (newestVoice);
@@ -651,10 +671,10 @@ void SynthEngine::publishUiTap (int newestVoice)
     ui.sourceValue[static_cast<int> (S::randomPerNote)].store (v.randomNorm(), std::memory_order_relaxed);
 
     for (int k = 0; k < 3; ++k)
-        if (! current.lfo[k].mono)
+        if (! effLfo[k].mono)
         {
             ui.sourceValue[static_cast<int> (S::lfo1) + k]
-                .store (v.polyLfoValue (k, current.lfo[k]), std::memory_order_relaxed);
+                .store (v.polyLfoValue (k, effLfo[k]), std::memory_order_relaxed);
             ui.lfoPhase[k].store (static_cast<float> (v.polyLfoPhase (k)), std::memory_order_relaxed);
         }
 }

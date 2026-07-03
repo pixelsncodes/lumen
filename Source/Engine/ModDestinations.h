@@ -28,6 +28,12 @@ enum class Dest
     chorusRate, chorusDepth, chorusMix,
     delayTime, delayFeedback, delayDamp,
     reverbSize, reverbDamp, reverbWidth,
+    // Phase 5 (append-only): LFO rates (SPEC 9 — every continuous knob).
+    // Global-only, like the FX bus: poly-source routings are inactive, and
+    // the modulated rate lands one engine chunk late (LFO values are read
+    // before the sums that would retune them exist). Free-rate only; a
+    // host-synced LFO ignores its rate modulation.
+    lfo1Rate, lfo2Rate, lfo3Rate,
     count
 };
 
@@ -92,6 +98,9 @@ inline constexpr DestRange kRanges[kNumDests] = {
     { 0.0f, 1.0f, 0.0f },          // reverbSize
     { 0.0f, 1.0f, 0.0f },          // reverbDamp
     { 0.0f, 1.0f, 0.0f },          // reverbWidth
+    { 0.01f, 40.0f, 0.63245553f }, // lfo1Rate (Hz, sqrt(min*max))
+    { 0.01f, 40.0f, 0.63245553f }, // lfo2Rate
+    { 0.01f, 40.0f, 0.63245553f }, // lfo3Rate
 };
 
 // JUCE skew math: normalized p -> value = min + (max-min) * p^e where

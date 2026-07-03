@@ -15,6 +15,7 @@
 #include "Engine/SynthEngine.h"
 #include "Engine/Wavetable.h"
 #include "State/ModState.h"
+#include "State/ModState.h"
 #include "State/Parameters.h"
 
 #include <cmath>
@@ -532,6 +533,78 @@ public:
     }
 };
 
+class InitModDefaultsTest final : public juce::UnitTest
+{
+public:
+    InitModDefaultsTest() : juce::UnitTest ("Init default macro maps & motion slot", "Modulation") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("fresh state gets the Init modulation defaults");
+        juce::ValueTree state ("PARAMS");
+        modstate::ensureTrees (state);
+        mod::Config fromTree {};
+        modstate::buildConfig (state, fromTree);
+
+        const auto& slot0 = fromTree.slots[0];
+        expect (slot0.enabled, "motion slot enabled");
+        expectEquals (slot0.source, modstate::sourceFromToken ("lfo1"));
+        expectEquals (slot0.dest, modstate::destFromToken ("oscAMorph"));
+        expectWithinAbsoluteError (slot0.depth, 0.25f, 1.0e-6f);
+        for (int i = 1; i < mod::kNumSlots; ++i)
+            expect (! fromTree.slots[i].enabled, "remaining slots empty");
+
+        beginTest ("tree defaults match applyInitModDefaults (render harness)");
+        mod::Config direct {};
+        modstate::applyInitModDefaults (direct);
+        for (int m = 0; m < mod::kNumMacros; ++m)
+            for (int i = 0; i < mod::kMaxMacroMaps; ++i)
+            {
+                expectEquals (fromTree.macroMaps[m][i].dest, direct.macroMaps[m][i].dest);
+                expectWithinAbsoluteError (fromTree.macroMaps[m][i].rangeMin,
+                                           direct.macroMaps[m][i].rangeMin, 1.0e-6f);
+                expectWithinAbsoluteError (fromTree.macroMaps[m][i].rangeMax,
+                                           direct.macroMaps[m][i].rangeMax, 1.0e-6f);
+            }
+
+        beginTest ("neutral at the frozen macro defaults (Init timbre unchanged)");
+        const float frozenDefaults[4] = { 0.5f, 0.5f, 0.3f, 0.2f }; // SPEC section 12
+        for (int d = 0; d < mod::kNumDests; ++d)
+            expectWithinAbsoluteError (mod::macroSumForDest (fromTree, d, frozenDefaults),
+                                       0.0f, 1.0e-3f);
+
+        beginTest ("every macro moves at least one destination when swept");
+        for (int m = 0; m < 4; ++m)
+        {
+            float atZero[4], atOne[4];
+            for (int i = 0; i < 4; ++i)
+                atZero[i] = atOne[i] = frozenDefaults[i];
+            atZero[m] = 0.0f;
+            atOne[m] = 1.0f;
+            float travel = 0.0f;
+            for (int d = 0; d < mod::kNumDests; ++d)
+                travel = juce::jmax (travel,
+                    std::abs (mod::macroSumForDest (fromTree, d, atOne)
+                              - mod::macroSumForDest (fromTree, d, atZero)));
+            expect (travel > 0.2f, "macro " + juce::String (m + 1) + " has audible span");
+        }
+
+        beginTest ("saved states are not re-seeded (user-cleared maps stay cleared)");
+        auto macros = state.getChildWithName ("MACROS");
+        for (int m = 0; m < macros.getNumChildren(); ++m)
+            macros.getChild (m).removeAllChildren (nullptr);
+        state.getChildWithName ("MODMATRIX").getChild (0).setProperty ("enabled", false, nullptr);
+        modstate::ensureTrees (state); // what setStateInformation runs on load
+        mod::Config reloaded {};
+        modstate::buildConfig (state, reloaded);
+        expect (! reloaded.slots[0].enabled, "cleared slot stays cleared");
+        for (int m = 0; m < mod::kNumMacros; ++m)
+            expectEquals (reloaded.macroMaps[m][0].dest, -1);
+    }
+};
+
 class ModMatrixMathTest final : public juce::UnitTest
 {
 public:
@@ -676,6 +749,7 @@ MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
 EngineRenderTest engineRenderTest;
+InitModDefaultsTest initModDefaultsTest;
 ModMatrixMathTest modMatrixMathTest;
 LfoTest lfoTest;
 FxNullTest fxNullTest;

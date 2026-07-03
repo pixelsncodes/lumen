@@ -9,6 +9,30 @@ namespace
     const juce::Identifier kMacrosType ("MACROS");
     const juce::Identifier kMacroType ("MACRO");
     const juce::Identifier kMapType ("MAP");
+
+    // Init-patch modulation defaults (SPEC pillar 1 / section 14). All macro
+    // ranges are chosen to sum to a ZERO offset at the frozen macro defaults
+    // (0.5 / 0.5 / 0.3 / 0.2, SPEC section 12), so the Init timbre stays
+    // exactly as approved and the knobs sweep away from it:
+    //   Tone     down = darker (cutoff), up = hotter (filter drive)
+    //   Motion   speed of the built-in LFO1 -> Osc A morph wobble
+    //   Space    reverb + delay mix, dry at 0
+    //   Texture  unison detune spread + noise bed
+    struct InitSlot { const char* source; const char* dest; float depth; };
+    constexpr InitSlot kInitSlots[] = {
+        { "lfo1", "oscAMorph", 0.25f },
+    };
+
+    struct InitMap { int macro; const char* dest; float min; float max; };
+    constexpr InitMap kInitMaps[] = {
+        { 0, "filterCutoff", -0.60f,  0.60f  },
+        { 0, "filterDrive",  -0.25f,  0.25f  },
+        { 1, "lfo1Rate",     -0.20f,  0.20f  },
+        { 2, "reverbMix",    -0.195f, 0.455f },
+        { 2, "delayMix",     -0.12f,  0.28f  },
+        { 3, "oscADetune",   -0.10f,  0.40f  },
+        { 3, "noiseLevel",   -0.10f,  0.40f  },
+    };
 } // namespace
 
 const juce::StringArray& sourceTokens()
@@ -46,7 +70,8 @@ const juce::StringArray& destTokens()
         "driveAmount", "driveTone",
         "chorusRate", "chorusDepth", "chorusMix",
         "delayTime", "delayFeedback", "delayDamp",
-        "reverbSize", "reverbDamp", "reverbWidth"
+        "reverbSize", "reverbDamp", "reverbWidth",
+        "lfo1Rate", "lfo2Rate", "lfo3Rate"
     };
     return tokens;
 }
@@ -57,7 +82,8 @@ int destFromToken (const juce::String& token)   { return destTokens().indexOf (t
 void ensureTrees (juce::ValueTree& state)
 {
     auto matrix = state.getChildWithName (kMatrixType);
-    if (! matrix.isValid())
+    const bool freshMatrix = ! matrix.isValid();
+    if (freshMatrix)
     {
         matrix = juce::ValueTree (kMatrixType);
         state.appendChild (matrix, nullptr);
@@ -73,7 +99,8 @@ void ensureTrees (juce::ValueTree& state)
     }
 
     auto macros = state.getChildWithName (kMacrosType);
-    if (! macros.isValid())
+    const bool freshMacros = ! macros.isValid();
+    if (freshMacros)
     {
         macros = juce::ValueTree (kMacrosType);
         state.appendChild (macros, nullptr);
@@ -83,6 +110,57 @@ void ensureTrees (juce::ValueTree& state)
         juce::ValueTree macro (kMacroType);
         macro.setProperty ("index", macros.getNumChildren(), nullptr);
         macros.appendChild (macro, nullptr);
+    }
+
+    // Init defaults only on freshly created trees; saved states (which always
+    // carry both nodes, even with every slot/map empty) load untouched.
+    if (freshMatrix)
+    {
+        int slotIndex = 0;
+        for (const auto& s : kInitSlots)
+        {
+            auto slot = matrix.getChild (slotIndex++);
+            slot.setProperty ("source", s.source, nullptr);
+            slot.setProperty ("dest", s.dest, nullptr);
+            slot.setProperty ("depth", s.depth, nullptr);
+            slot.setProperty ("enabled", true, nullptr);
+        }
+    }
+    if (freshMacros)
+    {
+        for (const auto& m : kInitMaps)
+        {
+            juce::ValueTree map (kMapType);
+            map.setProperty ("dest", m.dest, nullptr);
+            map.setProperty ("min", m.min, nullptr);
+            map.setProperty ("max", m.max, nullptr);
+            macros.getChild (m.macro).appendChild (map, nullptr);
+        }
+    }
+}
+
+void applyInitModDefaults (mod::Config& out)
+{
+    int slotIndex = 0;
+    for (const auto& s : kInitSlots)
+    {
+        auto& slot = out.slots[slotIndex++];
+        slot.source = sourceFromToken (s.source);
+        slot.dest = destFromToken (s.dest);
+        slot.depth = s.depth;
+        slot.enabled = slot.source >= 0 && slot.dest >= 0;
+    }
+
+    int mapIndex[mod::kNumMacros] {};
+    for (const auto& m : kInitMaps)
+    {
+        const int dest = destFromToken (m.dest);
+        if (dest < 0 || mapIndex[m.macro] >= mod::kMaxMacroMaps)
+            continue;
+        auto& map = out.macroMaps[m.macro][mapIndex[m.macro]++];
+        map.dest = dest;
+        map.rangeMin = m.min;
+        map.rangeMax = m.max;
     }
 }
 
