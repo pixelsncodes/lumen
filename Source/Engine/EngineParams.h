@@ -16,6 +16,7 @@ enum class TableChoice   { basic = 0, pwm, harmonicRise, formant, image };
 enum class FilterMode    { lp12 = 0, lp24, hp12, bp12, notch };
 enum class SubWave       { sine = 0, triangle, square };
 enum class NoiseType     { white = 0, pink };
+enum class VoiceMode     { poly = 0, mono, legato };
 
 struct OscParams
 {
@@ -104,5 +105,12 @@ struct EngineParams
 
     // --- Phase 4: effects ---------------------------------------------
     FxParams fx {};
+
+    // --- Phase 7: voice modes + glide (SPEC section 11) -----------------
+    // Mono = one voice, last-note priority, retrigger on every note change;
+    // legato = mono without envelope retrigger while notes overlap. Glide
+    // slews pitch between successive notes (always-glide) in mono/legato.
+    int   voiceMode    = 0;    // VoiceMode
+    float glideSeconds = 0.0f; // 0..2
 };
 } // namespace lumen

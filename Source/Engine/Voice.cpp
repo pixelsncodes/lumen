@@ -95,10 +95,22 @@ void Voice::prepare (double sr, uint32_t noiseSeed)
 }
 
 void Voice::startNote (int midiNote, float velocity, uint64_t& rngState,
-                       bool phaseRandomA, bool phaseRandomB)
+                       bool phaseRandomA, bool phaseRandomB,
+                       float glideFromSemis, float glideSeconds)
 {
     note = midiNote;
-    noteHz = 440.0f * std::exp2 ((static_cast<float> (midiNote) - 69.0f) / 12.0f);
+    pitchTargetSemis = static_cast<double> (midiNote);
+    if (glideFromSemis >= 0.0f && glideSeconds > 1.0e-4f
+        && std::abs (static_cast<double> (glideFromSemis) - pitchTargetSemis) > 1.0e-6)
+    {
+        pitchSemis = static_cast<double> (glideFromSemis);
+        glideSemisPerSample = (pitchTargetSemis - pitchSemis) / (static_cast<double> (glideSeconds) * sampleRate);
+    }
+    else
+    {
+        pitchSemis = pitchTargetSemis;
+        glideSemisPerSample = 0.0;
+    }
     velocityGain = std::clamp (velocity, 0.0f, 1.0f); // linear amplitude (DECISIONS.md)
 
     // Always (re)set all 8 lane phases so a unison-count increase mid-note
@@ -125,6 +137,21 @@ void Voice::startNote (int midiNote, float velocity, uint64_t& rngState,
     active = true;
 }
 
+void Voice::retune (int midiNote, float glideSeconds)
+{
+    note = midiNote;
+    pitchTargetSemis = static_cast<double> (midiNote);
+    if (glideSeconds > 1.0e-4f && std::abs (pitchSemis - pitchTargetSemis) > 1.0e-6)
+    {
+        glideSemisPerSample = (pitchTargetSemis - pitchSemis) / (static_cast<double> (glideSeconds) * sampleRate);
+    }
+    else
+    {
+        pitchSemis = pitchTargetSemis;
+        glideSemisPerSample = 0.0;
+    }
+}
+
 void Voice::noteOff()
 {
     env1.noteOff();
@@ -141,6 +168,7 @@ void Voice::kill()
 }
 
 void Voice::configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples,
+                          float hzStart, float hzEnd,
                           double bendStart, double bendEnd)
 {
     osc.enabled = g.enabled && g.table != nullptr && ! g.table->isEmpty();
@@ -152,10 +180,10 @@ void Voice::configureOsc (OscState& osc, const OscBlockGlobals& g, int numSample
     const auto startLanes = computeLanes (osc.unison, g.detuneStart, g.widthStart, g.blendStart, g.panStart);
     const auto endLanes   = computeLanes (osc.unison, g.detuneEnd,   g.widthEnd,   g.blendEnd,   g.panEnd);
 
-    const double baseStart = static_cast<double> (noteHz) * bendStart
+    const double baseStart = static_cast<double> (hzStart) * bendStart
         * std::exp2 ((static_cast<double> (g.semitones) + static_cast<double> (g.fineStart) / 100.0) / 12.0)
         / sampleRate;
-    const double baseEnd = static_cast<double> (noteHz) * bendEnd
+    const double baseEnd = static_cast<double> (hzEnd) * bendEnd
         * std::exp2 ((static_cast<double> (g.semitones) + static_cast<double> (g.fineEnd) / 100.0) / 12.0)
         / sampleRate;
 
@@ -187,15 +215,35 @@ void Voice::startBlock (const VoiceBlockGlobals& globals, int numSamples)
     noiseType = globals.noiseType;
     keytrackFactor = std::exp2 (globals.keytrack * (static_cast<float> (note) - 60.0f) / 12.0f);
 
-    configureOsc (oscA, globals.oscA, numSamples, globals.bendStart, globals.bendEnd);
-    configureOsc (oscB, globals.oscB, numSamples, globals.bendStart, globals.bendEnd);
+    // Advance the pitch glide across this block (SPEC 11). The float hz
+    // expression matches the pre-glide noteHz math exactly, so a snapped
+    // pitch (poly, glide 0) renders bit-identically to the old fixed pitch.
+    const double semisStart = pitchSemis;
+    if (glideSemisPerSample != 0.0)
+    {
+        double next = pitchSemis + glideSemisPerSample * static_cast<double> (numSamples);
+        if ((glideSemisPerSample > 0.0 && next >= pitchTargetSemis)
+            || (glideSemisPerSample < 0.0 && next <= pitchTargetSemis))
+        {
+            next = pitchTargetSemis;
+            glideSemisPerSample = 0.0;
+        }
+        pitchSemis = next;
+    }
+    const float hzStart = 440.0f * std::exp2 ((static_cast<float> (semisStart) - 69.0f) / 12.0f);
+    const float hzEnd = glideSemisPerSample == 0.0 && semisStart == pitchSemis
+                            ? hzStart
+                            : 440.0f * std::exp2 ((static_cast<float> (pitchSemis) - 69.0f) / 12.0f);
+
+    configureOsc (oscA, globals.oscA, numSamples, hzStart, hzEnd, globals.bendStart, globals.bendEnd);
+    configureOsc (oscB, globals.oscB, numSamples, hzStart, hzEnd, globals.bendStart, globals.bendEnd);
 
     // Sub tracks Osc A pitch pre-detune, -1 or -2 octaves (SPEC section 5).
     const double subScale = std::exp2 (-static_cast<double> (globals.subOctave));
-    const double subStart = static_cast<double> (noteHz) * globals.bendStart
+    const double subStart = static_cast<double> (hzStart) * globals.bendStart
         * std::exp2 ((globals.oscA.semitones + static_cast<double> (globals.oscA.fineStart) / 100.0) / 12.0)
         * subScale / sampleRate;
-    const double subEnd = static_cast<double> (noteHz) * globals.bendEnd
+    const double subEnd = static_cast<double> (hzEnd) * globals.bendEnd
         * std::exp2 ((globals.oscA.semitones + static_cast<double> (globals.oscA.fineEnd) / 100.0) / 12.0)
         * subScale / sampleRate;
     subInc = subStart;

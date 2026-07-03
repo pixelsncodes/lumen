@@ -81,26 +81,31 @@ void OscCard::animate()
 // ---------------------------------------------------------------------------
 
 SubNoiseCard::SubNoiseCard (const UiShared& shared)
-    : CardPanel ("SUB / NOISE", theme::accentA),
+    : CardPanel ("SUB / NOISE / VOICE", theme::accentA),
       subWave (shared, "subWave"),
       subOctave (shared, "subOctave"),
       noiseType (shared, "noiseType"),
+      voiceMode (shared, "voiceMode"),
       subLevel (shared, "subLevel", "Level", theme::accentA),
-      noiseLevel (shared, "noiseLevel", "Level", theme::accentA)
+      noiseLevel (shared, "noiseLevel", "Level", theme::accentA),
+      glideTime (shared, "glideTime", "Glide", theme::accentA)
 {
     for (auto* child : std::initializer_list<juce::Component*> {
-             &subWave, &subOctave, &noiseType, &subLevel, &noiseLevel })
+             &subWave, &subOctave, &noiseType, &voiceMode, &subLevel, &noiseLevel, &glideTime })
         addAndMakeVisible (child);
 }
 
 void SubNoiseCard::resized()
 {
-    subWave.setBounds (10, 52, 86, 18);
-    subOctave.setBounds (102, 52, 70, 18);
-    subLevel.setBounds (182, 32, 66, 70);
+    subWave.setBounds (10, 42, 86, 18);
+    subOctave.setBounds (102, 42, 70, 18);
+    subLevel.setBounds (186, 20, 62, 60);
 
-    noiseType.setBounds (10, 148, 86, 18);
-    noiseLevel.setBounds (182, 122, 66, 70);
+    noiseType.setBounds (10, 104, 86, 18);
+    noiseLevel.setBounds (186, 82, 62, 60);
+
+    voiceMode.setBounds (10, 166, 86, 18);
+    glideTime.setBounds (186, 144, 62, 60);
 }
 
 void SubNoiseCard::paint (juce::Graphics& g)
@@ -108,10 +113,12 @@ void SubNoiseCard::paint (juce::Graphics& g)
     CardPanel::paint (g);
     g.setColour (theme::textMuted);
     g.setFont (theme::medium (11.0f));
-    g.drawText ("SUB", 10, 32, 100, 12, juce::Justification::centredLeft);
-    g.drawText ("NOISE", 10, 128, 100, 12, juce::Justification::centredLeft);
+    g.drawText ("SUB", 10, 26, 100, 12, juce::Justification::centredLeft);
+    g.drawText ("NOISE", 10, 88, 100, 12, juce::Justification::centredLeft);
+    g.drawText ("VOICE", 10, 150, 100, 12, juce::Justification::centredLeft);
     g.setColour (theme::hairline);
-    g.drawHorizontalLine (112, 8.0f, (float) getWidth() - 8.0f);
+    g.drawHorizontalLine (84, 8.0f, (float) getWidth() - 8.0f);
+    g.drawHorizontalLine (146, 8.0f, (float) getWidth() - 8.0f);
 }
 
 // ---------------------------------------------------------------------------

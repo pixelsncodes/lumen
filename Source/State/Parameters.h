@@ -118,5 +118,9 @@ inline constexpr const char* reverbSize    = "reverbSize";
 inline constexpr const char* reverbDamp    = "reverbDamp";
 inline constexpr const char* reverbWidth   = "reverbWidth";
 
+// --- Phase 7: voice modes + glide (SPEC section 11) ----------------------
+inline constexpr const char* voiceMode = "voiceMode";
+inline constexpr const char* glideTime = "glideTime";
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

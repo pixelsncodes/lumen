@@ -116,6 +116,9 @@ const std::vector<Binding>& all()
         { params::reverbSize,    [] (EngineParams& p, float v) { p.fx.reverbSize = v; } },
         { params::reverbDamp,    [] (EngineParams& p, float v) { p.fx.reverbDamp = v; } },
         { params::reverbWidth,   [] (EngineParams& p, float v) { p.fx.reverbWidth = v; } },
+
+        { params::voiceMode,     [] (EngineParams& p, float v) { p.voiceMode = toInt (v); } },
+        { params::glideTime,     [] (EngineParams& p, float v) { p.glideSeconds = v; } },
     };
     return table;
 }

@@ -261,6 +261,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (std::make_unique<FloatParam> (pid (reverbWidth), "Reverb Width",
         unitRange, fx.reverbWidth, unitAttr));
 
+    // Phase 7: voice modes + glide (SPEC section 11). Glide time is consumed
+    // at note events (no audio-rate smoothing needed; the pitch slew IS the
+    // smoothing), skewed so short portamento times get most of the throw.
+    layout.add (std::make_unique<ChoiceParam> (pid (voiceMode), "Voice Mode",
+        juce::StringArray { "Poly", "Mono", "Legato" }, defaults.voiceMode));
+    juce::NormalisableRange<float> glideRange (0.0f, 2.0f);
+    glideRange.setSkewForCentre (0.25f);
+    layout.add (std::make_unique<FloatParam> (pid (glideTime), "Glide Time",
+        glideRange, defaults.glideSeconds,
+        Attributes().withLabel ("s").withStringFromValueFunction (secondsToText)));
+
     return layout;
 }
 } // namespace lumen::params

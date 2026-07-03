@@ -51,8 +51,8 @@ public:
     void paint (juce::Graphics& g) override;
 
 private:
-    ChoiceCombo subWave, subOctave, noiseType;
-    ModKnob subLevel, noiseLevel;
+    ChoiceCombo subWave, subOctave, noiseType, voiceMode;
+    ModKnob subLevel, noiseLevel, glideTime;
 };
 
 class FilterCard final : public CardPanel

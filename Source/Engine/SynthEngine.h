@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace lumen
@@ -78,6 +79,20 @@ public:
         return n;
     }
 
+    // Newest active voice's note / live glide pitch (tests + UI; -1 / 0 when
+    // silent). Message-thread reads race harmlessly with the audio thread.
+    int newestActiveNote() const noexcept
+    {
+        const auto* v = newestActiveVoice();
+        return v != nullptr ? v->currentNote() : -1;
+    }
+
+    float newestActivePitchSemis() const noexcept
+    {
+        const auto* v = newestActiveVoice();
+        return v != nullptr ? v->currentPitchSemis() : 0.0f;
+    }
+
 private:
     using Smoothed = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>;
 
@@ -88,6 +103,16 @@ private:
 
     void renderChunk (float* outL, float* outR, int numSamples);
     Voice* findVoiceFor (int midiNote);
+
+    // Voice modes (SPEC section 11)
+    const Voice* newestActiveVoice() const noexcept;
+    Voice* newestActiveVoice() noexcept
+    {
+        return const_cast<Voice*> (std::as_const (*this).newestActiveVoice());
+    }
+    void heldPush (int midiNote) noexcept;
+    void heldRemove (int midiNote) noexcept;
+    void retriggerMono (Voice& voice, int midiNote, float velocity);
 
     // Modulation helpers
     float baseNaturalFor (int dest) const noexcept;
@@ -109,6 +134,12 @@ private:
     Voice voices[kNumVoices];
     FxChain fx;
     bool fxEnabled = true;
+
+    // Held-key stack in press order (maintained in every mode so a mid-play
+    // mode switch behaves): last entry = most recent key = the mono note.
+    int heldNotes[128] {};
+    int numHeld = 0;
+    float lastNoteSemis = -1.0f; // last played note, for always-glide across gaps
 
     // Lens image tables (Phase 6): owned by the caller, swapped atomically.
     std::atomic<const Wavetable*> imageTableA { nullptr }, imageTableB { nullptr };

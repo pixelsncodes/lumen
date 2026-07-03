@@ -5,6 +5,7 @@
 //                [--measure-mod] [--measure-echo] [--set param=value ...]
 //                [--image <png|jpg>] [--mode scan|spectral] [--lens-target A|B]
 //                [--chroma] [--gen-image gradient|stripes|checker|warm|busy]
+//                [--seq note@on:off,...] [--table-dump frames.csv]
 //
 // --preset resolves factory names first (case-insensitive, "init" included),
 // then .lumen files (full APVTS state XML: parameters + matrix/macros +
@@ -18,12 +19,18 @@
 //   oscillator's Image slot and prints the wavetable SHA-256 (determinism).
 // --chroma additionally applies the SPEC 13.5 "Set patch from colors" map.
 // --gen-image writes a deterministic procedural test image to --out and exits.
+// --seq renders a timed note sequence instead of the single --note (seconds,
+//   e.g. "36@0:1.0,48@0.5:1.5" — sample-accurate on/offs; exercises the
+//   Phase 7 mono/legato/glide voice modes).
+// --table-dump writes Osc A's resolved wavetable (mip level 0) as CSV, one
+//   row per frame (SPEC section 18).
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
 #include <juce_graphics/juce_graphics.h>
 
+#include "Engine/FactoryTables.h"
 #include "Engine/SynthEngine.h"
 #include "Lens/LensEngine.h"
 #include "Lens/TestImages.h"
@@ -65,6 +72,11 @@ struct RenderOptions
     int lensTarget = 0;                                         // --lens-target A|B
     bool chroma = false;                                        // --chroma
     juce::String genImage;                                      // --gen-image kind
+
+    // Phase 7 harness additions
+    struct SeqEvent { int note; double onSeconds; double offSeconds; };
+    std::vector<SeqEvent> seq;                                  // --seq
+    juce::String tableDumpPath;                                 // --table-dump
 };
 
 bool parseArguments (int argc, char* argv[], RenderOptions& options)
@@ -108,6 +120,28 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
                 return false;
             }
             (flag == "--mod" ? options.modRoutes : options.macroMaps).push_back (parts);
+        }
+        else if (flag == "--table-dump" && hasValue) { options.tableDumpPath = argv[++i]; }
+        else if (flag == "--seq" && hasValue)
+        {
+            juce::StringArray entries;
+            entries.addTokens (juce::String (argv[++i]), ",", "");
+            for (const auto& entry : entries)
+            {
+                juce::StringArray parts;
+                parts.addTokens (entry.replaceCharacter ('@', ':'), ":", "");
+                const bool ok = parts.size() == 3
+                    && parts[0].getIntValue() >= 0 && parts[0].getIntValue() <= 127
+                    && parts[2].getDoubleValue() > parts[1].getDoubleValue();
+                if (! ok)
+                {
+                    std::cerr << "--seq: expected note@on:off (seconds), got '" << entry << "'\n";
+                    return false;
+                }
+                options.seq.push_back ({ parts[0].getIntValue(),
+                                         parts[1].getDoubleValue(),
+                                         parts[2].getDoubleValue() });
+            }
         }
         else if (flag == "--preset" && hasValue)    { options.preset = argv[++i]; }
         else if (flag == "--out" && hasValue)       { options.outPath = argv[++i]; }
@@ -332,6 +366,49 @@ double renderNotes (lumen::SynthEngine& engine, juce::AudioBuffer<float>& output
     const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - startTime;
     const double audioSeconds = totalSamples / sampleRate;
     return audioSeconds / std::max (1.0e-9, elapsed.count());
+}
+
+// --seq: sample-accurate timed on/off events (Phase 7 voice-mode demos).
+double renderSequence (lumen::SynthEngine& engine, juce::AudioBuffer<float>& output, double sampleRate,
+                       const std::vector<RenderOptions::SeqEvent>& seq, int velocity)
+{
+    const auto startTime = std::chrono::steady_clock::now();
+
+    struct Event { int sample; bool on; int note; };
+    std::vector<Event> events;
+    for (const auto& e : seq)
+    {
+        events.push_back ({ static_cast<int> (e.onSeconds * sampleRate), true, e.note });
+        events.push_back ({ static_cast<int> (e.offSeconds * sampleRate), false, e.note });
+    }
+    std::stable_sort (events.begin(), events.end(),
+                      [] (const Event& a, const Event& b) { return a.sample < b.sample; });
+
+    const int totalSamples = output.getNumSamples();
+    int position = 0;
+    size_t nextEvent = 0;
+    while (position < totalSamples)
+    {
+        while (nextEvent < events.size() && events[nextEvent].sample <= position)
+        {
+            const auto& e = events[nextEvent++];
+            if (e.on)
+                engine.noteOn (e.note, static_cast<float> (velocity) / 127.0f);
+            else
+                engine.noteOff (e.note);
+        }
+
+        int end = juce::jmin (totalSamples, position + kBlockSize);
+        if (nextEvent < events.size() && events[nextEvent].sample < end)
+            end = juce::jmax (position + 1, events[nextEvent].sample);
+
+        engine.render (output.getWritePointer (0, position),
+                       output.getWritePointer (1, position), end - position);
+        position = end;
+    }
+
+    const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - startTime;
+    return (totalSamples / sampleRate) / std::max (1.0e-9, elapsed.count());
 }
 
 bool writeWav (const juce::File& file, const juce::AudioBuffer<float>& buffer, double sampleRate)
@@ -924,6 +1001,41 @@ int main (int argc, char* argv[])
         engine.setImageTable (options.lensTarget, &lensTable); // --image wins
     engine.setParams (params);
 
+    // --table-dump: Osc A's resolved wavetable, mip level 0, one CSV row per
+    // frame (SPEC section 18). Resolution mirrors the engine: an Image choice
+    // uses the loaded Lens/preset table, falling back to the factory set.
+    if (options.tableDumpPath.isNotEmpty())
+    {
+        const lumen::Wavetable* table = &lumen::factory::forIndex (params.oscA.table);
+        if (params.oscA.table == static_cast<int> (lumen::TableChoice::image))
+        {
+            if (haveImage && options.lensTarget == 0 && ! lensTable.isEmpty())
+                table = &lensTable;
+            else if (havePresetTable[0] && ! presetTables[0].isEmpty())
+                table = &presetTables[0];
+        }
+
+        juce::String csv;
+        csv.preallocateBytes (static_cast<size_t> (table->getNumFrames()) * lumen::Wavetable::kFrameLength * 10);
+        for (int frame = 0; frame < table->getNumFrames(); ++frame)
+        {
+            const float* data = table->frameData (frame, 0);
+            for (int i = 0; i < lumen::Wavetable::kFrameLength; ++i)
+                csv << (i > 0 ? "," : "") << juce::String (data[i], 6);
+            csv << "\n";
+        }
+
+        const auto dumpFile = juce::File::getCurrentWorkingDirectory().getChildFile (options.tableDumpPath);
+        if (! dumpFile.replaceWithText (csv))
+        {
+            std::cerr << "--table-dump: cannot write '" << dumpFile.getFullPathName() << "'\n";
+            return 1;
+        }
+        std::cout << "table_dump=" << dumpFile.getFullPathName()
+                  << " frames=" << table->getNumFrames()
+                  << " samples_per_frame=" << lumen::Wavetable::kFrameLength << "\n";
+    }
+
     if (options.bench)
     {
         auto* json = new juce::DynamicObject();
@@ -953,13 +1065,21 @@ int main (int argc, char* argv[])
         return 0;
     }
 
-    const int noteOffSample = static_cast<int> (options.durationSeconds * options.sampleRate);
-    const int totalSamples = static_cast<int> ((options.durationSeconds + options.tailSeconds) * options.sampleRate);
+    // --seq extends the buffer to cover its last note-off; the analyze
+    // timing metrics stay aligned with that final off.
+    double lastOffSeconds = options.durationSeconds;
+    for (const auto& e : options.seq)
+        lastOffSeconds = juce::jmax (lastOffSeconds, e.offSeconds);
+
+    const int noteOffSample = static_cast<int> (lastOffSeconds * options.sampleRate);
+    const int totalSamples = static_cast<int> ((lastOffSeconds + options.tailSeconds) * options.sampleRate);
     juce::AudioBuffer<float> buffer (2, totalSamples);
     buffer.clear();
 
-    const double realtimeFactor = renderNotes (engine, buffer, options.sampleRate,
-                                               { { options.note, noteOffSample } }, options.velocity);
+    const double realtimeFactor = options.seq.empty()
+        ? renderNotes (engine, buffer, options.sampleRate,
+                       { { options.note, noteOffSample } }, options.velocity)
+        : renderSequence (engine, buffer, options.sampleRate, options.seq, options.velocity);
 
     const auto outFile = juce::File::getCurrentWorkingDirectory().getChildFile (options.outPath);
     if (! writeWav (outFile, buffer, options.sampleRate))

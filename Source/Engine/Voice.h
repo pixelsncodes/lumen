@@ -61,8 +61,14 @@ public:
     static constexpr int kMaxUnison = 8;
 
     void prepare (double sampleRate, uint32_t noiseSeed);
+    // glideFromSemis < 0 = start at pitch (no glide); otherwise the pitch
+    // slews from glideFromSemis to midiNote over glideSeconds (SPEC 11).
     void startNote (int midiNote, float velocity, uint64_t& rngState,
-                    bool phaseRandomA, bool phaseRandomB);
+                    bool phaseRandomA, bool phaseRandomB,
+                    float glideFromSemis = -1.0f, float glideSeconds = 0.0f);
+    // Legato pitch change: retargets the glide only — no envelope/LFO
+    // retrigger, no phase reset, velocity kept from the first note.
+    void retune (int midiNote, float glideSeconds);
     void noteOff();
     void kill();
 
@@ -70,6 +76,7 @@ public:
     bool isReleasing() const noexcept { return active && env1.isReleasing(); }
     float envLevel() const noexcept   { return env1.value(); }
     int currentNote() const noexcept  { return note; }
+    float currentPitchSemis() const noexcept { return static_cast<float> (pitchSemis); }
     uint64_t age() const noexcept     { return noteOnOrder; }
     void setAge (uint64_t order) noexcept { noteOnOrder = order; }
 
@@ -116,6 +123,7 @@ private:
     };
 
     void configureOsc (OscState& osc, const OscBlockGlobals& g, int numSamples,
+                       float hzStart, float hzEnd,
                        double bendStart, double bendEnd);
     float renderOscSample (OscState& osc, float morph, float& outR) noexcept;
 
@@ -123,9 +131,15 @@ private:
     bool active = false;
     int note = 60;
     float velocityGain = 0.0f;
-    float noteHz = 261.63f;
     float keytrackFactor = 1.0f;
     uint64_t noteOnOrder = 0;
+
+    // Pitch glide (SPEC 11): pitchSemis slews linearly in semitone space
+    // toward pitchTargetSemis; rate 0 = snapped. Advanced once per block in
+    // startBlock; the per-sample ramp rides the existing increment lerp.
+    double pitchSemis = 60.0;
+    double pitchTargetSemis = 60.0;
+    double glideSemisPerSample = 0.0;
 
     OscState oscA, oscB;
     int filterMode = 1;

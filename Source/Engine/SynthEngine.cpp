@@ -114,26 +114,130 @@ Voice* SynthEngine::findVoiceFor (int)
     return oldest;
 }
 
+const Voice* SynthEngine::newestActiveVoice() const noexcept
+{
+    const Voice* newest = nullptr;
+    for (const auto& v : voices)
+        if (v.isActive() && (newest == nullptr || v.age() > newest->age()))
+            newest = &v;
+    return newest;
+}
+
+void SynthEngine::heldPush (int midiNote) noexcept
+{
+    heldRemove (midiNote);
+    if (numHeld < 128)
+        heldNotes[numHeld++] = midiNote;
+}
+
+void SynthEngine::heldRemove (int midiNote) noexcept
+{
+    for (int i = 0; i < numHeld; ++i)
+        if (heldNotes[i] == midiNote)
+        {
+            for (int j = i; j < numHeld - 1; ++j)
+                heldNotes[j] = heldNotes[j + 1];
+            --numHeld;
+            return;
+        }
+}
+
+void SynthEngine::retriggerMono (Voice& voice, int midiNote, float velocity)
+{
+    // Mono retrigger: same declick path as voice stealing (envelopes restart
+    // from their current level), gliding from the live pitch mid-glide.
+    const float from = current.glideSeconds > 0.0f ? voice.currentPitchSemis() : -1.0f;
+    voice.setAge (++noteCounter);
+    voice.startNote (midiNote, velocity, rngState,
+                     current.oscA.phaseRandom, current.oscB.phaseRandom,
+                     from, current.glideSeconds);
+    voiceModPrimed[&voice - voices] = false;
+}
+
 void SynthEngine::noteOn (int midiNote, float velocity)
 {
-    auto* voice = findVoiceFor (midiNote);
-    voice->setAge (++noteCounter);
-    voice->startNote (midiNote, velocity, rngState,
-                      current.oscA.phaseRandom, current.oscB.phaseRandom);
-    voiceModPrimed[voice - voices] = false;
+    heldPush (midiNote);
+
+    if (current.voiceMode == static_cast<int> (VoiceMode::poly))
+    {
+        auto* voice = findVoiceFor (midiNote);
+        voice->setAge (++noteCounter);
+        voice->startNote (midiNote, velocity, rngState,
+                          current.oscA.phaseRandom, current.oscB.phaseRandom);
+        voiceModPrimed[voice - voices] = false;
+        lastNoteSemis = static_cast<float> (midiNote);
+        return;
+    }
+
+    // Mono / legato: a single voice with last-note priority (SPEC 11).
+    auto* voice = newestActiveVoice();
+    for (auto& v : voices) // release leftovers from a mid-play mode switch
+        if (v.isActive() && &v != voice && ! v.isReleasing())
+            v.noteOff();
+
+    const bool legato = current.voiceMode == static_cast<int> (VoiceMode::legato);
+    if (voice != nullptr)
+    {
+        // Legato while a previous key overlaps: pitch only, no retrigger.
+        if (legato && numHeld > 1 && ! voice->isReleasing())
+            voice->retune (midiNote, current.glideSeconds);
+        else
+            retriggerMono (*voice, midiNote, velocity);
+    }
+    else
+    {
+        // Detached note: always-glide travels from the LAST played note even
+        // though its voice already ended (glide 0 starts on pitch).
+        const float from = current.glideSeconds > 0.0f ? lastNoteSemis : -1.0f;
+        auto* fresh = findVoiceFor (midiNote);
+        fresh->setAge (++noteCounter);
+        fresh->startNote (midiNote, velocity, rngState,
+                          current.oscA.phaseRandom, current.oscB.phaseRandom,
+                          from, current.glideSeconds);
+        voiceModPrimed[fresh - voices] = false;
+    }
+    lastNoteSemis = static_cast<float> (midiNote);
 }
 
 void SynthEngine::noteOff (int midiNote)
 {
-    for (auto& v : voices)
-        if (v.isActive() && v.currentNote() == midiNote && ! v.isReleasing())
-            v.noteOff();
+    heldRemove (midiNote);
+
+    if (current.voiceMode == static_cast<int> (VoiceMode::poly))
+    {
+        for (auto& v : voices)
+            if (v.isActive() && v.currentNote() == midiNote && ! v.isReleasing())
+                v.noteOff();
+        return;
+    }
+
+    // Mono / legato: releasing a background key is silent; releasing the
+    // sounding key returns to the most recent still-held one (or releases).
+    auto* voice = newestActiveVoice();
+    if (voice == nullptr || voice->isReleasing() || voice->currentNote() != midiNote)
+        return;
+
+    if (numHeld > 0)
+    {
+        const int returnNote = heldNotes[numHeld - 1];
+        if (current.voiceMode == static_cast<int> (VoiceMode::legato))
+            voice->retune (returnNote, current.glideSeconds);
+        else
+            retriggerMono (*voice, returnNote, voice->velocityNorm());
+        lastNoteSemis = static_cast<float> (returnNote);
+    }
+    else
+    {
+        voice->noteOff();
+    }
 }
 
 void SynthEngine::reset()
 {
     for (auto& v : voices)
         v.kill();
+    numHeld = 0;
+    lastNoteSemis = -1.0f;
     fx.reset();
 }
 

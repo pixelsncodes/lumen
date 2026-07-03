@@ -1708,11 +1708,188 @@ public:
     }
 };
 
+class VoiceModeTest final : public juce::UnitTest
+{
+public:
+    VoiceModeTest() : juce::UnitTest ("Voice modes: mono priority, legato, glide", "Engine") {}
+
+    static constexpr double kSr = 48000.0;
+    static constexpr int kBlock = 512;
+
+    // Pure-sine single-lane patch, FX bus bypassed at the engine tap, so
+    // amplitude and zero-crossing pitch measurements are exact.
+    static lumen::EngineParams sinePatch (int mode, float glideSeconds)
+    {
+        lumen::EngineParams p;
+        p.voiceMode = mode;
+        p.glideSeconds = glideSeconds;
+        p.oscA.unison = 1;
+        p.oscA.phaseRandom = false;
+        p.oscA.morph = 0.0f; // Basic frame 0 = sine
+        return p;
+    }
+
+    struct Window { float peak; };
+
+    static Window renderSeconds (lumen::SynthEngine& engine, double seconds)
+    {
+        std::vector<float> l (static_cast<size_t> (seconds * kSr), 0.0f), r (l.size(), 0.0f);
+        for (size_t pos = 0; pos < l.size(); pos += kBlock)
+            engine.render (l.data() + pos, r.data() + pos,
+                           static_cast<int> (std::min<size_t> (kBlock, l.size() - pos)));
+        float peak = 0.0f;
+        for (const float s : l)
+            peak = juce::jmax (peak, std::abs (s));
+        return { peak };
+    }
+
+    // f0 from interpolated positive-going zero crossings (pure sine input).
+    static double measureF0 (lumen::SynthEngine& engine, double seconds)
+    {
+        std::vector<float> l (static_cast<size_t> (seconds * kSr), 0.0f), r (l.size(), 0.0f);
+        for (size_t pos = 0; pos < l.size(); pos += kBlock)
+            engine.render (l.data() + pos, r.data() + pos,
+                           static_cast<int> (std::min<size_t> (kBlock, l.size() - pos)));
+        double first = -1.0, last = -1.0;
+        int crossings = 0;
+        for (size_t i = 1; i < l.size(); ++i)
+            if (l[i - 1] < 0.0f && l[i] >= 0.0f)
+            {
+                const double t = static_cast<double> (i - 1)
+                               + l[i - 1] / (l[i - 1] - l[i]);
+                if (first < 0.0) first = t;
+                last = t;
+                ++crossings;
+            }
+        if (crossings < 2)
+            return 0.0;
+        return kSr * static_cast<double> (crossings - 1) / (last - first);
+    }
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("mono: one voice, last-note priority, held-note return");
+
+        SynthEngine engine;
+        engine.prepare (kSr, kBlock);
+        engine.setFxEnabled (false);
+        engine.setParams (sinePatch (static_cast<int> (VoiceMode::mono), 0.0f));
+
+        engine.noteOn (48, 0.8f);
+        renderSeconds (engine, 0.05);
+        engine.noteOn (52, 0.8f);
+        renderSeconds (engine, 0.05);
+        engine.noteOn (55, 0.8f);
+        renderSeconds (engine, 0.05);
+        expectEquals (engine.activeVoiceCount(), 1, "three held keys share one mono voice");
+        expectEquals (engine.newestActiveNote(), 55, "newest key sounds");
+
+        engine.noteOff (55);
+        renderSeconds (engine, 0.05);
+        expectEquals (engine.newestActiveNote(), 52, "release returns to the most recent held key");
+        expectEquals (engine.activeVoiceCount(), 1);
+
+        engine.noteOff (48); // background key: nothing audible changes
+        renderSeconds (engine, 0.05);
+        expectEquals (engine.newestActiveNote(), 52);
+
+        engine.noteOff (52);
+        renderSeconds (engine, 1.0); // default release 200 ms
+        expectEquals (engine.activeVoiceCount(), 0, "last release ends the voice");
+
+        beginTest ("mono: hammering 12 keys never uses a second voice");
+        for (int n = 0; n < 12; ++n)
+        {
+            engine.noteOn (40 + n, 0.8f);
+            renderSeconds (engine, 0.01);
+            expectEquals (engine.activeVoiceCount(), 1);
+        }
+        engine.reset();
+
+        beginTest ("mono retriggers the envelope, legato does not");
+
+        for (const bool legato : { false, true })
+        {
+            auto p = sinePatch (static_cast<int> (legato ? VoiceMode::legato : VoiceMode::mono), 0.0f);
+            p.env1.attackSeconds = 0.005f;
+            p.env1.decaySeconds = 0.03f;
+            p.env1.sustain = 0.25f;
+            engine.reset();
+            engine.setParams (p);
+
+            engine.noteOn (60, 1.0f);
+            renderSeconds (engine, 0.5); // settle on the sustain shelf
+            const float sustainPeak = renderSeconds (engine, 0.05).peak;
+
+            engine.noteOn (67, 1.0f);    // overlapping note (60 still held)
+            const float overlapPeak = renderSeconds (engine, 0.05).peak;
+
+            if (legato)
+                expect (overlapPeak < sustainPeak * 1.3f,
+                        "legato overlap stays on the sustain shelf (no retrigger)");
+            else
+                expect (overlapPeak > sustainPeak * 2.0f,
+                        "mono overlap retriggers the attack");
+            engine.noteOff (67);
+            engine.noteOff (60);
+            engine.reset();
+        }
+
+        beginTest ("glide reaches the target pitch in the set time (0.5 s, +12 semis)");
+
+        engine.reset();
+        engine.setParams (sinePatch (static_cast<int> (VoiceMode::mono), 0.5f));
+        engine.noteOn (48, 1.0f);
+        renderSeconds (engine, 0.1);
+        expectWithinAbsoluteError (engine.newestActivePitchSemis(), 48.0f, 1.0e-3f,
+                                   "first note starts on pitch");
+
+        engine.noteOn (60, 1.0f);
+        renderSeconds (engine, 0.25);
+        expectWithinAbsoluteError (engine.newestActivePitchSemis(), 54.0f, 0.05f,
+                                   "linear-in-semitones: halfway after half the glide time");
+        renderSeconds (engine, 0.2);
+        expect (engine.newestActivePitchSemis() < 59.9f, "still short of target at 0.45 s");
+        renderSeconds (engine, 0.06);
+        expectWithinAbsoluteError (engine.newestActivePitchSemis(), 60.0f, 1.0e-3f,
+                                   "on target after the set glide time");
+
+        const double f0 = measureF0 (engine, 0.3);
+        expectWithinAbsoluteError (f0, 261.6256, 1.5, "rendered pitch lands on C4 (no overshoot)");
+
+        beginTest ("legato glide retunes without retrigger");
+
+        engine.reset();
+        engine.setParams (sinePatch (static_cast<int> (VoiceMode::legato), 0.2f));
+        engine.noteOn (60, 1.0f);
+        renderSeconds (engine, 0.1);
+        engine.noteOn (72, 1.0f); // overlap: retune + glide
+        expectEquals (engine.activeVoiceCount(), 1);
+        renderSeconds (engine, 0.1);
+        expectWithinAbsoluteError (engine.newestActivePitchSemis(), 66.0f, 0.05f, "mid-glide");
+        renderSeconds (engine, 0.12);
+        expectWithinAbsoluteError (engine.newestActivePitchSemis(), 72.0f, 1.0e-3f, "target reached");
+        engine.reset();
+
+        beginTest ("poly mode unchanged: chords still allocate one voice per note");
+        engine.setParams (sinePatch (static_cast<int> (VoiceMode::poly), 0.0f));
+        engine.noteOn (60, 0.8f);
+        engine.noteOn (64, 0.8f);
+        engine.noteOn (67, 0.8f);
+        renderSeconds (engine, 0.05);
+        expectEquals (engine.activeVoiceCount(), 3);
+        engine.reset();
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
 EngineRenderTest engineRenderTest;
+VoiceModeTest voiceModeTest;
 InitModDefaultsTest initModDefaultsTest;
 ModMatrixMathTest modMatrixMathTest;
 LfoTest lfoTest;
