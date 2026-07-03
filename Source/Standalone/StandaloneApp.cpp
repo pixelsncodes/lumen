@@ -132,6 +132,13 @@ public:
                 menuIndex >= 0 && menuIndex + 1 < args.size())
                 menuMode = args[menuIndex + 1];
 
+            // --menu-bg bright|dark composites the (per-pixel transparent)
+            // menu image over a backdrop so the rounded corners are checkable
+            // against both a bright desktop and a dark UI region.
+            if (const auto bgIndex = args.indexOf ("--menu-bg");
+                bgIndex >= 0 && bgIndex + 1 < args.size())
+                menuBg = args[bgIndex + 1];
+
             harnessProcessor.reset (::createPluginFilter());
 
             // --lens-image: run the Lens engine before the editor opens so
@@ -185,11 +192,17 @@ public:
                 }
             }
 
-            // Let first paints and timers run before snapshotting (SPEC section 18).
+            // Let first paints and timers run before snapshotting (SPEC section
+            // 18). --settle overrides the wait, e.g. to catch the Lens morph
+            // journey mid-image with --notes held.
+            int settleMs = 700;
+            if (const auto settleIndex = args.indexOf ("--settle");
+                settleIndex >= 0 && settleIndex + 1 < args.size())
+                settleMs = juce::jlimit (100, 20000, args[settleIndex + 1].getIntValue());
             if (menuMode.isNotEmpty())
-                juce::Timer::callAfterDelay (700, [this] { captureMenuAndQuit(); });
+                juce::Timer::callAfterDelay (settleMs, [this] { captureMenuAndQuit(); });
             else
-                juce::Timer::callAfterDelay (700, [this] { takeScreenshotAndQuit(); });
+                juce::Timer::callAfterDelay (settleMs, [this] { takeScreenshotAndQuit(); });
             return;
         }
 
@@ -464,35 +477,75 @@ private:
 
         width = juce::jlimit (210, 320, width);
         const int border = lnf.getPopupMenuBorderSize();
-        int total = border * 2;
-        for (const auto& r : rows) total += r.height;
 
-        juce::Image img (juce::Image::ARGB, width, total, true);
-        juce::Graphics g (img);
-        lnf.drawPopupMenuBackground (g, width, total);
+        // The preset browser shows in three columns (rows flow top to bottom,
+        // column by column, like PopupMenu's own layout); the gear menu in one.
+        const int numColumns = gear ? 1 : 3;
+        int totalH = 0;
+        for (const auto& r : rows) totalH += r.height;
+        const int targetH = (totalH + numColumns - 1) / numColumns;
 
-        int y = border;
+        std::vector<std::vector<Row>> columns (static_cast<size_t> (numColumns));
+        int columnH = 0, maxColumnH = 0;
+        size_t c = 0;
         for (const auto& r : rows)
         {
-            const juce::Rectangle<int> area (border, y, width - border * 2, r.height);
-            if (r.type == kHeader)
-                lnf.drawPopupMenuSectionHeader (g, area, r.text);
-            else if (r.type == kSeparator)
-                lnf.drawPopupMenuItem (g, area, true, false, false, false, false, {}, {}, nullptr, nullptr);
-            else
-                lnf.drawPopupMenuItem (g, area, false, true, r.highlighted, r.ticked, false,
-                                       r.text, {}, nullptr, nullptr);
-            y += r.height;
+            if (columnH >= targetH && c + 1 < columns.size())
+            {
+                c++;
+                columnH = 0;
+            }
+            columns[c].push_back (r);
+            columnH += r.height;
+            maxColumnH = juce::jmax (maxColumnH, columnH);
+        }
+
+        const int imageW = border * 2 + width * numColumns;
+        const int imageH = border * 2 + maxColumnH;
+        juce::Image img (juce::Image::ARGB, imageW, imageH, true);
+        juce::Graphics g (img);
+        lnf.drawPopupMenuBackground (g, imageW, imageH);
+
+        for (size_t col = 0; col < columns.size(); ++col)
+        {
+            const int x = border + static_cast<int> (col) * width;
+            int y = border;
+            for (const auto& r : columns[col])
+            {
+                const juce::Rectangle<int> area (x, y, width, r.height);
+                if (r.type == kHeader)
+                    lnf.drawPopupMenuSectionHeader (g, area, r.text);
+                else if (r.type == kSeparator)
+                    lnf.drawPopupMenuItem (g, area, true, false, false, false, false, {}, {}, nullptr, nullptr);
+                else
+                    lnf.drawPopupMenuItem (g, area, false, true, r.highlighted, r.ticked, false,
+                                           r.text, {}, nullptr, nullptr);
+                y += r.height;
+            }
         }
         return img;
     }
 
     void captureMenuAndQuit()
     {
-        const auto menu = renderBrandedMenu (menuMode == "gear");
+        auto menu = renderBrandedMenu (menuMode == "gear");
         bool ok = false;
         if (menu.isValid())
         {
+            // --menu-bg: prove the corners really are transparent by
+            // compositing the ARGB menu over a backdrop with a margin.
+            if (menuBg.isNotEmpty())
+            {
+                const auto backdrop = menuBg == "dark" ? juce::Colour (0xff0f0f12)
+                                                       : juce::Colour (0xffe9e9ec);
+                juce::Image composite (juce::Image::RGB, menu.getWidth() + 40,
+                                       menu.getHeight() + 40, false);
+                juce::Graphics g (composite);
+                g.fillAll (backdrop);
+                g.drawImageAt (menu, 20, 20);
+                menu = composite;
+            }
+
             screenshotFile.deleteFile();
             juce::FileOutputStream stream (screenshotFile);
             ok = stream.openedOk() && juce::PNGImageFormat().writeImageToStream (menu, stream);
@@ -516,6 +569,7 @@ private:
     std::unique_ptr<juce::AudioProcessorEditor> harnessEditor;
     juce::File screenshotFile;
     juce::String menuMode; // "" | "preset" | "gear" for --screenshot --menu
+    juce::String menuBg;   // "" | "bright" | "dark" backdrop for --menu-bg
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<juce::AudioProcessorPlayer> player;

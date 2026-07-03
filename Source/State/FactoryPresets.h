@@ -32,7 +32,9 @@ struct Route { const char* source; const char* dest; float depth; };
 // Macro map defined by its total normalized span + response curve; min/max
 // derive from the preset's stored macro position p so the knob rests
 // sound-neutral (offset 0 at p) and sweeps away from the designed patch:
-//   min = -span * p^curve, max = span - span * p^curve.
+//   min = -span * p^curve, max = span - span * p^curve,
+// with max nudged by ulps so mod::macroMapOffset is EXACTLY 0.0f at p — the
+// at-rest render is bit-identical to the map-free patch (unit-gated).
 // Negative span inverts the direction of travel.
 struct MacroMap { int macro; const char* dest; float span; float curve = 1.0f; };
 

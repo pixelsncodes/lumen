@@ -37,7 +37,101 @@ bool LensController::loadImage (const juce::Image& image, const juce::String& so
     display[osc] = session[osc].working;
     names[osc] = sourceName;
     analyzeAndInstall (osc, true, true);
+
+    // Image drops (and only drops — never preset/state loads, so the Lens
+    // factory presets' own morph motion is never doubled) also route the
+    // per-note morph journey through the image.
+    applyMorphJourney (osc);
     return true;
+}
+
+void LensController::applyMorphJourney (int osc)
+{
+    // Env 3 becomes the journey ramp: a slow glide to the far end of the
+    // image, held there for the rest of the note (constants in LensEngine.h,
+    // logged in DECISIONS.md). Decay/release are left to the loaded patch.
+    setParamNatural (params::env3Attack, lens::kJourneyAttackSeconds);
+    setParamNatural (params::env3Sustain, 1.0f);
+    setParamNatural (params::env3Curve, 0.0f);
+
+    // Matrix route env3 -> target morph: reuse an existing slot for that
+    // pair, else the first disabled slot (same policy as the chroma patch).
+    const juce::String morphToken = (osc == 1 ? "oscB" : "oscA") + juce::String ("Morph");
+    if (auto matrix = apvts.state.getChildWithName ("MODMATRIX"); matrix.isValid())
+    {
+        juce::ValueTree slot;
+        for (const auto& candidate : matrix)
+        {
+            if (candidate["source"].toString() == "env3"
+                && candidate["dest"].toString() == morphToken)
+            {
+                slot = candidate;
+                break;
+            }
+            if (! slot.isValid() && ! static_cast<bool> (candidate["enabled"]))
+                slot = candidate;
+        }
+        if (slot.isValid())
+        {
+            slot.setProperty ("source", "env3", nullptr);
+            slot.setProperty ("dest", morphToken, nullptr);
+            slot.setProperty ("depth", static_cast<double> (lens::kJourneyDepth), nullptr);
+            slot.setProperty ("enabled", true, nullptr);
+        }
+    }
+
+    // Motion scales the travel speed: a Motion -> env3Attack map pinned
+    // neutral at Motion's current value, so the drop itself changes nothing.
+    auto macros = apvts.state.getChildWithName ("MACROS");
+    auto motion = macros.getChild (1);
+    if (! motion.isValid())
+        return;
+    juce::ValueTree map;
+    for (const auto& candidate : motion)
+        if (candidate["dest"].toString() == "env3Attack")
+        {
+            map = candidate;
+            break;
+        }
+    if (! map.isValid())
+    {
+        if (motion.getNumChildren() >= mod::kMaxMacroMaps)
+            return; // Motion is fully mapped by the patch; speed stays fixed
+        map = juce::ValueTree ("MAP");
+        motion.appendChild (map, nullptr);
+    }
+    float motionValue = 0.5f;
+    if (auto* value = apvts.getRawParameterValue (params::macro2))
+        motionValue = value->load();
+    const float atRest = lens::kJourneyMotionSpan * motionValue;
+    map.setProperty ("dest", "env3Attack", nullptr);
+    map.setProperty ("min", static_cast<double> (-atRest), nullptr);
+    map.setProperty ("max", static_cast<double> (lens::kJourneyMotionSpan - atRest), nullptr);
+    map.setProperty ("curve", 1.0, nullptr);
+}
+
+void LensController::removeMorphJourney (int osc)
+{
+    const juce::String morphToken = (osc == 1 ? "oscB" : "oscA") + juce::String ("Morph");
+    if (auto matrix = apvts.state.getChildWithName ("MODMATRIX"); matrix.isValid())
+        for (auto slot : matrix)
+            if (slot["source"].toString() == "env3" && slot["dest"].toString() == morphToken)
+            {
+                slot.setProperty ("enabled", false, nullptr);
+                slot.setProperty ("dest", juce::String(), nullptr);
+                slot.setProperty ("depth", 0.0, nullptr);
+            }
+
+    // Drop the Motion speed map only if no other osc still journeys.
+    if (auto matrix = apvts.state.getChildWithName ("MODMATRIX"); matrix.isValid())
+        for (const auto& slot : matrix)
+            if (static_cast<bool> (slot["enabled"]) && slot["source"].toString() == "env3"
+                && slot["dest"].toString().endsWith ("Morph"))
+                return;
+    auto motion = apvts.state.getChildWithName ("MACROS").getChild (1);
+    for (int i = motion.getNumChildren(); --i >= 0;)
+        if (motion.getChild (i)["dest"].toString() == "env3Attack")
+            motion.removeChild (i, nullptr);
 }
 
 void LensController::analyzeAndInstall (int osc, bool storeState, bool allowChroma)
@@ -96,6 +190,10 @@ void LensController::removeImage (int osc)
     if (auto* value = apvts.getRawParameterValue (tableId);
         value != nullptr && juce::roundToInt (value->load()) == 4)
         setParamNatural (tableId, 0.0f); // TableChoice::basic — the Init table
+
+    // Without an image the journey would sweep the factory table instead;
+    // take its route (and the Motion speed map, if unshared) back out.
+    removeMorphJourney (index);
 }
 
 void LensController::clearTable (int osc)

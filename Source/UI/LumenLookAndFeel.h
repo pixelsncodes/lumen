@@ -53,6 +53,8 @@ public:
 class LumenMenuLookAndFeel final : public LumenLookAndFeel
 {
 public:
+    LumenMenuLookAndFeel();
+
     void drawPopupMenuBackground (juce::Graphics& g, int width, int height) override;
     int getPopupMenuBorderSize() override;
 

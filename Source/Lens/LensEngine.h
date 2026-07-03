@@ -70,6 +70,18 @@ inline constexpr float kMacroGain = 0.7f;  // ~default +-0.35 travel
 inline constexpr float kEdgeFull = 0.25f;  // E at which the texture axis saturates
 inline constexpr float kMacroDefaults[4] = { 0.5f, 0.5f, 0.3f, 0.2f }; // frozen Init values
 
+// Morph journey (DECISIONS.md, Phase 7 polish): whenever a user image is
+// applied, the plugin routes Env 3 to the target osc's morph so every note
+// travels through the image by default — the per-note counterpart of the
+// Photograph preset's slow morph glide. The Motion macro scales the travel
+// speed through an env3Attack map pinned neutral at Motion's value when the
+// image is applied (up = faster, ~0.4 s at full; down = slower, capped at
+// the 10 s attack ceiling). Applied only on image drops, never on preset or
+// state loads — the Lens factory presets ship their own morph motion.
+inline constexpr float kJourneyAttackSeconds = 5.0f; // env3 attack = image travel time
+inline constexpr float kJourneyDepth = 1.0f;         // env3 -> morph slot depth (base..top)
+inline constexpr float kJourneyMotionSpan = -0.5f;   // Motion -> env3Attack (negative: up = faster)
+
 // The exact SPEC 13.5 patch targets derived from the stats.
 struct PatchTargets
 {

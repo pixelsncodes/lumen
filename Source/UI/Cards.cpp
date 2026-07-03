@@ -524,7 +524,7 @@ HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewCh
       standalone (standaloneChrome),
       openSettings (std::move (onOpenSettings)),
       viewTabs ({ "PLAY", "DEEP" }, std::move (onViewChange)),
-      master (shared, "masterGain", "Main", theme::neonYellow),
+      master (shared, "masterGain", "", theme::neonYellow), // unlabelled: header space is tight
       meter (shared)
 {
     addAndMakeVisible (viewTabs);
@@ -572,7 +572,7 @@ void HeaderBar::resized()
     presetNext.setBounds (616, 14, 20, 20);
     viewTabs.setBounds (648, 13, 118, 22);
     gear.setBounds (774, 12, 24, 24);
-    master.setBounds (808, 1, 46, 46);
+    master.setBounds (810, 5, 38, 38); // knob centre = y 24 = header centre, like the meter
     meter.setBounds (864, 14, 104, 20);
     minimizeButton.setBounds (978, 14, 22, 20);
     closeButton.setBounds (1006, 14, 22, 20);
@@ -657,9 +657,12 @@ void HeaderBar::showBrowserMenu()
     menu.addSeparator();
     menu.addItem (1, "Save Preset...");
 
+    // Three columns so the whole bank is visible at once; category headers,
+    // the current-patch tick and the Save Preset... divider ride along.
     menu.showMenuAsync (juce::PopupMenu::Options()
                             .withTargetComponent (presetName)
-                            .withMinimumWidth (presetName.getWidth()),
+                            .withMinimumNumColumns (3)
+                            .withMaximumNumColumns (3),
                         [this] (int result)
                         {
                             if (result == 1)
@@ -759,6 +762,7 @@ void DeepView::animate (bool fftTick)
 PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
                     juce::MidiKeyboardState& keyboardState)
     : shared (sharedContext),
+      notes (keyboardState),
       waterfall (sharedContext, history),
       lensPanel (sharedContext, false),
       keyboard (keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
@@ -794,6 +798,35 @@ void PlayView::paint (juce::Graphics& g)
     g.fillAll (theme::well);
 }
 
+void PlayView::paintOverChildren (juce::Graphics& g)
+{
+    // Edge arrows over the keyboard ends: dim affordances that light neon
+    // yellow while notes sound beyond the visible range on that side.
+    const auto kb = keyboard.getBounds().toFloat();
+    auto drawArrow = [&g, &kb] (bool leftSide, bool lit)
+    {
+        const float cy = kb.getCentreY();
+        const float cx = leftSide ? kb.getX() + 12.0f : kb.getRight() - 12.0f;
+        const float dir = leftSide ? -1.0f : 1.0f;
+
+        if (lit)
+        {
+            g.setColour (theme::neonYellow.withAlpha (0.25f));
+            g.fillEllipse (cx - 11.0f, cy - 11.0f, 22.0f, 22.0f); // soft halo
+        }
+        juce::Path arrow;
+        arrow.addTriangle (cx + dir * 6.0f, cy,
+                           cx - dir * 3.5f, cy - 6.5f,
+                           cx - dir * 3.5f, cy + 6.5f);
+        g.setColour (lit ? theme::neonYellow : theme::textMuted.withAlpha (0.4f));
+        g.fillPath (arrow);
+        g.setColour (theme::well.withAlpha (lit ? 0.9f : 0.5f)); // reads on a lit key too
+        g.strokePath (arrow, juce::PathStrokeType (1.2f));
+    };
+    drawArrow (true, leftArrowLit);
+    drawArrow (false, rightArrowLit);
+}
+
 void PlayView::animate()
 {
     // The waterfall scene (grid + surface) is permanent (WATERFALL_SPEC
@@ -808,4 +841,41 @@ void PlayView::animate()
 
     waterfall.animate (audioActive);
     lensPanel.animate();
+
+    // Keyboard follow: scan the sounding notes once per tick. If any sounding
+    // note is visible the window must not move (a held key sliding under the
+    // mouse would be worse than an off-screen note); if ALL are outside,
+    // slide whole octaves toward them (C-aligned, clamped to 0..120).
+    int lowestNote = 128, highestNote = -1;
+    bool anyVisible = false;
+    const int rangeLow = keyboard.getRangeStart(), rangeHigh = keyboard.getRangeEnd();
+    for (int n = 0; n < 128; ++n)
+    {
+        if (! notes.isNoteOnForChannels (0xffff, n))
+            continue;
+        lowestNote = juce::jmin (lowestNote, n);
+        highestNote = juce::jmax (highestNote, n);
+        anyVisible = anyVisible || (n >= rangeLow && n <= rangeHigh);
+    }
+
+    if (highestNote >= 0 && ! anyVisible)
+    {
+        int shift = 0;
+        if (lowestNote > rangeHigh)                     // everything above: slide up
+            shift = (lowestNote - rangeHigh + 11) / 12 * 12;
+        else if (highestNote < rangeLow)                // everything below: slide down
+            shift = -((rangeLow - highestNote + 11) / 12 * 12);
+        const int newLow = juce::jlimit (0, 96, rangeLow + shift);
+        if (newLow != rangeLow)
+            keyboard.setAvailableRange (newLow, newLow + 24);
+    }
+
+    const bool left = highestNote >= 0 && lowestNote < keyboard.getRangeStart();
+    const bool right = highestNote >= 0 && highestNote > keyboard.getRangeEnd();
+    if (left != leftArrowLit || right != rightArrowLit)
+    {
+        leftArrowLit = left;
+        rightArrowLit = right;
+        repaint (keyboard.getBounds());
+    }
 }

@@ -241,6 +241,15 @@ void LumenLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool 
 // LumenMenuLookAndFeel — branded popup menus (preset browser + gear menu)
 // ---------------------------------------------------------------------------
 
+LumenMenuLookAndFeel::LumenMenuLookAndFeel()
+{
+    // A non-opaque background colour makes PopupMenu's desktop window
+    // per-pixel transparent (MenuWindow calls setOpaque(colour.isOpaque())),
+    // so the corners outside the rounded panel show whatever is behind the
+    // menu instead of an opaque white fill.
+    setColour (juce::PopupMenu::backgroundColourId, juce::Colours::transparentBlack);
+}
+
 void LumenMenuLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
 {
     const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);

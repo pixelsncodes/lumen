@@ -42,6 +42,20 @@ namespace
             return *this;
         }
 
+        // Stored macro knob positions (Tone / Motion / Space / Texture). The
+        // rest position is the neutral point of every macro map, so the knobs
+        // can sit anywhere without changing the designed sound (macroMapRange
+        // pins a bit-exact zero offset there) — they just show the preset's
+        // character and set where the sweeps start from.
+        Build& macros (float tone, float motion, float space, float texture)
+        {
+            p.settings.push_back ({ lumen::params::macro1, tone });
+            p.settings.push_back ({ lumen::params::macro2, motion });
+            p.settings.push_back ({ lumen::params::macro3, space });
+            p.settings.push_back ({ lumen::params::macro4, texture });
+            return *this;
+        }
+
         Build& lens (const char* image, int mode, int targetOsc = 0)
         {
             p.lens = { image, mode, targetOsc };
@@ -79,6 +93,7 @@ namespace
         // Sub Zero — pure deep sine sub with a triangle floor; thump from a
         // short filter-envelope knock. Tone opens it into a clean synth bass.
         bank.push_back (Build ("Sub Zero", "Bass")
+            .macros (0.15f, 0.20f, 0.10f, 0.10f)
             .set (oscAMorph, 0.0f).set (oscAUnison, 1.0f).set (oscALevel, 0.9f)
             .set (subWave, kSubTri).set (subLevel, 0.35f)
             .set (filterMode, kLp24).set (filterCutoff, 400.0f).set (filterRes, 0.05f)
@@ -98,6 +113,7 @@ namespace
         // Rubber — elastic resonant pluck bass: closed LP24 kicked open by a
         // fast envelope; velocity digs into the filter.
         bank.push_back (Build ("Rubber", "Bass")
+            .macros (0.30f, 0.45f, 0.15f, 0.25f)
             .set (oscAMorph, 0.6f).set (oscAUnison, 1.0f).set (oscALevel, 0.8f)
             .set (subWave, kSubSine).set (subLevel, 0.25f)
             .set (filterMode, kLp24).set (filterCutoff, 260.0f).set (filterRes, 0.4f)
@@ -118,6 +134,7 @@ namespace
         // Neon Growl — formant bass with an LFO chewing the morph; drive on
         // both the filter and the bus for bite.
         bank.push_back (Build ("Neon Growl", "Bass")
+            .macros (0.40f, 0.60f, 0.15f, 0.55f)
             .set (oscATable, kFormant).set (oscAMorph, 0.35f)
             .set (oscAUnison, 2.0f).set (oscADetune, 8.0f).set (oscAWidth, 0.4f).set (oscALevel, 0.9f)
             .set (masterGain, 3.0f)
@@ -140,6 +157,7 @@ namespace
         // Deep Field — wide slow-PWM bass pad over a sine floor; chorus and
         // a drifting morph keep the low end moving without mud.
         bank.push_back (Build ("Deep Field", "Bass")
+            .macros (0.35f, 0.35f, 0.30f, 0.40f)
             .set (oscATable, kPwm).set (oscAMorph, 0.35f)
             .set (oscAUnison, 4.0f).set (oscADetune, 14.0f).set (oscAWidth, 0.85f).set (oscALevel, 1.0f)
             .set (masterGain, 6.0f)
@@ -159,6 +177,7 @@ namespace
         // Knuckle — short punchy knock bass: harmonic-rise wave, LP12, hard
         // filter knock, velocity into cutoff and bus drive.
         bank.push_back (Build ("Knuckle", "Bass")
+            .macros (0.45f, 0.25f, 0.10f, 0.50f)
             .set (oscATable, kRise).set (oscAMorph, 0.3f)
             .set (oscAUnison, 1.0f).set (oscALevel, 0.8f)
             .set (masterGain, 3.0f)
@@ -182,6 +201,7 @@ namespace
         // Tape Bass — soft lo-fi bass: dark tilt, slow chorus wow, pink hiss
         // and a lazy pitch drift, like a worn cassette.
         bank.push_back (Build ("Tape Bass", "Bass")
+            .macros (0.25f, 0.30f, 0.15f, 0.45f)
             .set (oscAMorph, 0.42f).set (oscAUnison, 1.0f).set (oscALevel, 0.85f)
             .set (subWave, kSubTri).set (subLevel, 0.3f)
             .set (filterMode, kLp12).set (filterCutoff, 650.0f).set (filterRes, 0.1f)
@@ -202,6 +222,7 @@ namespace
         // Laser — zap lead: a fast free envelope drops brightness and pitch
         // on every note; ping-pong eighths echo the zap.
         bank.push_back (Build ("Laser", "Leads")
+            .macros (0.70f, 0.65f, 0.35f, 0.30f)
             .set (oscATable, kRise).set (oscAMorph, 0.9f)
             .set (oscAUnison, 2.0f).set (oscADetune, 10.0f).set (oscAWidth, 0.5f).set (oscALevel, 0.75f)
             .set (masterGain, 3.0f)
@@ -224,6 +245,7 @@ namespace
         // Glass Whistle — near-sine whistle with delayed vibrato and a
         // breath-noise bed; Texture adds air.
         bank.push_back (Build ("Glass Whistle", "Leads")
+            .macros (0.65f, 0.40f, 0.45f, 0.20f)
             .set (oscAMorph, 0.03f).set (oscAUnison, 1.0f).set (oscALevel, 0.8f)
             .set (filterMode, kLp12).set (filterCutoff, 8000.0f).set (filterRes, 0.05f)
             .set (noiseLevel, -52.0f)
@@ -241,6 +263,7 @@ namespace
         // Saw Hero — seven-lane supersaw with a sub-octave saw bed; quarter
         // delay and a slow filter shimmer. The anthem patch.
         bank.push_back (Build ("Saw Hero", "Leads")
+            .macros (0.75f, 0.35f, 0.45f, 0.60f)
             .set (oscAMorph, 0.72f)
             .set (oscAUnison, 7.0f).set (oscADetune, 16.0f).set (oscAWidth, 0.95f)
             .set (oscABlend, 0.65f).set (oscALevel, 0.8f)
@@ -262,6 +285,7 @@ namespace
         // Vapor — hazy PWM lead: slow duty sweep, deep chorus, washed
         // quarter echoes. Soft attack, dreamwave colors.
         bank.push_back (Build ("Vapor", "Leads")
+            .macros (0.45f, 0.40f, 0.60f, 0.35f)
             .set (oscATable, kPwm).set (oscAMorph, 0.35f)
             .set (oscAUnison, 2.0f).set (oscADetune, 12.0f).set (oscAWidth, 0.7f).set (oscALevel, 1.0f)
             .set (masterGain, 6.0f)
@@ -283,6 +307,7 @@ namespace
         // Chrome — metallic formant lead with a hard square underlay,
         // driven filter and triplet echoes; vibrato fades in late.
         bank.push_back (Build ("Chrome", "Leads")
+            .macros (0.70f, 0.45f, 0.30f, 0.55f)
             .set (oscATable, kFormant).set (oscAMorph, 0.75f)
             .set (oscAUnison, 2.0f).set (oscADetune, 9.0f).set (oscAWidth, 0.5f).set (oscALevel, 0.9f)
             .set (masterGain, 4.5f)
@@ -305,6 +330,7 @@ namespace
         // Solar Flare — big aggressive lead: full harmonic-rise stack over a
         // detuned PWM sub-layer, hot drive, air noise, twin LFOs burning.
         bank.push_back (Build ("Solar Flare", "Leads")
+            .macros (0.80f, 0.60f, 0.50f, 0.70f)
             .set (oscATable, kRise).set (oscAMorph, 1.0f)
             .set (oscAUnison, 5.0f).set (oscADetune, 22.0f).set (oscAWidth, 0.9f).set (oscALevel, 0.85f)
             .set (masterGain, 6.0f)
@@ -331,6 +357,7 @@ namespace
         // fine-detuned PWM bed and sine floor, two counter-phase tide LFOs,
         // ping-pong halves and a big bright hall.
         bank.push_back (Build ("Neon Tide", "Pads")
+            .macros (0.55f, 0.45f, 0.55f, 0.35f)
             .set (oscAMorph, 0.55f)
             .set (oscAUnison, 5.0f).set (oscADetune, 13.0f).set (oscAWidth, 0.9f)
             .set (oscABlend, 0.55f).set (oscALevel, 0.85f)
@@ -360,6 +387,7 @@ namespace
         // Slow Aurora — a 16-second harmonic sunrise: the rise table sweeps
         // up one partial at a time under a huge soft hall.
         bank.push_back (Build ("Slow Aurora", "Pads")
+            .macros (0.40f, 0.25f, 0.65f, 0.25f)
             .set (oscATable, kRise).set (oscAMorph, 0.2f)
             .set (oscAUnison, 4.0f).set (oscADetune, 12.0f).set (oscAWidth, 0.85f).set (oscALevel, 0.85f)
             .set (masterGain, 5.5f)
@@ -382,6 +410,7 @@ namespace
         // Warm Fog — dark blanket pad: closed LP24, pink-noise fog, slow
         // breathing filter. Nothing bright survives.
         bank.push_back (Build ("Warm Fog", "Pads")
+            .macros (0.20f, 0.30f, 0.55f, 0.45f)
             .set (oscAMorph, 0.3f)
             .set (oscAUnison, 4.0f).set (oscADetune, 10.0f).set (oscAWidth, 0.75f).set (oscALevel, 0.85f)
             .set (masterGain, 4.0f)
@@ -402,6 +431,7 @@ namespace
         // Choir Ghost — formant vowels drifting under a dark choir floor;
         // church-sized hall, breath in the highs.
         bank.push_back (Build ("Choir Ghost", "Pads")
+            .macros (0.35f, 0.35f, 0.65f, 0.30f)
             .set (oscATable, kFormant).set (oscAMorph, 0.45f)
             .set (oscAUnison, 4.0f).set (oscADetune, 9.0f).set (oscAWidth, 0.8f).set (oscALevel, 0.85f)
             .set (masterGain, 5.0f)
@@ -422,6 +452,7 @@ namespace
         // Polar Drift — icy wide pad: bright thin PWM lanes, a glassy sine
         // an octave up, cold ping-pong halves and a dark-damped hall.
         bank.push_back (Build ("Polar Drift", "Pads")
+            .macros (0.65f, 0.30f, 0.60f, 0.40f)
             .set (oscATable, kPwm).set (oscAMorph, 0.7f)
             .set (oscAUnison, 6.0f).set (oscADetune, 18.0f).set (oscAWidth, 1.0f)
             .set (oscABlend, 0.6f).set (oscALevel, 0.75f)
@@ -445,6 +476,7 @@ namespace
         // Amber Haze — mellow dusk pad: warm tilted drive, a formant vowel
         // glowing underneath, everything slightly out of focus.
         bank.push_back (Build ("Amber Haze", "Pads")
+            .macros (0.30f, 0.35f, 0.50f, 0.40f)
             .set (oscAMorph, 0.48f)
             .set (oscAUnison, 4.0f).set (oscADetune, 11.0f).set (oscAWidth, 0.8f).set (oscALevel, 0.8f)
             .set (masterGain, 4.0f)
@@ -469,6 +501,7 @@ namespace
         // Dial Tone — two pure sines a fourth apart, straight off the hook;
         // Texture beats them against each other.
         bank.push_back (Build ("Dial Tone", "Keys")
+            .macros (0.50f, 0.55f, 0.25f, 0.15f)
             .set (oscAMorph, 0.0f).set (oscAUnison, 1.0f).set (oscALevel, 0.7f)
             .set (oscBEnabled, 1.0f).set (oscBMorph, 0.0f).set (oscBSemi, 4.0f).set (oscBLevel, 0.55f)
             .set (filterMode, kLp12).set (filterCutoff, 4000.0f)
@@ -486,6 +519,7 @@ namespace
         // Marble Pluck — hard bright click-pluck: resonant filter snap,
         // per-note pitch dust, tight eighth echoes.
         bank.push_back (Build ("Marble Pluck", "Keys")
+            .macros (0.60f, 0.30f, 0.35f, 0.30f)
             .set (oscATable, kRise).set (oscAMorph, 0.35f)
             .set (oscAUnison, 2.0f).set (oscADetune, 6.0f).set (oscAWidth, 0.5f).set (oscALevel, 1.0f)
             .set (masterGain, 4.5f)
@@ -507,6 +541,7 @@ namespace
         // Music Box — tiny tines: a sine two octaves up rings over the
         // fundamental; keytracked brightness, darker low notes.
         bank.push_back (Build ("Music Box", "Keys")
+            .macros (0.55f, 0.20f, 0.50f, 0.15f)
             .set (oscAMorph, 0.08f).set (oscAUnison, 1.0f).set (oscALevel, 0.7f)
             .set (oscBEnabled, 1.0f).set (oscBMorph, 0.12f).set (oscBSemi, 24.0f).set (oscBLevel, 0.35f)
             .set (filterMode, kLp12).set (filterCutoff, 6000.0f)
@@ -527,6 +562,7 @@ namespace
         // Soft EP — mellow electric piano: sine body + octave tine that
         // rises with velocity, classic chorus, slow mono autopan.
         bank.push_back (Build ("Soft EP", "Keys")
+            .macros (0.40f, 0.50f, 0.35f, 0.30f)
             .set (oscAMorph, 0.15f).set (oscAUnison, 1.0f).set (oscALevel, 0.7f)
             .set (oscBEnabled, 1.0f).set (oscBMorph, 0.05f).set (oscBSemi, 12.0f).set (oscBLevel, 0.28f)
             .set (filterMode, kLp12).set (filterCutoff, 2800.0f)
@@ -547,6 +583,7 @@ namespace
         // Pixel Pluck — 8-bit blip: thin pulse, sixteenth ping-pong, a
         // little per-note duty scatter for chip charm.
         bank.push_back (Build ("Pixel Pluck", "Keys")
+            .macros (0.65f, 0.55f, 0.20f, 0.45f)
             .set (oscATable, kPwm).set (oscAMorph, 0.3f)
             .set (oscAUnison, 1.0f).set (oscALevel, 1.0f)
             .set (subWave, kSubSquare).set (subLevel, 0.35f)
@@ -568,6 +605,7 @@ namespace
         // Kalimba Dust — thumb piano with a soft thump and dusty pink air;
         // per-note pitch scatter keeps repeats organic.
         bank.push_back (Build ("Kalimba Dust", "Keys")
+            .macros (0.50f, 0.30f, 0.40f, 0.35f)
             .set (oscATable, kFormant).set (oscAMorph, 0.12f)
             .set (oscAUnison, 1.0f).set (oscALevel, 1.0f)
             .set (masterGain, 3.0f)
@@ -590,6 +628,7 @@ namespace
         // Bell Garden — glassy bells: a nineteenth partial rings against
         // the fundamental with a slow beat shimmer; long triplet tails.
         bank.push_back (Build ("Bell Garden", "Keys")
+            .macros (0.60f, 0.25f, 0.60f, 0.20f)
             .set (oscAMorph, 0.04f).set (oscAUnison, 1.0f).set (oscALevel, 0.6f)
             .set (oscBEnabled, 1.0f).set (oscBMorph, 0.06f).set (oscBSemi, 19.0f).set (oscBLevel, 0.4f)
             .set (filterMode, kLp12).set (filterCutoff, 7000.0f)
@@ -611,6 +650,7 @@ namespace
         // Static Bloom — pink-noise swell blooming through a resonant
         // band-pass on a slow LFO; the tone underneath is barely there.
         bank.push_back (Build ("Static Bloom", "Textures")
+            .macros (0.25f, 0.40f, 0.60f, 0.75f)
             .set (noiseType, kPink).set (noiseLevel, -10.0f)
             .set (masterGain, 5.0f)
             .set (oscAMorph, 0.5f).set (oscALevel, 0.5f)
@@ -632,6 +672,7 @@ namespace
         // saw-down LFO sweeps the filter like the beam, a square one
         // flickers the level.
         bank.push_back (Build ("Scanline", "Textures")
+            .macros (0.45f, 0.60f, 0.40f, 0.55f)
             .lens ("stripes", 1 /* spectral */, 0)
             .set (oscATable, kImage).set (oscAMorph, 0.5f)
             .set (oscAUnison, 3.0f).set (oscADetune, 10.0f).set (oscAWidth, 0.8f).set (oscALevel, 0.9f)
@@ -656,6 +697,7 @@ namespace
         // formant vowel like tuning stations, white static behind a
         // resonant band-pass drifting across the dial.
         bank.push_back (Build ("Radio Sky", "Textures")
+            .macros (0.40f, 0.70f, 0.45f, 0.80f)
             .set (oscATable, kFormant).set (oscAMorph, 0.5f)
             .set (oscAUnison, 1.0f).set (oscALevel, 1.0f)
             .set (noiseLevel, -3.0f)
@@ -679,6 +721,7 @@ namespace
         // drone an octave down, sub floor, slow duty churn and an 8 Hz
         // throb.
         bank.push_back (Build ("Machine Hum", "Textures")
+            .macros (0.15f, 0.45f, 0.30f, 0.50f)
             .set (oscATable, kPwm).set (oscAMorph, 0.6f).set (oscASemi, -12.0f)
             .set (oscAUnison, 2.0f).set (oscADetune, 5.0f).set (oscAWidth, 0.4f).set (oscALevel, 0.85f)
             .set (masterGain, 4.0f)
@@ -703,6 +746,7 @@ namespace
         // gusts the cutoff, another leans on the resonance; a faint
         // detuned tone whistles inside the airstream.
         bank.push_back (Build ("Wind Tunnel", "Textures")
+            .macros (0.30f, 0.55f, 0.55f, 0.85f)
             .set (noiseLevel, 0.0f)
             .set (masterGain, 6.0f)
             .set (oscAMorph, 0.4f).set (oscALevel, 0.3f)
@@ -723,6 +767,7 @@ namespace
         // frame is one harmonic of the source rows, so the slow morph LFO
         // develops the picture as a rising partial glide.
         bank.push_back (Build ("Photograph", "Textures")
+            .macros (0.50f, 0.20f, 0.55f, 0.30f)
             .lens ("gradient", 0 /* scan */, 0)
             .set (oscATable, kImage).set (oscAMorph, 0.08f)
             .set (oscAUnison, 3.0f).set (oscADetune, 9.0f).set (oscAWidth, 0.8f).set (oscALevel, 1.0f)
@@ -792,9 +837,26 @@ void macroMapRange (const FactoryPreset& preset, const MacroMap& map,
                     float& rangeMin, float& rangeMax)
 {
     const float position = macroPosition (preset, map.macro);
-    const float atRest = map.span * std::pow (position, map.curve);
-    rangeMin = juce::jlimit (-1.0f, 1.0f, -atRest);
-    rangeMax = juce::jlimit (-1.0f, 1.0f, map.span - atRest);
+    // `shaped` mirrors mod::macroMapOffset exactly (same float pow), which
+    // computes offset = min + (max - min) * shaped. The at-rest offset must
+    // be EXACTLY 0.0f (a mapped destination renders denormalize(normalize(
+    // base) + offset), so only a bit-exact zero keeps the designed sound
+    // bit-identical across recalibrations). min = -(d * shaped) cancels by
+    // construction; the only failure mode is (min + d) - min not rounding
+    // back to d, cured by trying the span an ulp at a time.
+    const float shaped = map.curve == 1.0f ? position : std::pow (position, map.curve);
+    float d = map.span;
+    for (int guard = 0; guard < 16; ++guard)
+    {
+        const float atRest = d * shaped;
+        rangeMin = -atRest;
+        rangeMax = rangeMin + d;
+        if ((rangeMax - rangeMin) * shaped == atRest)
+            break;
+        d = std::nextafter (d, 0.0f);
+    }
+    jassert ((rangeMax - rangeMin) * shaped == -rangeMin); // offset == 0 exactly
+    jassert (rangeMin >= -1.0f && rangeMax <= 1.0f);       // spans stay well inside +-1
 }
 
 void applyToEngine (const FactoryPreset& preset, EngineParams& params)

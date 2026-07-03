@@ -23,10 +23,6 @@ namespace
         return false;
     }
 
-    juce::Colour oscAccent (int osc)
-    {
-        return osc == 1 ? theme::accentB : theme::accentA;
-    }
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -188,28 +184,35 @@ void LensImageView::paint (juce::Graphics& g)
     g.setColour (theme::hairlineLight);
     g.drawRect (dest, 1.0f);
 
-    // Scanline synced to the live morph (SPEC 13): Scan mode travels down
-    // the image, Spectral mode travels across the columns. Coloured with
-    // the target oscillator's accent.
+    // Scanline synced to the live morph (SPEC 13): a white beam the full
+    // image width (Scan, travelling down) or height (Spectral, travelling
+    // across), slightly thick with a soft fade trailing behind the travel
+    // direction so it reads as a scan beam.
     const float morph = juce::jlimit (0.0f, 1.0f, liveMorph (osc));
-    const auto accent = oscAccent (osc);
     const bool scanMode = lens.mode() == 0;
+    constexpr float beam = 2.4f, trail = 16.0f;
+    const auto white = juce::Colours::white;
+
+    juce::Graphics::ScopedSaveState clip (g);
+    g.reduceClipRegion (dest.getSmallestIntegerContainer());
 
     if (scanMode)
     {
         const float y = dest.getY() + morph * (dest.getHeight() - 1.0f);
-        g.setColour (accent.withAlpha (0.30f));
-        g.fillRect (juce::Rectangle<float> (dest.getX(), y - 1.5f, dest.getWidth(), 4.0f));
-        g.setColour (accent);
-        g.fillRect (juce::Rectangle<float> (dest.getX(), y, dest.getWidth(), 1.4f));
+        g.setGradientFill ({ white.withAlpha (0.0f), dest.getX(), y - trail,
+                             white.withAlpha (0.35f), dest.getX(), y, false });
+        g.fillRect (juce::Rectangle<float> (dest.getX(), y - trail, dest.getWidth(), trail));
+        g.setColour (white.withAlpha (0.95f));
+        g.fillRect (juce::Rectangle<float> (dest.getX(), y - beam * 0.5f, dest.getWidth(), beam));
     }
     else
     {
         const float x = dest.getX() + morph * (dest.getWidth() - 1.0f);
-        g.setColour (accent.withAlpha (0.30f));
-        g.fillRect (juce::Rectangle<float> (x - 1.5f, dest.getY(), 4.0f, dest.getHeight()));
-        g.setColour (accent);
-        g.fillRect (juce::Rectangle<float> (x, dest.getY(), 1.4f, dest.getHeight()));
+        g.setGradientFill ({ white.withAlpha (0.0f), x - trail, dest.getY(),
+                             white.withAlpha (0.35f), x, dest.getY(), false });
+        g.fillRect (juce::Rectangle<float> (x - trail, dest.getY(), trail, dest.getHeight()));
+        g.setColour (white.withAlpha (0.95f));
+        g.fillRect (juce::Rectangle<float> (x - beam * 0.5f, dest.getY(), beam, dest.getHeight()));
     }
 }
 

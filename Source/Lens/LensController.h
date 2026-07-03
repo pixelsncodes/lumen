@@ -69,6 +69,8 @@ private:
     static int oscIndex (int osc) noexcept { return osc == 1 ? 1 : 0; }
 
     void analyzeAndInstall (int osc, bool storeState, bool allowChroma);
+    void applyMorphJourney (int osc);
+    void removeMorphJourney (int osc);
     void installTable (int osc, const std::vector<float>& frames);
     void clearTable (int osc);
     void retire (std::unique_ptr<Wavetable> table);

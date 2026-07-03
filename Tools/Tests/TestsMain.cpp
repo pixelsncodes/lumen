@@ -25,6 +25,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <set>
 
 namespace
 {
@@ -1365,6 +1366,25 @@ public:
             }
         }
 
+        beginTest ("stored macro positions vary visibly across the bank");
+        for (int m = 0; m < 4; ++m)
+        {
+            std::set<int> distinct; // positions on a 0.01 grid
+            float lowest = 1.0f, highest = 0.0f;
+            for (const auto& preset : presets::bank())
+            {
+                const float p = presets::macroPosition (preset, m);
+                expect (p >= 0.0f && p <= 1.0f);
+                distinct.insert (juce::roundToInt (p * 100.0f));
+                lowest = juce::jmin (lowest, p);
+                highest = juce::jmax (highest, p);
+            }
+            expectGreaterOrEqual (static_cast<int> (distinct.size()), 6,
+                                  "macro " + juce::String (m + 1) + " position spread");
+            expectGreaterOrEqual (highest - lowest, 0.4f,
+                                  "macro " + juce::String (m + 1) + " position range");
+        }
+
         beginTest ("Lens presets: Photograph = gradient/scan, Scanline = stripes/spectral");
         const auto* photograph = presets::find ("Photograph");
         const auto* scanline = presets::find ("Scanline");
@@ -1458,6 +1478,55 @@ public:
             presettest::renderParams (engineParams, tableA1, nullptr, l1, r1);
             presettest::renderParams (stateParams, tableA2, nullptr, l2, r2);
             expect (l1 == l2 && r1 == r2, "bit-identical render across paths");
+
+            // Macro rest neutrality. A mapped destination always goes through
+            // denormalize(normalize(base) + offset), so "bit-identical at
+            // rest" means the offset itself must be EXACTLY 0.0f at the
+            // stored position — then the stored-position maps compute the
+            // same floats as the frozen-default maps the bank shipped with.
+            if (! preset.initMods) // Init's stock set has its own neutrality test
+            {
+                for (const auto& map : preset.maps)
+                {
+                    mod::MacroMapping mm;
+                    mm.dest = modstate::destFromToken (map.dest);
+                    presets::macroMapRange (preset, map, mm.rangeMin, mm.rangeMax);
+                    mm.curve = map.curve;
+                    const float position = presets::macroPosition (preset, map.macro);
+                    expect (mod::macroMapOffset (mm, position) == 0.0f,
+                            juce::String (preset.name) + ": " + map.dest
+                            + " offset not exactly zero at rest");
+                }
+
+                // And the render proof: the preset at its stored macro
+                // positions must sound bit-identical to the same patch at the
+                // frozen defaults with maps recalibrated there (= the bank as
+                // it shipped before per-preset positions existed).
+                presets::FactoryPreset atDefaults = preset;
+                std::erase_if (atDefaults.settings, [] (const presets::Setting& s)
+                {
+                    const juce::String id (s.id);
+                    return id == "macro1" || id == "macro2" || id == "macro3" || id == "macro4";
+                });
+                EngineParams defaultParams;
+                presets::applyToEngine (atDefaults, defaultParams);
+                for (auto* raw : processor.getParameters())
+                {
+                    auto* parameter = dynamic_cast<juce::RangedAudioParameter*> (raw);
+                    if (parameter == nullptr)
+                        continue;
+                    float natural = parameter->convertFrom0to1 (parameter->getDefaultValue());
+                    for (const auto& setting : atDefaults.settings)
+                        if (parameter->paramID == setting.id)
+                            natural = parameter->convertFrom0to1 (
+                                parameter->convertTo0to1 (setting.value));
+                    bindings::set (defaultParams, parameter->paramID, natural);
+                }
+                std::vector<float> l3, r3;
+                presettest::renderParams (defaultParams, tableA1, nullptr, l3, r3);
+                expect (l1 == l3 && r1 == r3,
+                        "at-rest render bit-identical to the frozen-default calibration");
+            }
 
             float peak = 0.0f;
             for (const float v : l1)

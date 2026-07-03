@@ -667,7 +667,16 @@ EchoMeasure measureEchoes (const std::vector<float>& mid, double sampleRate)
 
 // Modulation-rate measurement: spectral-centroid trajectory over the sustain,
 // autocorrelated to find the dominant modulation period.
-struct ModMeasure { double rateHz = 0.0; double periodSeconds = 0.0; double zipperRatio = 0.0; };
+struct ModMeasure
+{
+    double rateHz = 0.0;
+    double periodSeconds = 0.0;
+    double zipperRatio = 0.0;
+    // Trajectory endpoints (mean of the first/last 5 hops): a one-way ramp —
+    // e.g. the Lens morph journey — shows up here, not in the autocorrelation.
+    double centroidStartHz = 0.0;
+    double centroidEndHz = 0.0;
+};
 
 ModMeasure measureModulation (const std::vector<float>& mid, double sampleRate,
                               int sustainStart, int sustainEnd)
@@ -705,6 +714,13 @@ ModMeasure measureModulation (const std::vector<float>& mid, double sampleRate,
             den += mag;
         }
         centroid[static_cast<size_t> (f)] = den > 0.0 ? num / den : 0.0;
+    }
+
+    const int edge = juce::jmin (5, numFrames);
+    for (int f = 0; f < edge; ++f)
+    {
+        result.centroidStartHz += centroid[static_cast<size_t> (f)] / edge;
+        result.centroidEndHz += centroid[static_cast<size_t> (numFrames - 1 - f)] / edge;
     }
 
     double mean = 0.0;
@@ -1035,6 +1051,8 @@ int main (int argc, char* argv[])
             json->setProperty ("mod_rate_hz", modResult.rateHz);
             json->setProperty ("mod_period_s", modResult.periodSeconds);
             json->setProperty ("zipper_ratio", modResult.zipperRatio);
+            json->setProperty ("centroid_start_hz", modResult.centroidStartHz);
+            json->setProperty ("centroid_end_hz", modResult.centroidEndHz);
         }
 
         if (options.measureEcho)

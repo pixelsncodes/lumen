@@ -263,6 +263,10 @@ public:
 // Play view: the permanent waterfall scene (grid + spectral surface,
 // WATERFALL_SPEC.md — idle shows the drained flat surface, no context
 // switching), Lens drop zone, big macros, 2-octave mouse keyboard (SPEC 14).
+// The keyboard follows incoming MIDI: when sounding notes are entirely
+// outside the visible window it slides whole octaves to reach them (never
+// while a visible note is held), and yellow edge arrows light while notes
+// sound beyond the window on that side.
 class PlayView final : public juce::Component
 {
 public:
@@ -271,12 +275,15 @@ public:
 
     void resized() override;
     void paint (juce::Graphics& g) override;
+    void paintOverChildren (juce::Graphics& g) override;
     void animate();
 
 private:
     UiShared shared;
+    juce::MidiKeyboardState& notes;
     WaterfallView waterfall;
     LensPanel lensPanel; // the drop zone is the real Lens panel
     juce::OwnedArray<ModKnob> macroKnobs;
     FlatKeyboard keyboard;
+    bool leftArrowLit = false, rightArrowLit = false;
 };
