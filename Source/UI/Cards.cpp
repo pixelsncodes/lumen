@@ -1,5 +1,6 @@
 #include "UI/Cards.h"
 
+#include "Lens/LensController.h"
 #include "UI/Theme.h"
 
 using namespace lumen;
@@ -384,25 +385,21 @@ void LfoCard::animate()
 // LensCard
 // ---------------------------------------------------------------------------
 
-LensCard::LensCard()
-    : CardPanel ("LENS", theme::accentMod)
+LensCard::LensCard (const UiShared& shared)
+    : CardPanel ("LENS", theme::accentMod),
+      panel (shared, true)
 {
+    addAndMakeVisible (panel);
 }
 
-void LensCard::paint (juce::Graphics& g)
+void LensCard::resized()
 {
-    CardPanel::paint (g);
-    const auto well = getLocalBounds().toFloat().reduced (8.0f).withTrimmedTop (16.0f);
-    g.setColour (theme::well);
-    g.fillRoundedRectangle (well, theme::wellRadius);
-    g.setColour (theme::hairline);
-    g.drawRoundedRectangle (well, theme::wellRadius, 1.0f);
-    g.setColour (theme::textMuted);
-    g.setFont (theme::font (12.0f));
-    g.drawText ("image-to-tone engine", well.toNearestInt(), juce::Justification::centred);
-    g.setFont (theme::font (10.0f));
-    g.drawText ("arrives in Phase 6", well.toNearestInt().withTrimmedTop (32),
-                juce::Justification::centred);
+    panel.setBounds (getLocalBounds().reduced (8).withTrimmedTop (16));
+}
+
+void LensCard::animate()
+{
+    panel.animate();
 }
 
 // ---------------------------------------------------------------------------
@@ -529,6 +526,7 @@ DeepView::DeepView (const UiShared& shared, const AudioHistory& history)
       fx (shared),
       env (shared),
       lfo (shared),
+      lens (shared),
       footer (shared, history)
 {
     for (auto* child : std::initializer_list<juce::Component*> {
@@ -559,6 +557,7 @@ void DeepView::animate (bool fftTick)
     filter.animate (fftTick);
     env.animate();
     lfo.animate();
+    lens.animate();
     footer.animate();
 }
 
@@ -572,11 +571,15 @@ PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
       stackA (sharedContext, "oscATable", "oscAMorph", theme::accentA),
       stackB (sharedContext, "oscBTable", "oscBMorph", theme::accentB),
       waterfall (sharedContext, history),
+      bigLens (sharedContext, [this] { return bigLensOsc; }),
+      lensPanel (sharedContext, false),
       keyboard (keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     addAndMakeVisible (stackA);
     addChildComponent (stackB);
     addChildComponent (waterfall);
+    addChildComponent (bigLens);
+    addAndMakeVisible (lensPanel);
 
     const char* macroIds[] = { "macro1", "macro2", "macro3", "macro4" };
     const char* macroNames[] = { "Tone", "Motion", "Space", "Texture" };
@@ -595,7 +598,8 @@ void PlayView::resized()
     stackA.setBounds (visualizer);
     stackB.setBounds (visualizer);
     waterfall.setBounds (visualizer);
-    lensZone = { 764, 12, 260, 288 };
+    bigLens.setBounds (visualizer);
+    lensPanel.setBounds (764, 12, 260, 288);
 
     for (int m = 0; m < 4; ++m)
         macroKnobs[m]->setBounds (300 + m * 110, 316, 110, 148);
@@ -607,23 +611,6 @@ void PlayView::resized()
 void PlayView::paint (juce::Graphics& g)
 {
     g.fillAll (theme::well);
-
-    // Lens drop zone (SPEC 14; the engine itself arrives in Phase 6).
-    const auto zone = lensZone.toFloat();
-    g.setColour (theme::panel);
-    g.fillRoundedRectangle (zone, theme::cornerRadius);
-    g.setColour (theme::hairline);
-    g.drawRoundedRectangle (zone.reduced (0.5f), theme::cornerRadius, 1.0f);
-    g.setColour (theme::textSecondary);
-    g.setFont (theme::semiBold (15.0f));
-    g.drawText ("LENS", lensZone.withHeight (120).translated (0, 60), juce::Justification::centred);
-    g.setColour (theme::textMuted);
-    g.setFont (theme::font (12.0f));
-    g.drawText ("drop an image to build a tone", lensZone.withHeight (120).translated (0, 84),
-                juce::Justification::centred);
-    g.setFont (theme::font (10.0f));
-    g.drawText ("arrives in Phase 6", lensZone.withHeight (120).translated (0, 104),
-                juce::Justification::centred);
 }
 
 void PlayView::animate()
@@ -645,20 +632,37 @@ void PlayView::animate()
 
     auto* enabledA = shared.apvts().getRawParameterValue ("oscAEnabled");
     auto* enabledB = shared.apvts().getRawParameterValue ("oscBEnabled");
+    auto* tableA = shared.apvts().getRawParameterValue ("oscATable");
+    auto* tableB = shared.apvts().getRawParameterValue ("oscBTable");
     const bool aOn = enabledA != nullptr && enabledA->load() > 0.5f;
     const bool bOn = enabledB != nullptr && enabledB->load() > 0.5f;
 
+    // Phase 6 (SPEC 13.6/14): the image view takes over the idle visual
+    // whenever the shown oscillator is playing its Lens table.
+    auto& lensController = shared.processor.lensController();
+    const bool imageA = aOn && tableA != nullptr
+                        && juce::roundToInt (tableA->load()) == 4 && lensController.hasImage (0);
+    const bool imageB = bOn && ! aOn && tableB != nullptr
+                        && juce::roundToInt (tableB->load()) == 4 && lensController.hasImage (1);
+
     const bool showWaterfall = audioHoldFrames > 0 || (! aOn && ! bOn);
-    const bool showA = ! showWaterfall && aOn;
-    const bool showB = ! showWaterfall && ! aOn && bOn;
+    const bool showLens = ! showWaterfall && (imageA || imageB);
+    bigLensOsc = imageA ? 0 : 1;
+    const bool showA = ! showWaterfall && ! showLens && aOn;
+    const bool showB = ! showWaterfall && ! showLens && ! aOn && bOn;
     stackA.setVisible (showA);
     stackB.setVisible (showB);
+    bigLens.setVisible (showLens);
     waterfall.setVisible (showWaterfall);
 
     if (showA)
         stackA.animate();
     if (showB)
         stackB.animate();
+    if (showLens)
+        bigLens.animate();
     if (showWaterfall)
         waterfall.animate (audioActive);
+
+    lensPanel.animate();
 }

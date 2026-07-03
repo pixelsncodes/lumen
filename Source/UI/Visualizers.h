@@ -41,14 +41,17 @@ public:
 
 private:
     float displayedMorph() const;
+    const lumen::Wavetable& displayedTable() const; // resolves the Lens table
 
     UiShared shared;
     juce::Colour accent;
     std::atomic<float>* tableValue = nullptr;
     std::atomic<float>* morphValue = nullptr;
     int morphDest = -1;
+    int oscIndex = 0; // 0 = A, 1 = B (Lens image table lookup)
     float lastMorph = -1.0f;
     int lastTable = -1;
+    int lastLensVersion = -1;
 };
 
 // FFT spectrum (2048, Hann, log 20 Hz..20 kHz, -90..0 dB, peak hold) with

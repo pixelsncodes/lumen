@@ -6,7 +6,10 @@
 #include "State/Parameters.h"
 
 #include <atomic>
+#include <memory>
 #include <vector>
+
+namespace lumen { class LensController; }
 
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
@@ -47,6 +50,10 @@ public:
 
     // Live modulation values published by the engine each block.
     lumen::UiTap& uiTap() noexcept { return engine.uiTap(); }
+
+    // Lens image engine (Phase 6): drop handling, table swaps, chroma patch.
+    // Message thread only.
+    lumen::LensController& lensController() noexcept { return *lens; }
 
     // Latest parsed matrix/macro config (stable between UI edits) — used by
     // knobs to know their modulation span without re-parsing the ValueTree.
@@ -99,6 +106,7 @@ private:
     void valueTreeParentChanged (juce::ValueTree&) override {}
 
     lumen::SynthEngine engine;
+    std::unique_ptr<lumen::LensController> lens;
 
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;

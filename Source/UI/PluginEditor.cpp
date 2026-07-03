@@ -1,11 +1,18 @@
 #include "UI/PluginEditor.h"
 
+#include "Lens/LensController.h"
 #include "UI/Theme.h"
 
 namespace
 {
     constexpr int kBaseWidth = 1040;
     constexpr int kBaseHeight = 660;
+
+    bool isSupportedImageFile (const juce::String& path)
+    {
+        return path.endsWithIgnoreCase (".png") || path.endsWithIgnoreCase (".jpg")
+            || path.endsWithIgnoreCase (".jpeg") || path.endsWithIgnoreCase (".gif");
+    }
 } // namespace
 
 bool LumenAudioProcessorEditor::disableOpenGL = false;
@@ -75,8 +82,70 @@ void LumenAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (lumen::theme::well);
 }
 
+bool LumenAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& file : files)
+        if (isSupportedImageFile (file))
+            return true;
+    return false;
+}
+
+void LumenAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
+{
+    fileDragOver = true;
+    repaint();
+}
+
+void LumenAudioProcessorEditor::fileDragExit (const juce::StringArray&)
+{
+    fileDragOver = false;
+    repaint();
+}
+
+void LumenAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    fileDragOver = false;
+
+    auto& lens = processor.lensController();
+    bool loaded = false;
+    for (const auto& path : files)
+        if (isSupportedImageFile (path) && lens.loadImageFile (juce::File (path)))
+        {
+            loaded = true;
+            break;
+        }
+
+    dropMessage = loaded ? "Lens: image loaded to OSC " + juce::String (lens.target() == 1 ? "B" : "A")
+                         : "Lens: couldn't read that image";
+    dropMessageFrames = 150; // ~2.5 s at 60 Hz
+    repaint();
+}
+
 void LumenAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
+    if (fileDragOver || dropMessageFrames > 0)
+    {
+        const auto accent = fileDragOver ? lumen::theme::neonYellow
+                                         : lumen::theme::accentMod;
+        if (fileDragOver)
+        {
+            g.setColour (accent.withAlpha (0.9f));
+            g.drawRect (getLocalBounds(), 3);
+        }
+
+        const auto text = fileDragOver
+            ? "drop image -> LENS (OSC " + juce::String (processor.lensController().target() == 1 ? "B" : "A") + ")"
+            : dropMessage;
+        const juce::Rectangle<int> banner (getWidth() / 2 - 170, 56, 340, 26);
+        g.setColour (lumen::theme::well.withAlpha (0.92f));
+        g.fillRoundedRectangle (banner.toFloat(), 6.0f);
+        g.setColour (accent);
+        g.drawRoundedRectangle (banner.toFloat(), 6.0f, 1.0f);
+        g.setColour (lumen::theme::textPrimary);
+        g.setFont (lumen::theme::medium (13.0f));
+        g.drawText (text, banner, juce::Justification::centred);
+    }
+
     if (! hudEnabled)
         return;
 
@@ -187,6 +256,9 @@ void LumenAudioProcessorEditor::timerCallback()
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
     else
         playView->animate();
+
+    if (dropMessageFrames > 0 && --dropMessageFrames == 0)
+        repaint();
 
     for (auto* knob : knobRegistry)
         if (knob->isShowing())

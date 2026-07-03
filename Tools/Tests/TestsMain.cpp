@@ -14,7 +14,9 @@
 #include "Engine/SVF.h"
 #include "Engine/SynthEngine.h"
 #include "Engine/Wavetable.h"
-#include "State/ModState.h"
+#include "Lens/LensEngine.h"
+#include "Lens/TestImages.h"
+#include "State/LensState.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
 #include "UI/WaterfallModel.h"
@@ -877,6 +879,311 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Phase 6: Lens
+// ---------------------------------------------------------------------------
+
+namespace lenstest
+{
+    // Per-harmonic amplitude spectrum of one 2048-sample frame.
+    std::vector<float> harmonicAmplitudes (const float* frame)
+    {
+        juce::dsp::FFT fft (11);
+        std::vector<float> spectrum (2 * 2048, 0.0f);
+        std::copy_n (frame, 2048, spectrum.begin());
+        fft.performRealOnlyForwardTransform (spectrum.data());
+
+        std::vector<float> amps (1024, 0.0f);
+        for (int k = 1; k < 1024; ++k)
+            amps[static_cast<size_t> (k)] = std::hypot (spectrum[2 * static_cast<size_t> (k)],
+                                                        spectrum[2 * static_cast<size_t> (k) + 1]);
+        return amps;
+    }
+
+    double centroid (const std::vector<float>& amps)
+    {
+        double num = 0.0, den = 0.0;
+        for (size_t k = 1; k < amps.size(); ++k)
+        {
+            num += static_cast<double> (k) * amps[k];
+            den += amps[k];
+        }
+        return den > 0.0 ? num / den : 0.0;
+    }
+
+    juce::Image solidColour (juce::Colour colour)
+    {
+        juce::Image img (juce::Image::ARGB, 64, 64, true, juce::SoftwareImageType());
+        juce::Graphics g (img);
+        g.fillAll (colour);
+        return img;
+    }
+} // namespace lenstest
+
+class LensDeterminismTest final : public juce::UnitTest
+{
+public:
+    LensDeterminismTest() : juce::UnitTest ("Lens determinism + state round-trip", "Lens") {}
+
+    // The pinned reference checksums: the fixed procedural gradient image
+    // must always produce these exact wavetables (PHASES Phase 6 gate).
+    static constexpr const char* kExpectedScanSha =
+        "cdb1783437a6c6ddbcb706c86dd60e7834fa58430c06b445c0ebfcfdd0d0df7c";
+    static constexpr const char* kExpectedSpectralSha =
+        "62a3e9c6c1416bded864a92a9e7700d9f4a166db22c0fc44312e3bb2d76b4cfe";
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("same image -> identical seed and frames (two fresh runs)");
+        const auto image = lens::testimages::gradient();
+        const auto a1 = lens::analyzeImage (image);
+        const auto a2 = lens::analyzeImage (image);
+        expect (a1.valid && a2.valid, "analysis runs");
+        expectEquals (juce::String::toHexString (static_cast<juce::int64> (a1.seed)),
+                      juce::String::toHexString (static_cast<juce::int64> (a2.seed)));
+
+        const auto scan1 = lens::buildFrames (a1, lens::Mode::scan);
+        const auto scan2 = lens::buildFrames (a2, lens::Mode::scan);
+        const auto spectral1 = lens::buildFrames (a1, lens::Mode::spectral);
+        const auto spectral2 = lens::buildFrames (a2, lens::Mode::spectral);
+        expect (scan1 == scan2, "scan frames bit-identical");
+        expect (spectral1 == spectral2, "spectral frames bit-identical");
+
+        beginTest ("wavetable SHA-256 matches the pinned reference");
+        const auto scanSha = lens::sha256Hex (scan1.data(), scan1.size() * sizeof (float));
+        const auto spectralSha = lens::sha256Hex (spectral1.data(),
+                                                  spectral1.size() * sizeof (float));
+        logMessage ("  scan     sha256 = " + scanSha);
+        logMessage ("  spectral sha256 = " + spectralSha);
+        logMessage ("  seed = " + juce::String::toHexString (static_cast<juce::int64> (a1.seed)));
+        expectEquals (scanSha, juce::String (kExpectedScanSha));
+        expectEquals (spectralSha, juce::String (kExpectedSpectralSha));
+
+        beginTest ("state round-trip restores the frames bit-exactly (no source image)");
+        juce::ValueTree state ("PARAMS");
+        const auto thumbPng = lens::encodePng (lens::makeThumbnail (a1));
+        expect (thumbPng.getSize() > 0, "thumbnail PNG encoded");
+        lensstate::storeImage (state, 0, scan1, thumbPng, a1.seed, "gradient.png");
+
+        // Through XML text — exactly what getStateInformation/presets do.
+        const auto xmlText = state.toXmlString();
+        expect (! xmlText.contains ("gradient_source_path"), "no path stored");
+        const auto restored = juce::ValueTree::fromXml (xmlText);
+        std::vector<float> loaded;
+        expect (lensstate::loadImageFrames (restored, 0, loaded), "frames load back");
+        expect (loaded == scan1, "restored frames bit-identical");
+
+        const auto thumb = lensstate::loadThumbnail (restored, 0);
+        expect (thumb.isValid() && thumb.getWidth() == 64 && thumb.getHeight() == 64,
+                "64x64 thumbnail restored");
+
+        beginTest ("restored table renders bit-identical audio");
+        Wavetable original, roundTripped;
+        original.build (scan1.data(), lens::kNumFrames, lens::kHarmonicCap, lens::kPeakTarget);
+        roundTripped.build (loaded.data(), lens::kNumFrames, lens::kHarmonicCap, lens::kPeakTarget);
+
+        auto renderWith = [] (const Wavetable& table, std::vector<float>& l, std::vector<float>& r)
+        {
+            SynthEngine engine;
+            engine.prepare (48000.0, 512);
+            engine.setImageTable (0, &table);
+            EngineParams params;
+            params.oscA.table = static_cast<int> (TableChoice::image);
+            params.oscA.morph = 0.5f;
+            engine.setParams (params);
+            engine.noteOn (60, 100.0f / 127.0f);
+            l.assign (24000, 0.0f);
+            r.assign (24000, 0.0f);
+            engine.render (l.data(), r.data(), 24000);
+        };
+        std::vector<float> l1, r1, l2, r2;
+        renderWith (original, l1, r1);
+        renderWith (roundTripped, l2, r2);
+        expect (l1 == l2 && r1 == r2, "audio bit-identical after round-trip");
+    }
+};
+
+class LensCentroidTest final : public juce::UnitTest
+{
+public:
+    LensCentroidTest() : juce::UnitTest ("Lens scan centroid monotonicity", "Lens") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("gradient image, Scan mode: centroid rises down the morph range");
+        const auto analysis = lens::analyzeImage (lens::testimages::gradient());
+        const auto frames = lens::buildFrames (analysis, lens::Mode::scan);
+        expectEquals (static_cast<int> (frames.size()), lens::kNumFrames * lens::kFrameLength);
+
+        double first = 0.0, last = 0.0, previous = 0.0;
+        bool monotonic = true;
+        for (int i = 0; i < lens::kNumFrames; ++i)
+        {
+            const auto amps = lenstest::harmonicAmplitudes (
+                frames.data() + static_cast<size_t> (i) * lens::kFrameLength);
+            const double c = lenstest::centroid (amps);
+            if (i == 0)
+                first = c;
+            else if (c < previous - 1.0e-3) // equal rows may repeat; never fall
+                monotonic = false;
+            previous = c;
+            last = c;
+        }
+        logMessage (juce::String::formatted ("  centroid frame 0 = %.2f, frame 63 = %.2f",
+                                             first, last));
+        expect (monotonic, "centroid never decreases across the morph range");
+        expectGreaterThan (last, first * 10.0, "centroid rises strongly overall");
+    }
+};
+
+class LensStripeBinsTest final : public juce::UnitTest
+{
+public:
+    LensStripeBinsTest() : juce::UnitTest ("Lens spectral stripe bins", "Lens") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("stripe image, Spectral mode: peaks land on the stripe harmonics");
+        const auto analysis = lens::analyzeImage (lens::testimages::stripes());
+        const auto frames = lens::buildFrames (analysis, lens::Mode::spectral);
+
+        // Horizontal stripes make every column identical; check a middle frame.
+        const auto amps = lenstest::harmonicAmplitudes (
+            frames.data() + static_cast<size_t> (32) * lens::kFrameLength);
+
+        float maxAmp = 0.0f;
+        for (int k = 1; k <= lens::kMaxHarmonics; ++k)
+            maxAmp = juce::jmax (maxAmp, amps[static_cast<size_t> (k)]);
+
+        // Peaks: local maxima above 20% of the strongest harmonic.
+        std::vector<int> peaks;
+        for (int k = 2; k < lens::kMaxHarmonics; ++k)
+        {
+            const float a = amps[static_cast<size_t> (k)];
+            if (a > 0.2f * maxAmp
+                && a >= amps[static_cast<size_t> (k - 1)]
+                && a > amps[static_cast<size_t> (k + 1)])
+                peaks.push_back (k);
+        }
+
+        juce::String peakList;
+        for (const int p : peaks)
+            peakList << p << " ";
+        logMessage ("  peaks at harmonics: " + peakList.trim());
+
+        expect (std::abs (static_cast<int> (peaks.size()) - lens::testimages::kNumStripes) <= 1,
+                "peak count = stripe count +-1");
+
+        for (const int expected : lens::testimages::kStripeHarmonics)
+        {
+            bool found = false;
+            for (const int p : peaks)
+                found = found || std::abs (p - expected) <= 1;
+            expect (found, "peak within +-1 of harmonic " + juce::String (expected));
+        }
+    }
+};
+
+class LensChromaTest final : public juce::UnitTest
+{
+public:
+    LensChromaTest() : juce::UnitTest ("Lens chroma mapping (SPEC 13.5)", "Lens") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        // Solid red: Hm 0, Sm 1, Vm 1, sigV 0, E 0, sigH 0 -> the exact
+        // SPEC section 13.5 values.
+        beginTest ("solid red");
+        {
+            const auto stats = lens::chromaStats (lens::analyzeImage (
+                lenstest::solidColour (juce::Colours::red)));
+            expectWithinAbsoluteError (stats.hueMeanDeg, 0.0f, 0.01f);
+            expectWithinAbsoluteError (stats.satMean, 1.0f, 1.0e-4f);
+            expectWithinAbsoluteError (stats.valMean, 1.0f, 1.0e-4f);
+            expectWithinAbsoluteError (stats.lumaSigma, 0.0f, 1.0e-4f);
+            expectWithinAbsoluteError (stats.edgeMean, 0.0f, 1.0e-6f);
+            expectWithinAbsoluteError (stats.hueSigma, 0.0f, 1.0e-5f);
+
+            const auto t = lens::patchTargetsFor (stats);
+            expectEquals (t.filterMode, 1, "LP24 (warm hue)");
+            expectWithinAbsoluteError (t.cutoffHz, 11313.708f, 1.0f);   // 250 * 2^5.5
+            expectWithinAbsoluteError (t.res, 0.6f, 1.0e-4f);           // 0.05 + 0.55
+            expectWithinAbsoluteError (t.detuneCents, 33.0f, 1.0e-3f);  // 3 + 30
+            expectEquals (t.unison, 6);                                 // 1 + round(5)
+            expectWithinAbsoluteError (t.attackSeconds, 0.002f, 1.0e-5f);   // 400*(2/400)^1 ms
+            expectWithinAbsoluteError (t.releaseSeconds, 0.150f, 1.0e-5f);  // 150 ms
+            expectWithinAbsoluteError (t.driveDb, 0.0f, 1.0e-5f);
+            expectWithinAbsoluteError (t.noiseDb, -60.0f, 1.0e-4f);
+            expectWithinAbsoluteError (t.lfoDepth, 0.0f, 1.0e-5f);
+            expectWithinAbsoluteError (t.lfoRateHz, 0.15f, 1.0e-4f);
+            expectWithinAbsoluteError (t.reverbMix, 0.45f, 1.0e-4f);    // 0.10 + 0.35
+            expectWithinAbsoluteError (t.macro4, 0.0f, 1.0e-5f);
+        }
+
+        beginTest ("solid green -> BP12, solid blue -> LP12");
+        {
+            const auto green = lens::patchTargetsFor (lens::chromaStats (
+                lens::analyzeImage (lenstest::solidColour (juce::Colour (0xff00ff00)))));
+            expectEquals (green.filterMode, 3, "hue 120 -> BP12");
+
+            const auto blue = lens::patchTargetsFor (lens::chromaStats (
+                lens::analyzeImage (lenstest::solidColour (juce::Colours::blue))));
+            expectEquals (blue.filterMode, 0, "hue 240 -> LP12");
+        }
+
+        beginTest ("solid black (V = 0, S = 0)");
+        {
+            const auto stats = lens::chromaStats (lens::analyzeImage (
+                lenstest::solidColour (juce::Colours::black)));
+            expectWithinAbsoluteError (stats.satMean, 0.0f, 1.0e-5f);
+            expectWithinAbsoluteError (stats.valMean, 0.0f, 1.0e-5f);
+
+            const auto t = lens::patchTargetsFor (stats);
+            expectEquals (t.filterMode, 1, "undefined hue defaults warm (LP24)");
+            expectWithinAbsoluteError (t.cutoffHz, 250.0f, 0.01f);      // 250 * 2^0
+            expectWithinAbsoluteError (t.res, 0.05f, 1.0e-5f);
+            expectWithinAbsoluteError (t.detuneCents, 3.0f, 1.0e-4f);
+            expectEquals (t.unison, 1);
+            expectWithinAbsoluteError (t.attackSeconds, 0.4f, 1.0e-5f); // 400 ms
+            expectWithinAbsoluteError (t.releaseSeconds, 1.5f, 1.0e-5f); // 150 + 1350 ms
+        }
+
+        beginTest ("solid mid-gray follows the cutoff/attack curves");
+        {
+            const auto stats = lens::chromaStats (lens::analyzeImage (
+                lenstest::solidColour (juce::Colour (0xff808080))));
+            const float v = 128.0f / 255.0f;
+            expectWithinAbsoluteError (stats.valMean, v, 1.0e-4f);
+
+            const auto t = lens::patchTargetsFor (stats);
+            expectWithinAbsoluteError (t.cutoffHz, 250.0f * std::exp2 (5.5f * v), 1.0f);
+            expectWithinAbsoluteError (t.attackSeconds,
+                                       0.4f * std::pow (2.0f / 400.0f, v), 1.0e-5f);
+        }
+
+        beginTest ("checker image: zero saturation, strong edges");
+        {
+            const auto stats = lens::chromaStats (lens::analyzeImage (
+                lens::testimages::checker()));
+            expectWithinAbsoluteError (stats.satMean, 0.0f, 1.0e-4f);
+            expectGreaterThan (stats.edgeMean, 0.02f, "edges present");
+            expectGreaterThan (stats.lumaSigma, 0.9f, "max-contrast luma spread");
+
+            const auto t = lens::patchTargetsFor (stats);
+            expectGreaterThan (t.driveDb, 0.2f, "edges drive the Drive");
+            expectLessThan (t.reverbMix, 0.45f, "edges dry the reverb");
+        }
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
@@ -888,6 +1195,10 @@ LfoTest lfoTest;
 FxNullTest fxNullTest;
 LimiterTest limiterTest;
 WaterfallModelTest waterfallModelTest;
+LensDeterminismTest lensDeterminismTest;
+LensCentroidTest lensCentroidTest;
+LensStripeBinsTest lensStripeBinsTest;
+LensChromaTest lensChromaTest;
 } // namespace
 
 class ConsoleTestRunner final : public juce::UnitTestRunner

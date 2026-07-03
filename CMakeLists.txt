@@ -54,16 +54,21 @@ juce_add_plugin(Lumen
     COPY_PLUGIN_AFTER_BUILD     FALSE   # done by cmake/CopyVST3.cmake, best effort
 )
 
-# Engine + state sources shared by the plugin, render harness, and tests.
+# Engine + state + Lens sources shared by the plugin, render harness, and
+# tests. Source/Lens needs juce_graphics (image decode) + juce_cryptography
+# (SHA-256 checksums) — both already/newly linked by every target.
 set(LUMEN_ENGINE_SOURCES
     Source/Engine/Wavetable.cpp
     Source/Engine/FactoryTables.cpp
     Source/Engine/Voice.cpp
     Source/Engine/FxChain.cpp
     Source/Engine/SynthEngine.cpp
+    Source/Lens/LensEngine.cpp
+    Source/Lens/TestImages.cpp
     Source/State/Parameters.cpp
     Source/State/EngineBindings.cpp
     Source/State/ModState.cpp
+    Source/State/LensState.cpp
 )
 set(LUMEN_ENGINE_HEADERS
     Source/Engine/EngineParams.h
@@ -77,16 +82,21 @@ set(LUMEN_ENGINE_HEADERS
     Source/Engine/SynthEngine.h
     Source/Engine/Voice.h
     Source/Engine/Wavetable.h
+    Source/Lens/LensEngine.h
+    Source/Lens/TestImages.h
     Source/State/EngineBindings.h
+    Source/State/LensState.h
     Source/State/ModState.h
     Source/State/Parameters.h
 )
 
 set(LUMEN_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
+    Source/Lens/LensController.cpp
     Source/UI/LumenLookAndFeel.cpp
     Source/UI/Controls.cpp
     Source/UI/Visualizers.cpp
+    Source/UI/LensPanel.cpp
     Source/UI/Cards.cpp
     Source/UI/PluginEditor.cpp
     ${LUMEN_ENGINE_SOURCES}
@@ -94,11 +104,13 @@ set(LUMEN_PLUGIN_SOURCES
 target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
     Source/PluginProcessor.h
+    Source/Lens/LensController.h
     Source/UI/Theme.h
     Source/UI/LumenLookAndFeel.h
     Source/UI/Controls.h
     Source/UI/WaterfallModel.h
     Source/UI/Visualizers.h
+    Source/UI/LensPanel.h
     Source/UI/Cards.h
     Source/UI/PluginEditor.h
     Source/Engine/UiTap.h
@@ -112,7 +124,8 @@ target_compile_definitions(Lumen PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
 target_link_libraries(Lumen
-    PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_opengl LumenAssets
+    PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_opengl
+            juce::juce_cryptography LumenAssets
     PUBLIC  juce::juce_recommended_config_flags
 )
 
@@ -149,7 +162,9 @@ target_compile_definitions(lumen_render PRIVATE ${LUMEN_COMMON_DEFS})
 target_link_libraries(lumen_render PRIVATE
     juce::juce_audio_formats
     juce::juce_audio_processors
+    juce::juce_cryptography
     juce::juce_dsp
+    juce::juce_graphics
     juce::juce_recommended_config_flags
 )
 
@@ -169,6 +184,8 @@ target_include_directories(lumen_tests PRIVATE Source)
 target_compile_definitions(lumen_tests PRIVATE ${LUMEN_COMMON_DEFS})
 target_link_libraries(lumen_tests PRIVATE
     juce::juce_audio_processors
+    juce::juce_cryptography
     juce::juce_dsp
+    juce::juce_graphics
     juce::juce_recommended_config_flags
 )

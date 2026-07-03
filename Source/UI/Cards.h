@@ -2,6 +2,7 @@
 
 #include <juce_audio_utils/juce_audio_utils.h> // MidiKeyboardComponent
 
+#include "UI/LensPanel.h"
 #include "UI/Visualizers.h"
 
 // SPEC section 14 Deep/Play view building blocks. The whole UI is laid out
@@ -125,12 +126,18 @@ private:
     int active = 0;
 };
 
-// Placeholder until the Lens engine lands in Phase 6 (DECISIONS.md).
+// The Lens card (SPEC 13/14): image + scanline, Scan/Spectral toggle,
+// "Set patch from colors", A/B target selector.
 class LensCard final : public CardPanel
 {
 public:
-    LensCard();
-    void paint (juce::Graphics& g) override;
+    explicit LensCard (const UiShared& shared);
+
+    void resized() override;
+    void animate();
+
+private:
+    LensPanel panel;
 };
 
 // Deep-view footer: macros 1-4, mod-source grab handles, scope strip.
@@ -228,9 +235,11 @@ private:
     UiShared shared;
     WavetableStackView stackA, stackB;
     WaterfallView waterfall; // the "audio active" visual (WATERFALL_SPEC.md)
+    LensImageView bigLens;   // the "image" context visual (SPEC 14, Phase 6)
+    LensPanel lensPanel;     // the drop zone is now the real Lens panel
     juce::OwnedArray<ModKnob> macroKnobs;
     FlatKeyboard keyboard;
-    juce::Rectangle<int> lensZone;
+    int bigLensOsc = 0;
     // Waterfall stays up 44 frames (~0.73 s) after audio stops — exactly one
     // full drain of the history ring before handing back to the idle visual.
     int audioHoldFrames = 0;

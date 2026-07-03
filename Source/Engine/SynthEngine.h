@@ -7,6 +7,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include <atomic>
+#include <cstdint>
 #include <vector>
 
 namespace lumen
@@ -45,6 +47,24 @@ public:
     void setFxEnabled (bool enabled) noexcept { fxEnabled = enabled; }
     int latencySamples() const noexcept { return fxEnabled ? fx.latencySamples() : 0; }
     const FxChain::Levels& meterLevels() const noexcept { return fx.levels(); }
+
+    // --- Phase 6: Lens image tables --------------------------------------
+    // Per-osc Image table (SPEC 4/13): the message thread swaps the pointer
+    // atomically; render() resolves TableChoice::image through it (falling
+    // back to Basic while empty). The CALLER owns the table and must keep a
+    // retired table alive until renderCallCount() has advanced by >= 2 past
+    // the swap (any render concurrent with the swap has finished by then) —
+    // see LensController.
+    void setImageTable (int oscIndex, const Wavetable* table) noexcept
+    {
+        (oscIndex == 0 ? imageTableA : imageTableB)
+            .store (table, std::memory_order_release);
+    }
+
+    uint64_t renderCallCount() const noexcept
+    {
+        return renderCounter.load (std::memory_order_acquire);
+    }
 
     // Block-rate live-value snapshot for the UI (mod arcs, LFO markers).
     // Written on the audio thread each chunk, read via atomics only.
@@ -89,6 +109,10 @@ private:
     Voice voices[kNumVoices];
     FxChain fx;
     bool fxEnabled = true;
+
+    // Lens image tables (Phase 6): owned by the caller, swapped atomically.
+    std::atomic<const Wavetable*> imageTableA { nullptr }, imageTableB { nullptr };
+    std::atomic<uint64_t> renderCounter { 0 };
 
     OscSmoothers smoothA, smoothB;
     Smoothed subLevel, noiseLin, cutoff, res, drive, envAmount, keytrack, bendSemis;

@@ -3,17 +3,26 @@
 //   lumen_render --preset init --note 60 --vel 100 --dur 2 --tail 2
 //                --sr 48000 --out out.wav [--analyze] [--bench] [--no-fx]
 //                [--measure-mod] [--measure-echo] [--set param=value ...]
+//                [--image <png|jpg>] [--mode scan|spectral] [--lens-target A|B]
+//                [--chroma] [--gen-image gradient|stripes|checker]
 //
 // --analyze writes <out>.json with peak_dbfs, rms_dbfs, dc_offset, nan_count,
 // f0_hz, f0_cents_error, alias_floor_db, attack_ms_measured,
 // release_ms_measured, realtime_factor.
 // --bench renders 10 s of 8-voice chords and reports realtime_factor.
+// --image runs the Lens engine on the file, loads the result into the target
+//   oscillator's Image slot and prints the wavetable SHA-256 (determinism).
+// --chroma additionally applies the SPEC 13.5 "Set patch from colors" map.
+// --gen-image writes a deterministic procedural test image to --out and exits.
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
+#include <juce_graphics/juce_graphics.h>
 
 #include "Engine/SynthEngine.h"
+#include "Lens/LensEngine.h"
+#include "Lens/TestImages.h"
 #include "State/EngineBindings.h"
 #include "State/ModState.h"
 
@@ -43,6 +52,13 @@ struct RenderOptions
     std::vector<std::pair<juce::String, float>> overrides;      // --set id=value
     std::vector<juce::StringArray> modRoutes;                   // --mod src:dest:depth
     std::vector<juce::StringArray> macroMaps;                   // --macro n:dest:min:max[:curve]
+
+    // Lens (Phase 6)
+    juce::String imagePath;                                     // --image
+    lumen::lens::Mode lensMode = lumen::lens::Mode::scan;       // --mode
+    int lensTarget = 0;                                         // --lens-target A|B
+    bool chroma = false;                                        // --chroma
+    juce::String genImage;                                      // --gen-image kind
 };
 
 bool parseArguments (int argc, char* argv[], RenderOptions& options)
@@ -53,6 +69,23 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
         const bool hasValue = i + 1 < argc;
 
         if (flag == "--analyze")                    { options.analyze = true; }
+        else if (flag == "--chroma")                { options.chroma = true; }
+        else if (flag == "--image" && hasValue)     { options.imagePath = argv[++i]; }
+        else if (flag == "--gen-image" && hasValue) { options.genImage = argv[++i]; }
+        else if (flag == "--mode" && hasValue)
+        {
+            const juce::String modeName (argv[++i]);
+            if (modeName == "scan")          options.lensMode = lumen::lens::Mode::scan;
+            else if (modeName == "spectral") options.lensMode = lumen::lens::Mode::spectral;
+            else { std::cerr << "--mode expects scan|spectral, got '" << modeName << "'\n"; return false; }
+        }
+        else if (flag == "--lens-target" && hasValue)
+        {
+            const juce::String targetName (argv[++i]);
+            if (targetName == "A")      options.lensTarget = 0;
+            else if (targetName == "B") options.lensTarget = 1;
+            else { std::cerr << "--lens-target expects A|B, got '" << targetName << "'\n"; return false; }
+        }
         else if (flag == "--bench")                 { options.bench = true; }
         else if (flag == "--measure-mod")           { options.measureMod = true; }
         else if (flag == "--measure-echo")          { options.measureEcho = true; }
@@ -113,8 +146,58 @@ bool parseArguments (int argc, char* argv[], RenderOptions& options)
     return true;
 }
 
-bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& params)
+// SPEC 13.5 "Set patch from colors" applied straight to the engine POD (the
+// plugin-side twin is LensController::applyChromaPatch).
+void applyChromaFields (lumen::EngineParams& params, const lumen::lens::PatchTargets& t,
+                        int oscIndex)
 {
+    auto& osc = oscIndex == 1 ? params.oscB : params.oscA;
+    params.filterMode = t.filterMode;
+    params.filterCutoffHz = t.cutoffHz;
+    params.filterRes = t.res;
+    osc.detuneCents = t.detuneCents;
+    osc.unison = t.unison;
+    params.env1.attackSeconds = t.attackSeconds;
+    params.env1.releaseSeconds = t.releaseSeconds;
+    params.fx.driveDb = t.driveDb;
+    params.fx.driveEnabled = t.driveDb > 0.05f;
+    params.noiseDb = t.noiseDb;
+    params.fx.reverbMix = t.reverbMix;
+    params.macroValues[3] = t.macro4;
+    params.lfo[0].shape = 0;      // sine
+    params.lfo[0].sync = false;
+    params.lfo[0].mono = false;   // poly
+    params.lfo[0].rateHz = t.lfoRateHz;
+}
+
+void applyChromaLfoSlot (lumen::mod::Config& config, const lumen::lens::PatchTargets& t,
+                         int oscIndex)
+{
+    const int lfo1 = static_cast<int> (lumen::mod::Source::lfo1);
+    const int morph = static_cast<int> (oscIndex == 1 ? lumen::mod::Dest::oscBMorph
+                                                      : lumen::mod::Dest::oscAMorph);
+    lumen::mod::Slot* free = nullptr;
+    for (auto& slot : config.slots)
+    {
+        if (slot.enabled && slot.source == lfo1 && slot.dest == morph)
+        {
+            slot.depth = t.lfoDepth;
+            return;
+        }
+        if (free == nullptr && ! slot.enabled)
+            free = &slot;
+    }
+    if (free != nullptr)
+        *free = { lfo1, morph, t.lfoDepth, true };
+}
+
+bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& params,
+                        const lumen::lens::PatchTargets* chromaTargets)
+{
+    // Chroma first: explicit --set overrides must win over the color map.
+    if (chromaTargets != nullptr)
+        applyChromaFields (params, *chromaTargets, options.lensTarget);
+
     for (const auto& [id, value] : options.overrides)
     {
         if (! lumen::bindings::set (params, id, value))
@@ -165,6 +248,12 @@ bool buildEngineParams (const RenderOptions& options, lumen::EngineParams& param
         mm.rangeMax = map[3].getFloatValue();
         mm.curve = map.size() == 5 ? juce::jlimit (0.25f, 4.0f, map[4].getFloatValue()) : 1.0f;
     }
+
+    // Chroma's LFO 1 -> morph route goes in last: it must survive the Init
+    // defaults (which own slot 0) and never clobber explicit --mod routes.
+    if (chromaTargets != nullptr)
+        applyChromaLfoSlot (params.mod, *chromaTargets, options.lensTarget);
+
     return true;
 }
 
@@ -647,17 +736,80 @@ ModMeasure measureModulation (const std::vector<float>& mid, double sampleRate,
 
 int main (int argc, char* argv[])
 {
+    juce::ScopedJuceInitialiser_GUI juceInitialiser; // image decode/encode (Lens)
+
     RenderOptions options;
     if (! parseArguments (argc, argv, options))
         return 2;
 
+    // --gen-image: write the deterministic procedural test image and exit.
+    if (options.genImage.isNotEmpty())
+    {
+        const auto image = lumen::lens::testimages::byName (options.genImage);
+        if (! image.isValid())
+        {
+            std::cerr << "--gen-image expects gradient|stripes|checker, got '"
+                      << options.genImage << "'\n";
+            return 2;
+        }
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (options.outPath);
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        if (! stream.openedOk() || ! juce::PNGImageFormat().writeImageToStream (image, stream))
+        {
+            std::cerr << "Failed to write " << file.getFullPathName() << "\n";
+            return 1;
+        }
+        std::cout << "Wrote " << file.getFullPathName() << " ("
+                  << image.getWidth() << "x" << image.getHeight() << ")\n";
+        return 0;
+    }
+
+    // --image: Lens analysis first, so --chroma can shape the engine params.
+    lumen::Wavetable lensTable;
+    lumen::lens::ChromaStats lensStats;
+    lumen::lens::PatchTargets lensTargets;
+    juce::String lensSha, lensSeed;
+    bool haveImage = false;
+
+    if (options.imagePath.isNotEmpty())
+    {
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (options.imagePath);
+        const auto analysis = lumen::lens::analyzeImageFile (file);
+        if (! analysis.valid)
+        {
+            std::cerr << "--image: cannot decode '" << file.getFullPathName() << "'\n";
+            return 1;
+        }
+        const auto frames = lumen::lens::buildFrames (analysis, options.lensMode);
+        lensSha = lumen::lens::sha256Hex (frames.data(), frames.size() * sizeof (float));
+        lensSeed = juce::String::toHexString (static_cast<juce::int64> (analysis.seed));
+        lensStats = lumen::lens::chromaStats (analysis);
+        lensTargets = lumen::lens::patchTargetsFor (lensStats);
+        lensTable.build (frames.data(), lumen::lens::kNumFrames,
+                         lumen::lens::kHarmonicCap, lumen::lens::kPeakTarget);
+        haveImage = true;
+        std::cout << "lens_seed=" << lensSeed << " lens_table_sha256=" << lensSha << "\n";
+    }
+
     lumen::EngineParams params;
-    if (! buildEngineParams (options, params))
+    if (haveImage)
+    {
+        // The image loads into the target osc's Image slot (SPEC 13.6);
+        // --set can still override table/enabled below.
+        auto& targetOsc = options.lensTarget == 1 ? params.oscB : params.oscA;
+        targetOsc.table = static_cast<int> (lumen::TableChoice::image);
+        targetOsc.enabled = true;
+    }
+    if (! buildEngineParams (options, params,
+                             options.chroma && haveImage ? &lensTargets : nullptr))
         return 2;
 
     lumen::SynthEngine engine;
     engine.prepare (options.sampleRate, kBlockSize);
     engine.setFxEnabled (! options.noFx);
+    if (haveImage)
+        engine.setImageTable (options.lensTarget, &lensTable);
     engine.setParams (params);
 
     if (options.bench)
@@ -740,7 +892,21 @@ int main (int argc, char* argv[])
         json->setProperty ("release_ms_measured", timing.releaseMs);
         json->setProperty ("realtime_factor", realtimeFactor);
         json->setProperty ("latency_samples", latency);
-        json->setProperty ("schema_phase", 4);
+        json->setProperty ("schema_phase", 6);
+
+        if (haveImage)
+        {
+            json->setProperty ("lens_table_sha256", lensSha);
+            json->setProperty ("lens_seed", lensSeed);
+            json->setProperty ("lens_mode", options.lensMode == lumen::lens::Mode::scan
+                                                ? "scan" : "spectral");
+            json->setProperty ("lens_hue_mean_deg", lensStats.hueMeanDeg);
+            json->setProperty ("lens_sat_mean", lensStats.satMean);
+            json->setProperty ("lens_val_mean", lensStats.valMean);
+            json->setProperty ("lens_luma_sigma", lensStats.lumaSigma);
+            json->setProperty ("lens_edge_mean", lensStats.edgeMean);
+            json->setProperty ("lens_hue_sigma", lensStats.hueSigma);
+        }
 
         if (options.measureMod)
         {

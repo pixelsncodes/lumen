@@ -15,6 +15,7 @@
 // transform, and a frame-time debug HUD (toggle: H key).
 class LumenAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                         public juce::DragAndDropContainer,
+                                        public juce::FileDragAndDropTarget,
                                         private juce::Timer,
                                         private juce::MidiKeyboardState::Listener
 {
@@ -26,6 +27,13 @@ public:
     void paintOverChildren (juce::Graphics& g) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
+
+    // Drop an image ANYWHERE on the window (SPEC 13): forwards to the
+    // processor's LensController.
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override;
+    void fileDragExit (const juce::StringArray&) override;
+    void filesDropped (const juce::StringArray& files, int, int) override;
 
     // 0 = play, 1 = deep. Persisted as a state property ("uiView").
     void setView (int index);
@@ -69,6 +77,11 @@ private:
 
     int tick = 0;
     bool applyingExternalMidi = false; // guards keyboardState listener re-entry
+
+    // Lens drop feedback (overlay while dragging, brief message after).
+    bool fileDragOver = false;
+    int dropMessageFrames = 0;
+    juce::String dropMessage;
 
     // Frame-time instrumentation (written on the paint thread, read from the
     // message thread by --stress; HUD text is drawn on the paint thread).

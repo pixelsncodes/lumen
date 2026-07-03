@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 
+#include "Lens/LensController.h"
 #include "State/EngineBindings.h"
 #include "State/ModState.h"
 #include "UI/PluginEditor.h"
@@ -24,6 +25,7 @@ LumenAudioProcessor::LumenAudioProcessor()
     }
 
     initializeModState();
+    lens = std::make_unique<lumen::LensController> (apvts, engine);
 }
 
 LumenAudioProcessor::~LumenAudioProcessor()
@@ -274,6 +276,8 @@ void LumenAudioProcessor::setStateInformation (const void* data, int sizeInBytes
             apvts.state.removeListener (this);
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             initializeModState(); // re-ensure trees, republish, re-listen
+            if (lens != nullptr)
+                lens->applyStateToEngine(); // rebuild Lens tables from the state
         }
     }
 }

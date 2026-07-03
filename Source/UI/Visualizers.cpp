@@ -2,6 +2,7 @@
 
 #include "Engine/FactoryTables.h"
 #include "Engine/ModDestinations.h"
+#include "Lens/LensController.h"
 #include "State/ModState.h"
 #include "UI/Theme.h"
 
@@ -74,7 +75,17 @@ WavetableStackView::WavetableStackView (const UiShared& sharedContext,
     tableValue = shared.apvts().getRawParameterValue (tableParamID);
     morphValue = shared.apvts().getRawParameterValue (morphParamID);
     morphDest = modstate::destFromToken (morphParamID);
+    oscIndex = tableParamID.startsWith ("oscB") ? 1 : 0;
     setInterceptsMouseClicks (false, false);
+}
+
+const Wavetable& WavetableStackView::displayedTable() const
+{
+    const int index = tableValue != nullptr ? juce::roundToInt (tableValue->load()) : 0;
+    if (index == 4) // TableChoice::image -> this osc's Lens table
+        if (auto* image = shared.processor.lensController().currentTable (oscIndex))
+            return *image;
+    return factory::forIndex (index);
 }
 
 float WavetableStackView::displayedMorph() const
@@ -92,8 +103,7 @@ void WavetableStackView::paint (juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     drawWell (g, bounds);
 
-    const auto& table = factory::forIndex (tableValue != nullptr
-                                               ? juce::roundToInt (tableValue->load()) : 0);
+    const auto& table = displayedTable();
     if (table.isEmpty())
         return;
 
@@ -151,10 +161,13 @@ void WavetableStackView::animate()
 {
     const float morph = displayedMorph();
     const int tableIndex = tableValue != nullptr ? juce::roundToInt (tableValue->load()) : 0;
-    if (std::abs (morph - lastMorph) > 0.002f || tableIndex != lastTable)
+    const int lensVersion = shared.processor.lensController().tableVersion();
+    if (std::abs (morph - lastMorph) > 0.002f || tableIndex != lastTable
+        || lensVersion != lastLensVersion)
     {
         lastMorph = morph;
         lastTable = tableIndex;
+        lastLensVersion = lensVersion;
         repaint();
     }
 }

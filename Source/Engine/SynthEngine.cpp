@@ -146,6 +146,9 @@ void SynthEngine::render (float* outL, float* outR, int numSamples)
         renderChunk (outL + offset, outR + offset, chunk);
         offset += chunk;
     }
+
+    // Retire fence for the Lens image tables (see setImageTable).
+    renderCounter.fetch_add (1, std::memory_order_release);
 }
 
 // ---------------------------------------------------------------------------
@@ -578,9 +581,15 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
 
     // Block-rate start/end pairs for pitch/pan ramps inside the voices.
     VoiceBlockGlobals globals;
-    auto fillOsc = [numSamples] (OscBlockGlobals& g, const OscParams& p, OscSmoothers& s)
+    auto fillOsc = [numSamples] (OscBlockGlobals& g, const OscParams& p, OscSmoothers& s,
+                                 const Wavetable* imageTable)
     {
-        g.table = &factory::forIndex (p.table);
+        // TableChoice::image resolves to this osc's Lens table (Basic while
+        // none is loaded — factory::forIndex's fallback).
+        g.table = (p.table == static_cast<int> (TableChoice::image)
+                   && imageTable != nullptr && ! imageTable->isEmpty())
+                      ? imageTable
+                      : &factory::forIndex (p.table);
         g.enabled = p.enabled;
         g.unison = p.unison;
         g.semitones = p.semitones;
@@ -590,8 +599,8 @@ void SynthEngine::renderChunk (float* outL, float* outR, int numSamples)
         g.blendStart = s.blend.getCurrentValue();   g.blendEnd = s.blend.skip (numSamples);
         g.panStart = s.pan.getCurrentValue();       g.panEnd = s.pan.skip (numSamples);
     };
-    fillOsc (globals.oscA, current.oscA, smoothA);
-    fillOsc (globals.oscB, current.oscB, smoothB);
+    fillOsc (globals.oscA, current.oscA, smoothA, imageTableA.load (std::memory_order_acquire));
+    fillOsc (globals.oscB, current.oscB, smoothB, imageTableB.load (std::memory_order_acquire));
 
     globals.subWave = current.subWave;
     globals.subOctave = current.subOctave;

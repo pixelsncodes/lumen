@@ -6,6 +6,9 @@
 //              [--notes 48,55,60]      (hold these notes via simulated incoming
 //                                       MIDI pumped through processBlock, so the
 //                                       screenshot shows the playing state)
+//              [--lens-image <png>]    (load an image through the Lens engine
+//                                       first, so the screenshot shows the Lens
+//                                       panel with image + scanline — Phase 6)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
 //   Lumen.exe --stress <seconds> [--view play|deep]
 //       Real audio device + 8-voice chord + random parameter wiggling at
@@ -19,6 +22,7 @@
 
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
+#include "Lens/LensController.h"
 #include "PluginProcessor.h"
 #include "UI/PluginEditor.h"
 
@@ -98,6 +102,20 @@ public:
             LumenAudioProcessorEditor::disableOpenGL = true;
 
             harnessProcessor.reset (::createPluginFilter());
+
+            // --lens-image: run the Lens engine before the editor opens so
+            // the screenshot shows the loaded image + scanline (Phase 6).
+            const auto lensIndex = args.indexOf ("--lens-image");
+            if (lensIndex >= 0 && lensIndex + 1 < args.size())
+                if (auto* lumenProcessor = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
+                {
+                    const auto imageFile = juce::File::getCurrentWorkingDirectory()
+                                               .getChildFile (args[lensIndex + 1]);
+                    if (! lumenProcessor->lensController().loadImageFile (imageFile))
+                        printToStdout ("Warning: --lens-image could not decode "
+                                       + imageFile.getFullPathName() + "\n");
+                }
+
             harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
 
             if (harnessEditor == nullptr)
