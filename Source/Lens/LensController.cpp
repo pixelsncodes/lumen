@@ -81,6 +81,23 @@ void LensController::installTable (int osc, const std::vector<float>& frames)
     pruneRetired();
 }
 
+void LensController::removeImage (int osc)
+{
+    const int index = oscIndex (osc);
+    session[index] = {};
+    clearTable (index);
+    display[index] = {};
+    names[index] = {};
+    lensstate::removeImage (apvts.state, index);
+
+    // Revert to the init wavetable only if the osc is still on its Image
+    // slot (leave a user's explicit factory-table choice alone).
+    const juce::String tableId = index == 1 ? "oscBTable" : "oscATable";
+    if (auto* value = apvts.getRawParameterValue (tableId);
+        value != nullptr && juce::roundToInt (value->load()) == 4)
+        setParamNatural (tableId, 0.0f); // TableChoice::basic — the Init table
+}
+
 void LensController::clearTable (int osc)
 {
     if (current[osc] == nullptr)
@@ -190,7 +207,13 @@ void LensController::applyChromaPatch (const lens::ChromaStats& stats, int osc)
     setParamNatural (params::driveEnabled, t.driveDb > 0.05f ? 1.0f : 0.0f);
     setParamNatural (params::noiseLevel, t.noiseDb);
     setParamNatural (params::reverbMix, t.reverbMix);
-    setParamNatural (params::macro4, t.macro4);
+
+    // Macro knob positions from the image statistics (SPEC 13.5 extension):
+    // Tone <- Vm, Motion <- sigV, Space <- smoothness, Texture <- edges.
+    const char* macroIds[4] = { params::macro1, params::macro2,
+                                params::macro3, params::macro4 };
+    for (int m = 0; m < 4; ++m)
+        setParamNatural (macroIds[m], t.macros[m]);
 
     // LFO 1 -> target osc morph: sine, poly, free-running (SPEC 13.5).
     setParamNatural (params::lfo1Shape, 0.0f);

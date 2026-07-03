@@ -97,6 +97,15 @@ void storeImage (juce::ValueTree& state, int osc,
     node.setProperty (kSource, sourceName, nullptr);
 }
 
+void removeImage (juce::ValueTree& state, int osc)
+{
+    auto lens = getTree (state);
+    if (! lens.isValid())
+        return;
+    if (auto node = imageNode (lens, osc); node.isValid())
+        lens.removeChild (node, nullptr);
+}
+
 bool loadImageFrames (const juce::ValueTree& state, int osc, std::vector<float>& out)
 {
     const auto node = imageNode (getTree (state), osc);

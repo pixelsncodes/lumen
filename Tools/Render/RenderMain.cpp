@@ -4,7 +4,7 @@
 //                --sr 48000 --out out.wav [--analyze] [--bench] [--no-fx]
 //                [--measure-mod] [--measure-echo] [--set param=value ...]
 //                [--image <png|jpg>] [--mode scan|spectral] [--lens-target A|B]
-//                [--chroma] [--gen-image gradient|stripes|checker]
+//                [--chroma] [--gen-image gradient|stripes|checker|warm|busy]
 //
 // --analyze writes <out>.json with peak_dbfs, rms_dbfs, dc_offset, nan_count,
 // f0_hz, f0_cents_error, alias_floor_db, attack_ms_measured,
@@ -163,7 +163,8 @@ void applyChromaFields (lumen::EngineParams& params, const lumen::lens::PatchTar
     params.fx.driveEnabled = t.driveDb > 0.05f;
     params.noiseDb = t.noiseDb;
     params.fx.reverbMix = t.reverbMix;
-    params.macroValues[3] = t.macro4;
+    for (int m = 0; m < 4; ++m) // SPEC 13.5 extension: macro knob positions
+        params.macroValues[m] = t.macros[m];
     params.lfo[0].shape = 0;      // sine
     params.lfo[0].sync = false;
     params.lfo[0].mono = false;   // poly
@@ -748,7 +749,7 @@ int main (int argc, char* argv[])
         const auto image = lumen::lens::testimages::byName (options.genImage);
         if (! image.isValid())
         {
-            std::cerr << "--gen-image expects gradient|stripes|checker, got '"
+            std::cerr << "--gen-image expects gradient|stripes|checker|warm|busy, got '"
                       << options.genImage << "'\n";
             return 2;
         }
@@ -906,6 +907,13 @@ int main (int argc, char* argv[])
             json->setProperty ("lens_luma_sigma", lensStats.lumaSigma);
             json->setProperty ("lens_edge_mean", lensStats.edgeMean);
             json->setProperty ("lens_hue_sigma", lensStats.hueSigma);
+
+            // SPEC 13.5 extension: the macro knob positions the chroma map
+            // would set (applied to the engine only when --chroma is given).
+            json->setProperty ("lens_macro_tone", lensTargets.macros[0]);
+            json->setProperty ("lens_macro_motion", lensTargets.macros[1]);
+            json->setProperty ("lens_macro_space", lensTargets.macros[2]);
+            json->setProperty ("lens_macro_texture", lensTargets.macros[3]);
         }
 
         if (options.measureMod)

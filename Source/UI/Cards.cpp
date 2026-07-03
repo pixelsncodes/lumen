@@ -568,17 +568,11 @@ void DeepView::animate (bool fftTick)
 PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
                     juce::MidiKeyboardState& keyboardState)
     : shared (sharedContext),
-      stackA (sharedContext, "oscATable", "oscAMorph", theme::accentA),
-      stackB (sharedContext, "oscBTable", "oscBMorph", theme::accentB),
       waterfall (sharedContext, history),
-      bigLens (sharedContext, [this] { return bigLensOsc; }),
       lensPanel (sharedContext, false),
       keyboard (keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
-    addAndMakeVisible (stackA);
-    addChildComponent (stackB);
-    addChildComponent (waterfall);
-    addChildComponent (bigLens);
+    addAndMakeVisible (waterfall);
     addAndMakeVisible (lensPanel);
 
     const char* macroIds[] = { "macro1", "macro2", "macro3", "macro4" };
@@ -594,11 +588,7 @@ PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
 
 void PlayView::resized()
 {
-    const auto visualizer = juce::Rectangle<int> (16, 12, 740, 288);
-    stackA.setBounds (visualizer);
-    stackB.setBounds (visualizer);
-    waterfall.setBounds (visualizer);
-    bigLens.setBounds (visualizer);
+    waterfall.setBounds (16, 12, 740, 288);
     lensPanel.setBounds (764, 12, 260, 288);
 
     for (int m = 0; m < 4; ++m)
@@ -615,54 +605,16 @@ void PlayView::paint (juce::Graphics& g)
 
 void PlayView::animate()
 {
-    // Context auto-selection (SPEC 14, DECISIONS.md): the spectral waterfall
-    // whenever sound is coming out (voices active or FX tail still audible);
-    // when audio stops it keeps advancing all-zero rows for 44 frames so the
-    // surface drains toward the horizon (~0.73 s, WATERFALL_SPEC section 6)
-    // before handing back to the idle visual: the Osc A stack, the Osc B
-    // stack if only B is on, and the waterfall again when both oscillators
-    // are off (the old scope fallback role).
+    // The waterfall scene (grid + surface) is permanent (WATERFALL_SPEC
+    // section 6 — no context switching): idle shows the drained flat
+    // surface, ridges rise whenever sound is coming out (voices active or
+    // FX tail still audible), release drains in place.
     const auto& meter = shared.processor.meterLevels();
     const bool audioActive =
         shared.tap.activeVoices.load (std::memory_order_relaxed) > 0
         || meter.peakL.load (std::memory_order_relaxed) > 0.0005f   // ~-66 dBFS
         || meter.peakR.load (std::memory_order_relaxed) > 0.0005f;
-    audioHoldFrames = audioActive ? lumen::WaterfallModel::kRows
-                                  : juce::jmax (0, audioHoldFrames - 1);
 
-    auto* enabledA = shared.apvts().getRawParameterValue ("oscAEnabled");
-    auto* enabledB = shared.apvts().getRawParameterValue ("oscBEnabled");
-    auto* tableA = shared.apvts().getRawParameterValue ("oscATable");
-    auto* tableB = shared.apvts().getRawParameterValue ("oscBTable");
-    const bool aOn = enabledA != nullptr && enabledA->load() > 0.5f;
-    const bool bOn = enabledB != nullptr && enabledB->load() > 0.5f;
-
-    // Phase 6 (SPEC 13.6/14): the image view takes over the idle visual
-    // whenever the shown oscillator is playing its Lens table.
-    auto& lensController = shared.processor.lensController();
-    const bool imageA = aOn && tableA != nullptr
-                        && juce::roundToInt (tableA->load()) == 4 && lensController.hasImage (0);
-    const bool imageB = bOn && ! aOn && tableB != nullptr
-                        && juce::roundToInt (tableB->load()) == 4 && lensController.hasImage (1);
-
-    const bool showWaterfall = audioHoldFrames > 0 || (! aOn && ! bOn);
-    const bool showLens = ! showWaterfall && (imageA || imageB);
-    bigLensOsc = imageA ? 0 : 1;
-    const bool showA = ! showWaterfall && ! showLens && aOn;
-    const bool showB = ! showWaterfall && ! showLens && ! aOn && bOn;
-    stackA.setVisible (showA);
-    stackB.setVisible (showB);
-    bigLens.setVisible (showLens);
-    waterfall.setVisible (showWaterfall);
-
-    if (showA)
-        stackA.animate();
-    if (showB)
-        stackB.animate();
-    if (showLens)
-        bigLens.animate();
-    if (showWaterfall)
-        waterfall.animate (audioActive);
-
+    waterfall.animate (audioActive);
     lensPanel.animate();
 }

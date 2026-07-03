@@ -59,6 +59,17 @@ struct ChromaStats
 
 ChromaStats chromaStats (const Analysis& analysis);
 
+// Chroma -> macro knob positions (SPEC 13.5 extension, DECISIONS.md):
+// each macro rests at its Init default and travels conservatively with one
+// image statistic — macro = clamp01(default + kMacroGain * (stat - 0.5)).
+// Stats: Tone <- Vm, Motion <- sigV, Space <- 1 - E', Texture <- E', where
+// E' = min(E / kEdgeFull, 1) rescales the practically small Sobel mean
+// (real photos rarely exceed ~0.25) onto the full 0..1 axis. Supersedes the
+// original "Macro 4 (Texture) default = E".
+inline constexpr float kMacroGain = 0.7f;  // ~default +-0.35 travel
+inline constexpr float kEdgeFull = 0.25f;  // E at which the texture axis saturates
+inline constexpr float kMacroDefaults[4] = { 0.5f, 0.5f, 0.3f, 0.2f }; // frozen Init values
+
 // The exact SPEC 13.5 patch targets derived from the stats.
 struct PatchTargets
 {
@@ -74,7 +85,7 @@ struct PatchTargets
     float lfoDepth = 0.0f;        // LFO 1 -> target osc morph: 0.5 * sigH
     float lfoRateHz = 0.15f;      // 0.15 + 4 * sigV, sine, poly
     float reverbMix = 0.12f;      // 0.10 + 0.35 * (1 - E)
-    float macro4 = 0.2f;          // Texture default = E
+    float macros[4] = { 0.5f, 0.5f, 0.3f, 0.2f }; // Tone/Motion/Space/Texture
 };
 
 PatchTargets patchTargetsFor (const ChromaStats& stats);

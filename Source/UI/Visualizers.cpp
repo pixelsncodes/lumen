@@ -484,16 +484,29 @@ void WaterfallView::animate (bool audioActive)
         rebuildFloorImage(); // fHi (top tick span) depends on the sample rate
     }
 
+    // One row every OTHER frame (spec sections 2/6): ~30 rows/s keeps the
+    // 22-row ring at ~0.73 s of visible history, half the ridge density.
+    // Skipped frames change nothing on screen, so they don't repaint.
+    advanceParity = ! advanceParity;
+    if (! advanceParity)
+        return;
+
     if (audioActive)
     {
         history.latest (sampleBuf, WaterfallModel::kFftSize);
         model.pushFrame (sampleBuf);
+        silentRows = 0;
     }
     else
     {
         model.pushSilent();
+        silentRows = juce::jmin (silentRows + 1, WaterfallModel::kRows + 1);
     }
-    repaint();
+
+    // Once every row in the ring is a drain row the scene is static (flat
+    // surface over the grid) — keep the analyser decaying, skip the repaint.
+    if (silentRows <= WaterfallModel::kRows)
+        repaint();
 }
 
 void WaterfallView::resized()
@@ -514,20 +527,45 @@ void WaterfallView::rebuildFloorImage()
 
     const float w = (float) wi, h = (float) hi;
     const float cx = w / 2.0f, halfW = w * 0.47f, groundY = h * 0.84f;
+    const float horizonY = h * 0.30f;
+
+    // Synthwave perspective floor grid (spec section 4), behind the rows.
+    // Horizontals sit at each row's baseline and span that row's width, so
+    // the spacing and width both compress toward the horizon; verticals
+    // connect each 1-2-5 tick's front x to its depth-scaled x at the horizon.
+    const float fLo = WaterfallModel::kFreqLo, fHi = model.freqHi();
+    const float logLo = std::log (fLo), logRange = std::log (fHi) - std::log (fLo);
+    auto tickOffset = [&] (float f) // signed offset from cx at depth 0
+    {
+        return ((std::log (f) - logLo) / logRange - 0.5f) * halfW * 2.0f;
+    };
+    const float gridF[] = { 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f };
+
+    g.setColour (waterfall::accent.withAlpha (waterfall::kGridAlpha));
+    for (int j = 0; j < WaterfallModel::kRows; ++j)
+    {
+        const float depth = (float) j / (float) (WaterfallModel::kRows - 1);
+        const float scale = 1.0f - depth * 0.42f;
+        const float baseY = groundY + (horizonY - groundY) * depth;
+        g.fillRect (juce::Rectangle<float> (cx - halfW * scale, baseY,
+                                            halfW * 2.0f * scale, 1.0f));
+    }
+    constexpr float kBackScale = 1.0f - 0.42f; // row-depth scale at the horizon
+    for (const float f : gridF)
+        if (f >= fLo && f <= fHi)
+        {
+            const float off = tickOffset (f);
+            g.drawLine (cx + off, groundY, cx + off * kBackScale, horizonY, 1.0f);
+        }
 
     // Baseline: 1 px at groundY, accent @ 0.28, spanning cx +/- halfW.
     g.setColour (waterfall::accent.withAlpha (0.28f));
     g.fillRect (juce::Rectangle<float> (cx - halfW, groundY, halfW * 2.0f, 1.0f));
 
     // Ticks: 1-2-5 series within [fLo, fHi], height h*0.018 below the baseline.
-    const float fLo = WaterfallModel::kFreqLo, fHi = model.freqHi();
-    const float logLo = std::log (fLo), logRange = std::log (fHi) - std::log (fLo);
     const float tickH = h * 0.018f;
-    auto tickX = [&] (float f)
-    {
-        return cx + ((std::log (f) - logLo) / logRange - 0.5f) * halfW * 2.0f;
-    };
-    for (const float f : { 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f })
+    auto tickX = [&] (float f) { return cx + tickOffset (f); };
+    for (const float f : gridF)
         if (f >= fLo && f <= fHi)
         {
             g.setColour (waterfall::accent.withAlpha (0.16f));
@@ -582,7 +620,6 @@ void WaterfallView::paint (juce::Graphics& g)
         const float baseY = groundY + (horizonY - groundY) * depth;
         const float* row = model.row (j);
 
-        float minY = baseY;
         for (int c = 0; c < kColumns; ++c)
         {
             const float n = (float) c / (float) (kColumns - 1);
@@ -590,7 +627,6 @@ void WaterfallView::paint (juce::Graphics& g)
             hv = hv * hv * 0.55f + hv * 0.45f; // soft expander — do not omit
             xs[c] = cx + (n - 0.5f) * halfW * 2.0f * scale;
             ys[c] = baseY - hv * hScale * scale;
-            minY = juce::jmin (minY, ys[c]);
         }
 
         ridge.clear();
@@ -606,24 +642,15 @@ void WaterfallView::paint (juce::Graphics& g)
         fillPath.lineTo (xs[0], baseY);
         fillPath.closeSubPath();
 
-        // 1. FILL — fully opaque vertical gradient; this is the occlusion.
-        const auto topCol = waterfall::mix (waterfall::accent, waterfall::dim, depth * 0.55f);
-        juce::ColourGradient gradient (topCol, 0.0f, juce::jmin (minY, baseY - 1.0f),
-                                       waterfall::darkBase, 0.0f, baseY, false);
-        gradient.addColour (0.5, waterfall::mix (topCol, waterfall::darkBase, 0.7f));
-        g.setGradientFill (gradient);
+        // 1. FILL — solid opaque background colour; this is the occlusion.
+        // Clean silhouetted ridgelines, no gradient, no glow (spec section 4).
+        g.setColour (waterfall::background);
         g.fillPath (fillPath);
 
-        // 2. GLOW stroke, front half only.
-        if (depth < 0.5f)
-        {
-            g.setColour (waterfall::accent.withAlpha (0.14f * (1.0f - depth * 2.0f)));
-            g.strokePath (ridge, juce::PathStrokeType (juce::jmax (2.5f, h * 0.013f)));
-        }
-
-        // 3. MAIN stroke — near-white front fading to pure accent at the back.
+        // 2. MAIN stroke — fixed ~1 px at all sizes, near-white front fading
+        // to pure accent at the back.
         g.setColour (waterfall::mix (waterfall::bright, waterfall::accent, depth * 0.5f));
-        g.strokePath (ridge, juce::PathStrokeType (juce::jmax (1.0f, h * 0.004f)));
+        g.strokePath (ridge, juce::PathStrokeType (1.0f));
     }
 
     g.setColour (theme::hairline);

@@ -818,7 +818,7 @@ public:
 
         // Criterion 3: Web-Audio emulation — full-scale 1 kHz sine settles
         // its column above 0.8; silence drains every value below 0.01
-        // within 44 frames (one full pass of the history ring).
+        // within kRows rows (one full pass of the history ring).
         beginTest ("full-scale 1 kHz sine settles its column > 0.8");
         WM model;
         model.prepare (48000.0);
@@ -867,14 +867,15 @@ public:
         }
         expectLessThan (previousValue, settled, "smoothing decays toward the floor");
 
-        beginTest ("silence drains every column below 0.01 within 44 frames");
+        beginTest ("silence drains every column below 0.01 within kRows rows");
         for (int frame = 0; frame < WM::kRows; ++frame)
             model.pushSilent(); // the audio-inactive path (WATERFALL_SPEC section 6)
         float peak = 0.0f;
         for (int j = 0; j < WM::kRows; ++j)
             for (int c = 0; c < WM::kColumns; ++c)
                 peak = std::max (peak, model.value (j, c));
-        logMessage ("  peak value across the ring after 44 drain frames = " + juce::String (peak, 6));
+        logMessage ("  peak value across the ring after " + juce::String (WM::kRows)
+                    + " drain rows = " + juce::String (peak, 6));
         expectLessThan (peak, 0.01f, "surface fully drained");
     }
 };
@@ -978,6 +979,18 @@ public:
         const auto thumb = lensstate::loadThumbnail (restored, 0);
         expect (thumb.isValid() && thumb.getWidth() == 64 && thumb.getHeight() == 64,
                 "64x64 thumbnail restored");
+
+        beginTest ("removeImage drops the IMAGE node (frames + thumbnail + name)");
+        {
+            auto cleared = restored.createCopy();
+            lensstate::removeImage (cleared, 0);
+            std::vector<float> none;
+            expect (! lensstate::hasImage (cleared, 0), "hasImage false after remove");
+            expect (! lensstate::loadImageFrames (cleared, 0, none), "no frames after remove");
+            expect (! lensstate::loadThumbnail (cleared, 0).isValid(), "no thumbnail after remove");
+            expect (lensstate::sourceName (cleared, 0).isEmpty(), "no source name after remove");
+            lensstate::removeImage (cleared, 0); // idempotent, no crash
+        }
 
         beginTest ("restored table renders bit-identical audio");
         Wavetable original, roundTripped;
@@ -1125,7 +1138,12 @@ public:
             expectWithinAbsoluteError (t.lfoDepth, 0.0f, 1.0e-5f);
             expectWithinAbsoluteError (t.lfoRateHz, 0.15f, 1.0e-4f);
             expectWithinAbsoluteError (t.reverbMix, 0.45f, 1.0e-4f);    // 0.10 + 0.35
-            expectWithinAbsoluteError (t.macro4, 0.0f, 1.0e-5f);
+            // Macros (SPEC 13.5 extension): default + 0.7 * (stat - 0.5),
+            // clamped; Vm 1, sigV 0, E' 0.
+            expectWithinAbsoluteError (t.macros[0], 0.85f, 1.0e-4f);  // Tone
+            expectWithinAbsoluteError (t.macros[1], 0.15f, 1.0e-4f);  // Motion
+            expectWithinAbsoluteError (t.macros[2], 0.65f, 1.0e-4f);  // Space
+            expectWithinAbsoluteError (t.macros[3], 0.0f, 1.0e-5f);   // Texture (clamped)
         }
 
         beginTest ("solid green -> BP12, solid blue -> LP12");
@@ -1180,6 +1198,37 @@ public:
             const auto t = lens::patchTargetsFor (stats);
             expectGreaterThan (t.driveDb, 0.2f, "edges drive the Drive");
             expectLessThan (t.reverbMix, 0.45f, "edges dry the reverb");
+        }
+
+        // SPEC 13.5 extension: a warm soft image and a busy high-contrast
+        // image must land the four macro knobs in visibly different spots.
+        beginTest ("macro positions separate warm-soft from busy-high-contrast");
+        {
+            const auto warm = lens::patchTargetsFor (lens::chromaStats (
+                lens::analyzeImage (lens::testimages::warm())));
+            const auto busy = lens::patchTargetsFor (lens::chromaStats (
+                lens::analyzeImage (lens::testimages::busy())));
+
+            // (Plain concatenation: %s in String::formatted garbles narrow
+            // literals on Windows — see the WSL/Windows gotchas note.)
+            const char* names[4] = { "Tone", "Motion", "Space", "Texture" };
+            for (int m = 0; m < 4; ++m)
+                logMessage ("  " + juce::String (names[m]).paddedRight (' ', 8)
+                            + " warm " + juce::String (warm.macros[m], 3)
+                            + " | busy " + juce::String (busy.macros[m], 3));
+
+            for (int m = 0; m < 4; ++m)
+            {
+                expect (warm.macros[m] >= 0.0f && warm.macros[m] <= 1.0f, "warm clamped");
+                expect (busy.macros[m] >= 0.0f && busy.macros[m] <= 1.0f, "busy clamped");
+            }
+            // Motion / Space / Texture must separate clearly (>= 0.15 of
+            // knob travel); the pair is constructed to disagree on contrast
+            // and edge density. Tone separation depends on the busy image's
+            // mid-value palette, so it only needs to differ.
+            expectGreaterThan (busy.macros[1] - warm.macros[1], 0.15f, "Motion separates");
+            expectGreaterThan (warm.macros[2] - busy.macros[2], 0.15f, "Space separates");
+            expectGreaterThan (busy.macros[3] - warm.macros[3], 0.15f, "Texture separates");
         }
     }
 };

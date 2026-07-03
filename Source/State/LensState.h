@@ -40,6 +40,9 @@ void storeImage (juce::ValueTree& state, int osc,
                  const juce::MemoryBlock& thumbPng,
                  juce::uint64 seed, const juce::String& sourceName);
 
+// Drops the osc's IMAGE node (frames + thumbnail + name) from the state.
+void removeImage (juce::ValueTree& state, int osc);
+
 // True + fills `out` (kFrameFloats floats) if osc has stored frames.
 bool loadImageFrames (const juce::ValueTree& state, int osc, std::vector<float>& out);
 juce::Image loadThumbnail (const juce::ValueTree& state, int osc);

@@ -33,6 +33,11 @@ public:
     bool loadImageFile (const juce::File& file);
     bool loadImage (const juce::Image& image, const juce::String& sourceName);
 
+    // Remove the osc's Lens image: clear the table/thumbnail (engine +
+    // state) and revert the osc to the init wavetable if it was playing the
+    // Image slot. Every other patch parameter is left as it is.
+    void removeImage (int osc);
+
     // Settings (persisted in the LENS state tree). Changing the mode
     // re-analyzes the in-session source image if one is still in memory;
     // after a state reload only the generated table exists (SPEC 13 stores

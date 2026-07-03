@@ -25,6 +25,15 @@ juce::Image stripes();
 // 512x512 checkerboard, 32-px cells (chroma: zero saturation, high edges).
 juce::Image checker();
 
-// By name: "gradient" | "stripes" | "checker"; invalid Image if unknown.
+// Chroma-to-macro verification pair (SPEC 13.5 extension, DECISIONS.md):
+// deterministic stand-ins for a "warm soft photo" (512x384 low-contrast
+// warm gradient + soft sun disc: high Vm, low sigV, near-zero E) and a
+// "busy high-contrast photo" (512x384 hard-edged saturated color cells
+// with diagonal stripes: mid/low Vm, high sigV, high E).
+juce::Image warm();
+juce::Image busy();
+
+// By name: "gradient" | "stripes" | "checker" | "warm" | "busy";
+// invalid Image if unknown.
 juce::Image byName (const juce::String& name);
 } // namespace lumen::lens::testimages

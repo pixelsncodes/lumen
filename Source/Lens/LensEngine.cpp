@@ -322,7 +322,14 @@ PatchTargets patchTargetsFor (const ChromaStats& c)
     t.lfoDepth = 0.5f * c.hueSigma;
     t.lfoRateHz = 0.15f + 4.0f * c.lumaSigma;
     t.reverbMix = 0.10f + 0.35f * (1.0f - c.edgeMean);
-    t.macro4 = c.edgeMean;
+
+    // Macro knob positions (SPEC 13.5 extension, header): conservative
+    // travel around the frozen Init defaults, clamped 0..1.
+    const float edgeFull = juce::jmin (1.0f, c.edgeMean / kEdgeFull);
+    const float stats[4] = { c.valMean, c.lumaSigma, 1.0f - edgeFull, edgeFull };
+    for (int m = 0; m < 4; ++m)
+        t.macros[m] = juce::jlimit (0.0f, 1.0f,
+                                    kMacroDefaults[m] + kMacroGain * (stats[m] - 0.5f));
     return t;
 }
 

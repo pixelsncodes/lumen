@@ -141,6 +141,9 @@ namespace lumen::waterfall
     inline const juce::Colour darkBase   { 0xff000000 | kDarkBaseRgb };
     inline const juce::Colour background { 0xff070708 };
 
+    // Perspective floor grid alpha (spec section 4: accent @ ~0.10-0.15).
+    inline constexpr float kGridAlpha = 0.12f;
+
     // Runtime per-channel linear interp for the depth-dependent paint mixes.
     inline juce::Colour mix (juce::Colour a, juce::Colour b, float t)
     {
@@ -154,11 +157,13 @@ namespace lumen::waterfall
 } // namespace lumen::waterfall
 
 // Play view 3D spectral waterfall (WATERFALL_SPEC.md): pseudo-3D ridgeline
-// surface, newest spectrum row at the front, rows stacked with linear
-// perspective and drawn back-to-front, each closed to its own baseline and
-// filled opaquely (the opaque fill IS the hidden-line removal). Replaces the
-// scope as the Play view "audio active" visual; the Deep view scope strip is
-// unchanged.
+// surface over a synthwave perspective floor grid, newest spectrum row at
+// the front, rows stacked with linear perspective and drawn back-to-front,
+// each closed to its own baseline and filled with solid opaque background
+// (the opaque fill IS the hidden-line removal). The scene is the PERMANENT
+// Play view large visualizer: idle = grid with a drained flat surface,
+// playing = ridges rise, release = drain in place. The Deep view scope
+// strip is unchanged.
 class WaterfallView final : public juce::Component
 {
 public:
@@ -166,8 +171,9 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
-    // One history row per UI frame (spec section 6): an FFT of the latest
-    // tap samples while audio is active, an all-zero drain row otherwise.
+    // Called every UI frame; advances one history row every OTHER frame
+    // (spec section 6): an FFT of the latest tap samples while audio is
+    // active, an all-zero drain row otherwise.
     void animate (bool audioActive);
 
 private:
@@ -177,6 +183,8 @@ private:
     const AudioHistory& history;
     lumen::WaterfallModel model;
     double preparedRate = 48000.0;
+    bool advanceParity = false;
+    int silentRows = 0; // consecutive drain rows; ring is static past kRows
 
     // Preallocated scratch — paint never allocates (spec section 7); the
     // two Paths keep their storage across clear() calls.

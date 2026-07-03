@@ -23,7 +23,9 @@ public:
     static constexpr int kFftSize = 1 << kFftOrder;  // 2048
     static constexpr int kNumBins = kFftSize / 2;    // 1024
     static constexpr int kColumns = 120;             // DEPTH_C
-    static constexpr int kRows = 44;                 // DEPTH_R (~0.73 s @ 60 fps)
+    // DEPTH_R. The view advances one row every OTHER ~60 fps frame
+    // (WATERFALL_SPEC sections 2/6), so 22 rows still cover ~0.73 s.
+    static constexpr int kRows = 22;
 
     // 0.8 is critical: it is what makes the ridges undulate instead of
     // flicker (the AnalyserNode smoothingTimeConstant default).
@@ -57,9 +59,9 @@ public:
         front = 0;
     }
 
-    // One FFT per animation frame over the most recent kFftSize samples
-    // (overlapping windows are expected and desired). Pushes a new row at
-    // the front of the ring.
+    // One FFT per row advance (every other animation frame, spec section 6)
+    // over the most recent kFftSize samples — overlapping windows are
+    // expected and desired. Pushes a new row at the front of the ring.
     void pushFrame (const float* samples) noexcept
     {
         for (int i = 0; i < kFftSize; ++i)

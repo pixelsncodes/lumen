@@ -219,8 +219,9 @@ public:
     }
 };
 
-// Play view: one large context visualizer, Lens drop zone, big macros,
-// 2-octave mouse keyboard (SPEC 14).
+// Play view: the permanent waterfall scene (grid + spectral surface,
+// WATERFALL_SPEC.md — idle shows the drained flat surface, no context
+// switching), Lens drop zone, big macros, 2-octave mouse keyboard (SPEC 14).
 class PlayView final : public juce::Component
 {
 public:
@@ -233,14 +234,8 @@ public:
 
 private:
     UiShared shared;
-    WavetableStackView stackA, stackB;
-    WaterfallView waterfall; // the "audio active" visual (WATERFALL_SPEC.md)
-    LensImageView bigLens;   // the "image" context visual (SPEC 14, Phase 6)
-    LensPanel lensPanel;     // the drop zone is now the real Lens panel
+    WaterfallView waterfall;
+    LensPanel lensPanel; // the drop zone is the real Lens panel
     juce::OwnedArray<ModKnob> macroKnobs;
     FlatKeyboard keyboard;
-    int bigLensOsc = 0;
-    // Waterfall stays up 44 frames (~0.73 s) after audio stops — exactly one
-    // full drain of the history ring before handing back to the idle visual.
-    int audioHoldFrames = 0;
 };

@@ -33,10 +33,96 @@ namespace
 // LensImageView
 // ---------------------------------------------------------------------------
 
+LensImageView::IconButton::IconButton (Glyph glyphToDraw, juce::String tip)
+    : glyph (glyphToDraw)
+{
+    setTooltip (std::move (tip));
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void LensImageView::IconButton::mouseUp (const juce::MouseEvent& e)
+{
+    if (getLocalBounds().contains (e.getPosition()) && onClick != nullptr)
+        onClick();
+}
+
+void LensImageView::IconButton::paint (juce::Graphics& g)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour (theme::well.withAlpha (hovered ? 0.95f : 0.75f));
+    g.fillEllipse (bounds);
+    g.setColour (hovered ? theme::textPrimary : theme::textSecondary);
+    g.drawEllipse (bounds.reduced (0.5f), 1.0f);
+
+    const auto inner = bounds.reduced (bounds.getWidth() * 0.30f);
+    if (glyph == Glyph::remove)
+    {
+        g.drawLine ({ inner.getTopLeft(), inner.getBottomRight() }, 1.4f);
+        g.drawLine ({ inner.getTopRight(), inner.getBottomLeft() }, 1.4f);
+    }
+    else
+    {
+        // Replace: circular arrow — an open arc plus a small arrowhead.
+        juce::Path arc;
+        const auto centre = inner.getCentre();
+        const float r = inner.getWidth() * 0.5f;
+        arc.addCentredArc (centre.x, centre.y, r, r, 0.0f, 0.6f,
+                           juce::MathConstants<float>::twoPi - 0.6f, true);
+        g.strokePath (arc, juce::PathStrokeType (1.4f));
+
+        const auto tip = centre.getPointOnCircumference (r, 0.6f);
+        juce::Path head;
+        head.addTriangle (tip.x - 2.4f, tip.y - 1.2f, tip.x + 2.4f, tip.y - 1.2f,
+                          tip.x, tip.y + 2.6f);
+        g.fillPath (head);
+    }
+}
+
 LensImageView::LensImageView (const UiShared& sharedContext, std::function<int()> oscProvider)
     : shared (sharedContext), oscOf (std::move (oscProvider))
 {
-    setInterceptsMouseClicks (false, false);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+
+    removeButton.onClick = [this]
+    {
+        shared.processor.lensController().removeImage (oscOf());
+    };
+    replaceButton.onClick = [this] { openChooser(); };
+    addChildComponent (removeButton);
+    addChildComponent (replaceButton);
+}
+
+bool LensImageView::hasImage() const
+{
+    return shared.processor.lensController().displayImage (oscOf()).isValid();
+}
+
+void LensImageView::openChooser()
+{
+    chooser = std::make_unique<juce::FileChooser> (
+        "Choose an image for LENS", juce::File(), "*.png;*.jpg;*.jpeg;*.gif");
+    chooser->launchAsync (juce::FileBrowserComponent::openMode
+                              | juce::FileBrowserComponent::canSelectFiles,
+                          [this] (const juce::FileChooser& fc)
+                          {
+                              const auto file = fc.getResult();
+                              if (file != juce::File())
+                                  shared.processor.lensController().loadImageFile (file);
+                          });
+}
+
+void LensImageView::mouseUp (const juce::MouseEvent& e)
+{
+    // Empty well or thumbnail click = open the chooser (load / replace).
+    // The icon buttons are children, so they never reach here.
+    if (getLocalBounds().contains (e.getPosition()) && ! e.mods.isPopupMenu())
+        openChooser();
+}
+
+void LensImageView::resized()
+{
+    removeButton.setBounds (getWidth() - 22, 5, 17, 17);
+    replaceButton.setBounds (getWidth() - 42, 5, 17, 17);
 }
 
 float LensImageView::liveMorph (int osc) const
@@ -66,10 +152,28 @@ void LensImageView::paint (juce::Graphics& g)
 
     if (! img.isValid())
     {
+        // Empty state: dashed drop zone with a "+" — click opens the file
+        // chooser, dropping an image anywhere on the window still works.
+        const auto zone = bounds.reduced (7.0f);
+        juce::Path outline;
+        outline.addRoundedRectangle (zone, theme::wellRadius);
+        juce::Path dashed;
+        const float dashes[] = { 5.0f, 4.0f };
+        juce::PathStrokeType (1.0f).createDashedStroke (dashed, outline, dashes, 2);
+        g.setColour (theme::textMuted);
+        g.fillPath (dashed);
+
+        const auto centre = zone.getCentre();
+        const float arm = 9.0f;
+        g.setColour (theme::textSecondary);
+        g.drawLine (centre.x - arm, centre.y - 7.0f, centre.x + arm, centre.y - 7.0f, 1.6f);
+        g.drawLine (centre.x, centre.y - 7.0f - arm, centre.x, centre.y - 7.0f + arm, 1.6f);
+
         g.setColour (theme::textMuted);
         g.setFont (theme::font (12.0f));
-        g.drawText ("drop an image to build a tone",
-                    getLocalBounds(), juce::Justification::centred);
+        g.drawText ("click or drop an image to build a tone",
+                    getLocalBounds().withTrimmedTop (24),
+                    juce::Justification::centred);
         return;
     }
 
@@ -124,6 +228,10 @@ void LensImageView::animate()
         lastVersion = version;
         lastMode = mode;
         lastOsc = osc;
+
+        const bool loaded = hasImage();
+        removeButton.setVisible (loaded);
+        replaceButton.setVisible (loaded);
         repaint();
     }
 }
