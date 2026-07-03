@@ -284,12 +284,13 @@ void LensPanel::resized()
     }
     else
     {
-        // Play-view panel: title strip, image, one control row.
+        // Play-view panel: title strip, image, one control row. The mode
+        // tabs get the width A/B can spare so SPECTRAL sets naturally.
         area.reduce (10, 8);
         area.removeFromTop (18); // title
         auto controls = area.removeFromBottom (20);
         image.setBounds (area.withTrimmedBottom (6));
-        targetTabs.setBounds (controls.removeFromRight (58));
+        targetTabs.setBounds (controls.removeFromRight (44));
         controls.removeFromRight (6);
         colorsChip.setBounds (controls.removeFromRight (62));
         controls.removeFromRight (6);

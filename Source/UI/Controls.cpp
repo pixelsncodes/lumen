@@ -414,9 +414,38 @@ TabsBar::TabsBar (const juce::StringArray& labels, std::function<void (int)> onC
 void TabsBar::resized()
 {
     auto area = getLocalBounds();
-    const int w = area.getWidth() / juce::jmax (1, buttons.size());
+    const int count = juce::jmax (1, buttons.size());
+
+    // Each segment gets its label's natural width (the LookAndFeel button
+    // font plus the fitted-text indents) with the leftover shared evenly, so
+    // a long label like SPECTRAL is never horizontally compressed while
+    // equal labels ("1 2 3", "A B") still split the bar equally. Falls back
+    // to the plain equal split when the bar is too narrow to set naturally.
+    const auto font = theme::medium (juce::jmin (12.0f, (float) getHeight() * 0.65f));
+    juce::Array<int> widths;
+    int total = 0;
     for (auto* button : buttons)
-        button->setBounds (area.removeFromLeft (w).reduced (1, 0));
+    {
+        const int w = juce::GlyphArrangement::getStringWidthInt (font, button->getButtonText()) + 12;
+        widths.add (w);
+        total += w;
+    }
+
+    if (total > area.getWidth())
+    {
+        const int w = area.getWidth() / count;
+        for (auto* button : buttons)
+            button->setBounds (area.removeFromLeft (w).reduced (1, 0));
+        return;
+    }
+
+    const int share = (area.getWidth() - total) / count;
+    for (int i = 0; i < buttons.size(); ++i)
+    {
+        const int w = i == buttons.size() - 1 ? area.getWidth() // last takes the rounding slack
+                                              : widths[i] + share;
+        buttons[i]->setBounds (area.removeFromLeft (w).reduced (1, 0));
+    }
 }
 
 void TabsBar::setActive (int index, bool notify)
