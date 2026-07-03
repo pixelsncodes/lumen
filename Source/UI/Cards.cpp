@@ -628,16 +628,26 @@ void PlayView::paint (juce::Graphics& g)
 
 void PlayView::animate()
 {
-    // Context auto-selection (SPEC 14): Osc A stack normally, Osc B stack if
-    // only B is on, output scope when both oscillators are off (DECISIONS.md).
+    // Context auto-selection (SPEC 14, DECISIONS.md): the live output scope
+    // whenever sound is coming out (voices active or FX tail still audible,
+    // held ~1 s so it doesn't flicker between notes); when idle, the Osc A
+    // stack, the Osc B stack if only B is on, and the scope again when both
+    // oscillators are off.
+    const auto& meter = shared.processor.meterLevels();
+    const bool audioActive =
+        shared.tap.activeVoices.load (std::memory_order_relaxed) > 0
+        || meter.peakL.load (std::memory_order_relaxed) > 0.0005f   // ~-66 dBFS
+        || meter.peakR.load (std::memory_order_relaxed) > 0.0005f;
+    audioHoldFrames = audioActive ? 60 : juce::jmax (0, audioHoldFrames - 1);
+
     auto* enabledA = shared.apvts().getRawParameterValue ("oscAEnabled");
     auto* enabledB = shared.apvts().getRawParameterValue ("oscBEnabled");
     const bool aOn = enabledA != nullptr && enabledA->load() > 0.5f;
     const bool bOn = enabledB != nullptr && enabledB->load() > 0.5f;
 
-    const bool showA = aOn;
-    const bool showB = ! aOn && bOn;
-    const bool showScope = ! aOn && ! bOn;
+    const bool showScope = audioHoldFrames > 0 || (! aOn && ! bOn);
+    const bool showA = ! showScope && aOn;
+    const bool showB = ! showScope && ! aOn && bOn;
     stackA.setVisible (showA);
     stackB.setVisible (showB);
     scope.setVisible (showScope);

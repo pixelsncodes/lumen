@@ -206,4 +206,5 @@ private:
     juce::OwnedArray<ModKnob> macroKnobs;
     juce::MidiKeyboardComponent keyboard;
     juce::Rectangle<int> lensZone;
+    int audioHoldFrames = 0; // scope stays up ~1 s after the audio stops
 };
