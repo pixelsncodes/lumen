@@ -15,7 +15,8 @@
 //       60 Hz with the frame HUD on; prints JSON frame/dropout stats and
 //       exits 0 only if frame avg <= 16.7 ms and dropouts == 0 (Phase 5 gate).
 //
-// --preset is accepted and becomes meaningful in Phase 7.
+// --preset <name> loads that factory patch before the snapshot (same
+// PresetManager::loadFactory path as the browser); default is Slow Aurora.
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -146,6 +147,19 @@ public:
                 tooltipParam = args[tipIndex + 1];
 
             harnessProcessor.reset (::createPluginFilter());
+
+            // --preset <name>: load a factory preset so the screenshot reflects
+            // that patch instead of the constructor default (Slow Aurora). Uses
+            // the same PresetManager::loadFactory path as the browser and the
+            // exact state builder lumen_render resolves, so the shown patch is
+            // byte-identical to the rendered one. Applied before --lens-image so
+            // a layered image is not wiped by the state replace.
+            if (const auto presetIndex = args.indexOf ("--preset");
+                presetIndex >= 0 && presetIndex + 1 < args.size())
+                if (auto* lumenProcessor = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
+                    if (! lumenProcessor->presetManager().loadFactory (args[presetIndex + 1]))
+                        printToStdout ("Warning: --preset unknown factory name '"
+                                       + args[presetIndex + 1] + "'\n");
 
             // --lens-image: run the Lens engine before the editor opens so
             // the screenshot shows the loaded image + scanline (Phase 6).
