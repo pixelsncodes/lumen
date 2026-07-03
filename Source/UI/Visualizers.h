@@ -3,6 +3,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "UI/Controls.h"
+#include "UI/WaterfallModel.h"
 
 // SPEC section 15 visualizers. All audio data arrives through the
 // processor's lock-free tap FIFO, drained once per UI frame by the editor
@@ -94,6 +95,89 @@ private:
     bool draggingNode = false, nodeHover = false;
     float dragStartRes = 0.0f;
     float dragStartY = 0.0f;
+};
+
+// WATERFALL_SPEC.md section 5 palette — neon yellow, exact values. Every
+// colour derives from kAccentRgb via mix() (per-channel linear interp,
+// half-to-even rounding), so retuning the whole surface is one hex change;
+// the static_asserts pin the current derivation to the spec's table.
+namespace lumen::waterfall
+{
+    constexpr juce::uint32 mixChannel (juce::uint32 a, juce::uint32 b, double t)
+    {
+        const double v = (double) a + ((double) b - (double) a) * t;
+        const auto i = (juce::uint32) v;
+        const double frac = v - (double) i;
+        if (frac > 0.5) return i + 1;
+        if (frac < 0.5) return i;
+        return i % 2 == 0 ? i : i + 1;
+    }
+
+    constexpr juce::uint32 mixRgb (juce::uint32 a, juce::uint32 b, double t)
+    {
+        return (mixChannel ((a >> 16) & 0xff, (b >> 16) & 0xff, t) << 16)
+             | (mixChannel ((a >> 8) & 0xff, (b >> 8) & 0xff, t) << 8)
+             |  mixChannel (a & 0xff, b & 0xff, t);
+    }
+
+    constexpr juce::uint32 kAccentRgb   = 0xFAFF00;
+    constexpr juce::uint32 kBrightRgb   = mixRgb (kAccentRgb, 0xFFFFFF, 0.5);
+    constexpr juce::uint32 kDimRgb      = mixRgb (kAccentRgb, 0x04060A, 0.78);
+    constexpr juce::uint32 kDarkBaseRgb = mixRgb (kDimRgb, 0x000000, 0.55);
+    static_assert (kBrightRgb == 0xFCFF80, "WATERFALL_SPEC section 5: bright");
+    static_assert (kDimRgb == 0x3A3D08, "WATERFALL_SPEC section 5: dim");
+    static_assert (kDarkBaseRgb == 0x1A1B04, "WATERFALL_SPEC section 5: darkBase");
+
+    inline const juce::Colour accent     { 0xff000000 | kAccentRgb };
+    inline const juce::Colour bright     { 0xff000000 | kBrightRgb };
+    inline const juce::Colour dim        { 0xff000000 | kDimRgb };
+    inline const juce::Colour darkBase   { 0xff000000 | kDarkBaseRgb };
+    inline const juce::Colour background { 0xff070708 };
+
+    // Runtime per-channel linear interp for the depth-dependent paint mixes.
+    inline juce::Colour mix (juce::Colour a, juce::Colour b, float t)
+    {
+        auto channel = [t] (juce::uint8 x, juce::uint8 y)
+        {
+            return (juce::uint8) juce::roundToInt ((float) x + ((float) y - (float) x) * t);
+        };
+        return { channel (a.getRed(), b.getRed()), channel (a.getGreen(), b.getGreen()),
+                 channel (a.getBlue(), b.getBlue()) };
+    }
+} // namespace lumen::waterfall
+
+// Play view 3D spectral waterfall (WATERFALL_SPEC.md): pseudo-3D ridgeline
+// surface, newest spectrum row at the front, rows stacked with linear
+// perspective and drawn back-to-front, each closed to its own baseline and
+// filled opaquely (the opaque fill IS the hidden-line removal). Replaces the
+// scope as the Play view "audio active" visual; the Deep view scope strip is
+// unchanged.
+class WaterfallView final : public juce::Component
+{
+public:
+    WaterfallView (const UiShared& sharedContext, const AudioHistory& historyRef);
+
+    void paint (juce::Graphics& g) override;
+    void resized() override;
+    // One history row per UI frame (spec section 6): an FFT of the latest
+    // tap samples while audio is active, an all-zero drain row otherwise.
+    void animate (bool audioActive);
+
+private:
+    void rebuildFloorImage();
+
+    UiShared shared;
+    const AudioHistory& history;
+    lumen::WaterfallModel model;
+    double preparedRate = 48000.0;
+
+    // Preallocated scratch — paint never allocates (spec section 7); the
+    // two Paths keep their storage across clear() calls.
+    float sampleBuf[lumen::WaterfallModel::kFftSize] {};
+    float xs[lumen::WaterfallModel::kColumns] {};
+    float ys[lumen::WaterfallModel::kColumns] {};
+    juce::Path ridge, fillPath;
+    juce::Image floorImage; // baseline + ticks + labels, rebuilt on resize only
 };
 
 // Post-limiter scope, 2048-sample window, rising zero-cross trigger (SPEC 15).

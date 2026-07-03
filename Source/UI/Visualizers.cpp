@@ -448,6 +448,176 @@ void SpectrumView::mouseMove (const juce::MouseEvent& e)
 }
 
 // ---------------------------------------------------------------------------
+// WaterfallView (WATERFALL_SPEC.md)
+// ---------------------------------------------------------------------------
+
+WaterfallView::WaterfallView (const UiShared& sharedContext, const AudioHistory& historyRef)
+    : shared (sharedContext), history (historyRef)
+{
+    setInterceptsMouseClicks (false, false);
+    // Reserve once; Path::clear() keeps the storage afterwards (spec section 7).
+    ridge.preallocateSpace (WaterfallModel::kColumns * 3 + 8);
+    fillPath.preallocateSpace (WaterfallModel::kColumns * 3 + 16);
+}
+
+void WaterfallView::animate (bool audioActive)
+{
+    const double sr = shared.processor.getSampleRate();
+    const double effectiveRate = sr > 0.0 ? sr : 48000.0;
+    if (effectiveRate != preparedRate)
+    {
+        preparedRate = effectiveRate;
+        model.prepare (effectiveRate);
+        rebuildFloorImage(); // fHi (top tick span) depends on the sample rate
+    }
+
+    if (audioActive)
+    {
+        history.latest (sampleBuf, WaterfallModel::kFftSize);
+        model.pushFrame (sampleBuf);
+    }
+    else
+    {
+        model.pushSilent();
+    }
+    repaint();
+}
+
+void WaterfallView::resized()
+{
+    rebuildFloorImage();
+}
+
+// Floor + labels cached to an image, regenerated on resize/sr change only
+// (spec section 7). Everything is derived from w/h (spec sections 3-4).
+void WaterfallView::rebuildFloorImage()
+{
+    const int wi = getWidth(), hi = getHeight();
+    if (wi <= 0 || hi <= 0)
+        return;
+
+    floorImage = juce::Image (juce::Image::ARGB, wi, hi, true);
+    juce::Graphics g (floorImage);
+
+    const float w = (float) wi, h = (float) hi;
+    const float cx = w / 2.0f, halfW = w * 0.47f, groundY = h * 0.84f;
+
+    // Baseline: 1 px at groundY, accent @ 0.28, spanning cx +/- halfW.
+    g.setColour (waterfall::accent.withAlpha (0.28f));
+    g.fillRect (juce::Rectangle<float> (cx - halfW, groundY, halfW * 2.0f, 1.0f));
+
+    // Ticks: 1-2-5 series within [fLo, fHi], height h*0.018 below the baseline.
+    const float fLo = WaterfallModel::kFreqLo, fHi = model.freqHi();
+    const float logLo = std::log (fLo), logRange = std::log (fHi) - std::log (fLo);
+    const float tickH = h * 0.018f;
+    auto tickX = [&] (float f)
+    {
+        return cx + ((std::log (f) - logLo) / logRange - 0.5f) * halfW * 2.0f;
+    };
+    for (const float f : { 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f })
+        if (f >= fLo && f <= fHi)
+        {
+            g.setColour (waterfall::accent.withAlpha (0.16f));
+            g.fillRect (juce::Rectangle<float> (tickX (f) - 0.5f, groundY + 1.0f, 1.0f, tickH));
+        }
+
+    // Labels: 100 / 1k / 10k centered under their ticks, "Hz" right-aligned
+    // at cx + halfW. Mono face (DECISIONS.md: system default monospace — the
+    // UI has no embedded mono face), size max(8, h*0.028).
+    const float fontSize = juce::jmax (8.0f, h * 0.028f);
+    g.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
+                                              fontSize, juce::Font::plain)));
+    const int labelY = juce::roundToInt (groundY + 1.0f + tickH + 2.0f);
+    const int labelH = juce::roundToInt (fontSize + 2.0f);
+    const std::pair<const char*, float> labels[] = { { "100", 100.0f }, { "1k", 1000.0f },
+                                                     { "10k", 10000.0f } };
+    g.setColour (waterfall::accent.withAlpha (0.5f));
+    for (const auto& [text, f] : labels)
+        if (f >= fLo && f <= fHi)
+            g.drawText (text, juce::roundToInt (tickX (f)) - 30, labelY, 60, labelH,
+                        juce::Justification::centred);
+    g.setColour (waterfall::accent.withAlpha (0.65f));
+    g.drawText ("Hz", juce::roundToInt (cx + halfW) - 60, labelY, 60, labelH,
+                juce::Justification::centredRight);
+}
+
+void WaterfallView::paint (juce::Graphics& g)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour (waterfall::background);
+    g.fillRoundedRectangle (bounds, theme::wellRadius);
+
+    // Floor/axis before the rows (spec section 4).
+    if (floorImage.isValid())
+        g.drawImageAt (floorImage, 0, 0);
+
+    // Projection constants (spec section 3), all relative to w/h.
+    const float w = bounds.getWidth(), h = bounds.getHeight();
+    const float cx = w / 2.0f, halfW = w * 0.47f;
+    const float groundY = h * 0.84f, horizonY = h * 0.30f;
+    constexpr float kGain = 1.2f; // clamp any future gain parameter to <= 2.2
+    const float hScale = h * 0.36f * kGain;
+
+    constexpr int kRows = WaterfallModel::kRows;
+    constexpr int kColumns = WaterfallModel::kColumns;
+
+    // Back to front; each opaque fill occludes the rows behind it.
+    for (int j = kRows - 1; j >= 0; --j)
+    {
+        const float depth = (float) j / (float) (kRows - 1);
+        const float scale = 1.0f - depth * 0.42f;
+        const float baseY = groundY + (horizonY - groundY) * depth;
+        const float* row = model.row (j);
+
+        float minY = baseY;
+        for (int c = 0; c < kColumns; ++c)
+        {
+            const float n = (float) c / (float) (kColumns - 1);
+            float hv = row[c];
+            hv = hv * hv * 0.55f + hv * 0.45f; // soft expander — do not omit
+            xs[c] = cx + (n - 0.5f) * halfW * 2.0f * scale;
+            ys[c] = baseY - hv * hScale * scale;
+            minY = juce::jmin (minY, ys[c]);
+        }
+
+        ridge.clear();
+        fillPath.clear();
+        ridge.startNewSubPath (xs[0], ys[0]);
+        fillPath.startNewSubPath (xs[0], ys[0]);
+        for (int c = 1; c < kColumns; ++c)
+        {
+            ridge.lineTo (xs[c], ys[c]);
+            fillPath.lineTo (xs[c], ys[c]);
+        }
+        fillPath.lineTo (xs[kColumns - 1], baseY);
+        fillPath.lineTo (xs[0], baseY);
+        fillPath.closeSubPath();
+
+        // 1. FILL — fully opaque vertical gradient; this is the occlusion.
+        const auto topCol = waterfall::mix (waterfall::accent, waterfall::dim, depth * 0.55f);
+        juce::ColourGradient gradient (topCol, 0.0f, juce::jmin (minY, baseY - 1.0f),
+                                       waterfall::darkBase, 0.0f, baseY, false);
+        gradient.addColour (0.5, waterfall::mix (topCol, waterfall::darkBase, 0.7f));
+        g.setGradientFill (gradient);
+        g.fillPath (fillPath);
+
+        // 2. GLOW stroke, front half only.
+        if (depth < 0.5f)
+        {
+            g.setColour (waterfall::accent.withAlpha (0.14f * (1.0f - depth * 2.0f)));
+            g.strokePath (ridge, juce::PathStrokeType (juce::jmax (2.5f, h * 0.013f)));
+        }
+
+        // 3. MAIN stroke — near-white front fading to pure accent at the back.
+        g.setColour (waterfall::mix (waterfall::bright, waterfall::accent, depth * 0.5f));
+        g.strokePath (ridge, juce::PathStrokeType (juce::jmax (1.0f, h * 0.004f)));
+    }
+
+    g.setColour (theme::hairline);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), theme::wellRadius, 1.0f);
+}
+
+// ---------------------------------------------------------------------------
 // ScopeView
 // ---------------------------------------------------------------------------
 

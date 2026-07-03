@@ -97,6 +97,7 @@ target_sources(Lumen PRIVATE
     Source/UI/Theme.h
     Source/UI/LumenLookAndFeel.h
     Source/UI/Controls.h
+    Source/UI/WaterfallModel.h
     Source/UI/Visualizers.h
     Source/UI/Cards.h
     Source/UI/PluginEditor.h

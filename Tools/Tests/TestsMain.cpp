@@ -17,6 +17,7 @@
 #include "State/ModState.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
+#include "UI/WaterfallModel.h"
 
 #include <cmath>
 #include <iostream>
@@ -760,6 +761,122 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Play view spectral waterfall (WATERFALL_SPEC.md acceptance criteria 2 & 3)
+// ---------------------------------------------------------------------------
+class WaterfallModelTest final : public juce::UnitTest
+{
+public:
+    WaterfallModelTest()
+        : juce::UnitTest ("Waterfall column mapping and Web-Audio emulation", "UI") {}
+
+    void runTest() override
+    {
+        using WM = lumen::WaterfallModel;
+        expectEquals (WM::kSmoothing, 0.8f, "kSmoothing is the critical 0.8");
+
+        // Criterion 2: column mapping at 44100 and 48000.
+        for (const double sr : { 44100.0, 48000.0 })
+        {
+            beginTest ("column mapping at " + juce::String (sr, 0) + " Hz");
+            WM model;
+            model.prepare (sr);
+            const double fHi = std::min (18000.0, sr / 2.0 - 1000.0);
+
+            const int idxFirst = model.binIndexFor (0);
+            const int idxLast = model.binIndexFor (WM::kColumns - 1);
+            logMessage (juce::String::formatted (
+                "  sr=%.0f: idx[0]=%d (%.1f Hz), idx[119]=%d (%.1f Hz), fHi=%.0f",
+                sr, idxFirst, idxFirst * sr / WM::kFftSize,
+                idxLast, idxLast * sr / WM::kFftSize, fHi));
+
+            expectEquals (idxFirst,
+                          std::clamp ((int) std::lround (30.0 * WM::kFftSize / sr), 1, 1023),
+                          "idx[0] is the nearest bin to 30 Hz");
+            expectEquals (idxLast,
+                          std::clamp ((int) std::lround (fHi * WM::kFftSize / sr), 1, 1023),
+                          "idx[119] is the nearest bin to fHi");
+            expect (std::abs (idxFirst * sr / WM::kFftSize - 30.0) <= sr / WM::kFftSize,
+                    "idx[0] within one bin of 30 Hz");
+            expect (std::abs (idxLast * sr / WM::kFftSize - fHi) <= sr / WM::kFftSize,
+                    "idx[119] within one bin of fHi");
+
+            int previous = 0;
+            bool monotonic = true, bounded = true;
+            for (int c = 0; c < WM::kColumns; ++c)
+            {
+                const int idx = model.binIndexFor (c);
+                monotonic = monotonic && idx >= previous;
+                bounded = bounded && idx >= 1 && idx <= 1023;
+                previous = idx;
+            }
+            expect (monotonic, "bin indices monotonic non-decreasing");
+            expect (bounded, "all bin indices in [1, 1023]");
+        }
+
+        // Criterion 3: Web-Audio emulation — full-scale 1 kHz sine settles
+        // its column above 0.8; silence drains every value below 0.01
+        // within 44 frames (one full pass of the history ring).
+        beginTest ("full-scale 1 kHz sine settles its column > 0.8");
+        WM model;
+        model.prepare (48000.0);
+
+        int column = 0;
+        float bestDistance = 1.0e9f;
+        for (int c = 0; c < WM::kColumns; ++c)
+        {
+            const float distance = std::abs (model.columnFrequency (c) - 1000.0f);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                column = c;
+            }
+        }
+
+        float block[WM::kFftSize];
+        double phase = 0.0;
+        const double increment = 2.0 * juce::MathConstants<double>::pi * 1000.0 / 48000.0;
+        for (int frame = 0; frame < 60; ++frame) // 0.8^60 -> fully settled
+        {
+            for (int i = 0; i < WM::kFftSize; ++i)
+            {
+                block[i] = (float) std::sin (phase);
+                phase += increment;
+            }
+            model.pushFrame (block);
+        }
+        const float settled = model.value (0, column);
+        logMessage (juce::String::formatted (
+            "  1 kHz column = %d (%.1f Hz, bin %d), settled v = %.3f",
+            column, model.columnFrequency (column), model.binIndexFor (column), settled));
+        expectGreaterThan (settled, 0.8f, "settled v approximately 1-ish");
+
+        beginTest ("processed digital silence decays the column monotonically");
+        // v stays clamped at 1 until the smoothed magnitude falls below the
+        // -30 dB ceiling (~13 frames from 0.5 at 0.8/frame), then decays.
+        std::fill (std::begin (block), std::end (block), 0.0f);
+        float previousValue = settled;
+        for (int frame = 0; frame < 20; ++frame)
+        {
+            model.pushFrame (block);
+            const float v = model.value (0, column);
+            expect (v <= previousValue + 1.0e-6f, "value never rises during silence");
+            previousValue = v;
+        }
+        expectLessThan (previousValue, settled, "smoothing decays toward the floor");
+
+        beginTest ("silence drains every column below 0.01 within 44 frames");
+        for (int frame = 0; frame < WM::kRows; ++frame)
+            model.pushSilent(); // the audio-inactive path (WATERFALL_SPEC section 6)
+        float peak = 0.0f;
+        for (int j = 0; j < WM::kRows; ++j)
+            for (int c = 0; c < WM::kColumns; ++c)
+                peak = std::max (peak, model.value (j, c));
+        logMessage ("  peak value across the ring after 44 drain frames = " + juce::String (peak, 6));
+        expectLessThan (peak, 0.01f, "surface fully drained");
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
@@ -770,6 +887,7 @@ ModMatrixMathTest modMatrixMathTest;
 LfoTest lfoTest;
 FxNullTest fxNullTest;
 LimiterTest limiterTest;
+WaterfallModelTest waterfallModelTest;
 } // namespace
 
 class ConsoleTestRunner final : public juce::UnitTestRunner

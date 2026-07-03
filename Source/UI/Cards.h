@@ -202,9 +202,11 @@ public:
 private:
     UiShared shared;
     WavetableStackView stackA, stackB;
-    ScopeView scope;
+    WaterfallView waterfall; // the "audio active" visual (WATERFALL_SPEC.md)
     juce::OwnedArray<ModKnob> macroKnobs;
     juce::MidiKeyboardComponent keyboard;
     juce::Rectangle<int> lensZone;
-    int audioHoldFrames = 0; // scope stays up ~1 s after the audio stops
+    // Waterfall stays up 44 frames (~0.73 s) after audio stops — exactly one
+    // full drain of the history ring before handing back to the idle visual.
+    int audioHoldFrames = 0;
 };

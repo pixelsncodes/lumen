@@ -571,12 +571,12 @@ PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
     : shared (sharedContext),
       stackA (sharedContext, "oscATable", "oscAMorph", theme::accentA),
       stackB (sharedContext, "oscBTable", "oscBMorph", theme::accentB),
-      scope (history, theme::accentMod),
+      waterfall (sharedContext, history),
       keyboard (keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     addAndMakeVisible (stackA);
     addChildComponent (stackB);
-    addChildComponent (scope);
+    addChildComponent (waterfall);
 
     const char* macroIds[] = { "macro1", "macro2", "macro3", "macro4" };
     const char* macroNames[] = { "Tone", "Motion", "Space", "Texture" };
@@ -594,7 +594,7 @@ void PlayView::resized()
     const auto visualizer = juce::Rectangle<int> (16, 12, 740, 288);
     stackA.setBounds (visualizer);
     stackB.setBounds (visualizer);
-    scope.setBounds (visualizer);
+    waterfall.setBounds (visualizer);
     lensZone = { 764, 12, 260, 288 };
 
     for (int m = 0; m < 4; ++m)
@@ -628,34 +628,37 @@ void PlayView::paint (juce::Graphics& g)
 
 void PlayView::animate()
 {
-    // Context auto-selection (SPEC 14, DECISIONS.md): the live output scope
-    // whenever sound is coming out (voices active or FX tail still audible,
-    // held ~1 s so it doesn't flicker between notes); when idle, the Osc A
-    // stack, the Osc B stack if only B is on, and the scope again when both
-    // oscillators are off.
+    // Context auto-selection (SPEC 14, DECISIONS.md): the spectral waterfall
+    // whenever sound is coming out (voices active or FX tail still audible);
+    // when audio stops it keeps advancing all-zero rows for 44 frames so the
+    // surface drains toward the horizon (~0.73 s, WATERFALL_SPEC section 6)
+    // before handing back to the idle visual: the Osc A stack, the Osc B
+    // stack if only B is on, and the waterfall again when both oscillators
+    // are off (the old scope fallback role).
     const auto& meter = shared.processor.meterLevels();
     const bool audioActive =
         shared.tap.activeVoices.load (std::memory_order_relaxed) > 0
         || meter.peakL.load (std::memory_order_relaxed) > 0.0005f   // ~-66 dBFS
         || meter.peakR.load (std::memory_order_relaxed) > 0.0005f;
-    audioHoldFrames = audioActive ? 60 : juce::jmax (0, audioHoldFrames - 1);
+    audioHoldFrames = audioActive ? lumen::WaterfallModel::kRows
+                                  : juce::jmax (0, audioHoldFrames - 1);
 
     auto* enabledA = shared.apvts().getRawParameterValue ("oscAEnabled");
     auto* enabledB = shared.apvts().getRawParameterValue ("oscBEnabled");
     const bool aOn = enabledA != nullptr && enabledA->load() > 0.5f;
     const bool bOn = enabledB != nullptr && enabledB->load() > 0.5f;
 
-    const bool showScope = audioHoldFrames > 0 || (! aOn && ! bOn);
-    const bool showA = ! showScope && aOn;
-    const bool showB = ! showScope && ! aOn && bOn;
+    const bool showWaterfall = audioHoldFrames > 0 || (! aOn && ! bOn);
+    const bool showA = ! showWaterfall && aOn;
+    const bool showB = ! showWaterfall && ! aOn && bOn;
     stackA.setVisible (showA);
     stackB.setVisible (showB);
-    scope.setVisible (showScope);
+    waterfall.setVisible (showWaterfall);
 
     if (showA)
         stackA.animate();
     if (showB)
         stackB.animate();
-    if (showScope)
-        scope.animate();
+    if (showWaterfall)
+        waterfall.animate (audioActive);
 }
