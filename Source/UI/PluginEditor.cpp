@@ -162,6 +162,26 @@ void LumenAudioProcessorEditor::timerCallback()
     if (numRead > 0)
         history.push (tapChunk, numRead);
 
+    // Mirror incoming (host/hardware) MIDI notes onto the on-screen keyboard.
+    // The guard keeps the resulting listener callbacks from re-sending the
+    // notes to the engine — they already played on the audio thread.
+    {
+        LumenAudioProcessor::MidiDisplayEvent events[64];
+        const int numEvents = processor.readMidiDisplayEvents (events, 64);
+        applyingExternalMidi = true;
+        for (int i = 0; i < numEvents; ++i)
+        {
+            const auto& e = events[i];
+            if (e.note < 0)
+                keyboardState.allNotesOff (1);
+            else if (e.on)
+                keyboardState.noteOn (1, e.note, juce::jmax (0.01f, e.velocity));
+            else
+                keyboardState.noteOff (1, e.note, 0.0f);
+        }
+        applyingExternalMidi = false;
+    }
+
     header->animate();
     if (deepView->isVisible())
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
@@ -180,10 +200,12 @@ void LumenAudioProcessorEditor::timerCallback()
 
 void LumenAudioProcessorEditor::handleNoteOn (juce::MidiKeyboardState*, int, int note, float velocity)
 {
-    processor.uiNoteOn (note, velocity);
+    if (! applyingExternalMidi)
+        processor.uiNoteOn (note, velocity);
 }
 
 void LumenAudioProcessorEditor::handleNoteOff (juce::MidiKeyboardState*, int, int note, float)
 {
-    processor.uiNoteOff (note);
+    if (! applyingExternalMidi)
+        processor.uiNoteOff (note);
 }

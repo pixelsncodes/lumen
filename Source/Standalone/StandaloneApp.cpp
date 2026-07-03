@@ -3,6 +3,9 @@
 //
 //   Lumen.exe --version
 //   Lumen.exe --screenshot <file.png> [--view play|deep] [--preset <name>]
+//              [--notes 48,55,60]      (hold these notes via simulated incoming
+//                                       MIDI pumped through processBlock, so the
+//                                       screenshot shows the playing state)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
 //   Lumen.exe --stress <seconds> [--view play|deep]
 //       Real audio device + 8-voice chord + random parameter wiggling at
@@ -20,6 +23,7 @@
 #include "UI/PluginEditor.h"
 
 #include <cstdio>
+#include <vector>
 
 extern juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 
@@ -81,7 +85,7 @@ public:
         {
             if (screenshotIndex + 1 >= args.size() || args[screenshotIndex + 1].startsWith ("--"))
             {
-                printToStdout ("Usage: Lumen.exe --screenshot <file.png> [--view play|deep] [--preset <name>]\n");
+                printToStdout ("Usage: Lumen.exe --screenshot <file.png> [--view play|deep] [--preset <name>] [--notes n,n,...]\n");
                 setApplicationReturnValue (2);
                 quit();
                 return;
@@ -111,6 +115,27 @@ public:
             harnessEditor->addToDesktop (juce::ComponentPeer::windowIsTemporary);
             harnessEditor->setVisible (true);
 
+            // --notes: hold a chord via simulated incoming MIDI, pumped through
+            // processBlock exactly like hardware/host MIDI (no audio device).
+            const auto notesIndex = args.indexOf ("--notes");
+            if (notesIndex >= 0 && notesIndex + 1 < args.size())
+            {
+                juce::StringArray tokens;
+                tokens.addTokens (args[notesIndex + 1], ",", "");
+                std::vector<int> notes;
+                for (const auto& t : tokens)
+                    if (const int n = t.getIntValue(); n >= 0 && n <= 127)
+                        notes.push_back (n);
+
+                if (! notes.empty())
+                {
+                    harnessProcessor->setPlayConfigDetails (0, 2, 48000.0, 512);
+                    harnessProcessor->prepareToPlay (48000.0, 512);
+                    midiPump = std::make_unique<MidiPumpTimer> (*harnessProcessor, std::move (notes));
+                    midiPump->startTimerHz (60);
+                }
+            }
+
             // Let first paints and timers run before snapshotting (SPEC section 18).
             juce::Timer::callAfterDelay (700, [this] { takeScreenshotAndQuit(); });
             return;
@@ -134,6 +159,7 @@ public:
     {
         window = nullptr;
         stressTimer = nullptr;
+        midiPump = nullptr;
         if (player != nullptr)
             deviceManager.removeAudioCallback (player.get());
         player = nullptr;
@@ -270,9 +296,40 @@ private:
         LumenStandaloneApp& app;
     };
 
+    // Drives processBlock at ~real time on the message thread with the note-on
+    // chord in the first buffer — the same code path incoming hardware MIDI
+    // takes, so the keyboard display and audio-activity plumbing are exercised
+    // for real during a --screenshot run.
+    struct MidiPumpTimer final : public juce::Timer
+    {
+        MidiPumpTimer (juce::AudioProcessor& processorRef, std::vector<int> notesToHold)
+            : processor (processorRef), notes (std::move (notesToHold)) {}
+
+        void timerCallback() override
+        {
+            juce::AudioBuffer<float> buffer (2, 512);
+            for (int block = 0; block < 2; ++block)
+            {
+                juce::MidiBuffer midi;
+                if (! sent)
+                {
+                    for (const int note : notes)
+                        midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.8f), 0);
+                    sent = true;
+                }
+                processor.processBlock (buffer, midi);
+            }
+        }
+
+        juce::AudioProcessor& processor;
+        std::vector<int> notes;
+        bool sent = false;
+    };
+
     // --- --screenshot -------------------------------------------------------
     void takeScreenshotAndQuit()
     {
+        midiPump = nullptr;
         bool ok = false;
 
         if (harnessEditor != nullptr)
@@ -313,6 +370,7 @@ private:
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<juce::AudioProcessorPlayer> player;
     std::unique_ptr<WiggleTimer> stressTimer;
+    std::unique_ptr<MidiPumpTimer> midiPump;
     juce::Array<juce::RangedAudioParameter*> wiggleTargets;
 };
 

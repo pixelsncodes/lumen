@@ -97,9 +97,15 @@ void LumenAudioProcessor::renderSegment (juce::AudioBuffer<float>& buffer, int s
 void LumenAudioProcessor::handleMidiMessage (const juce::MidiMessage& message)
 {
     if (message.isNoteOn())
+    {
         engine.noteOn (message.getNoteNumber(), message.getFloatVelocity());
+        pushMidiDisplayEvent (message.getNoteNumber(), message.getFloatVelocity(), true);
+    }
     else if (message.isNoteOff())
+    {
         engine.noteOff (message.getNoteNumber());
+        pushMidiDisplayEvent (message.getNoteNumber(), 0.0f, false);
+    }
     else if (message.isController() && message.getControllerNumber() == 1)
         engine.setModWheel (static_cast<float> (message.getControllerValue()) / 127.0f);
     else if (message.isChannelPressure())
@@ -107,7 +113,31 @@ void LumenAudioProcessor::handleMidiMessage (const juce::MidiMessage& message)
     else if (message.isPitchWheel())
         engine.setPitchBend ((static_cast<float> (message.getPitchWheelValue()) - 8192.0f) / 8192.0f);
     else if (message.isAllNotesOff() || message.isAllSoundOff())
+    {
         engine.reset();
+        pushMidiDisplayEvent (-1, 0.0f, false);
+    }
+}
+
+void LumenAudioProcessor::pushMidiDisplayEvent (int note, float velocity, bool on) noexcept
+{
+    const auto scope = midiDisplayFifo.write (1);
+    if (scope.blockSize1 > 0)
+        midiDisplayEvents[scope.startIndex1] = { note, velocity, on };
+}
+
+int LumenAudioProcessor::readMidiDisplayEvents (MidiDisplayEvent* dest, int maxEvents) noexcept
+{
+    int total = 0;
+    const auto scope = midiDisplayFifo.read (juce::jmin (maxEvents, midiDisplayFifo.getNumReady()));
+    for (const auto [start, size] : { std::pair { scope.startIndex1, scope.blockSize1 },
+                                      std::pair { scope.startIndex2, scope.blockSize2 } })
+    {
+        if (size > 0)
+            std::copy_n (midiDisplayEvents + start, size, dest + total);
+        total += size;
+    }
+    return total;
 }
 
 int LumenAudioProcessor::readAudioTap (float* dest, int maxSamples) noexcept

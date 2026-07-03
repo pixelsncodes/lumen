@@ -68,6 +68,7 @@ private:
     bool glAttached = false;
 
     int tick = 0;
+    bool applyingExternalMidi = false; // guards keyboardState listener re-entry
 
     // Frame-time instrumentation (written on the paint thread, read from the
     // message thread by --stress; HUD text is drawn on the paint thread).

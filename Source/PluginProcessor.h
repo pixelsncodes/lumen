@@ -64,6 +64,12 @@ public:
     void uiNoteOn (int midiNote, float velocity) noexcept;
     void uiNoteOff (int midiNote) noexcept;
 
+    // Incoming (host/hardware) MIDI notes -> keyboard display. The audio
+    // thread publishes note on/offs here; the editor drains them on its UI
+    // timer into the MidiKeyboardState. note == -1 means "all notes off".
+    struct MidiDisplayEvent { int note; float velocity; bool on; };
+    int readMidiDisplayEvents (MidiDisplayEvent* dest, int maxEvents) noexcept;
+
     // Output meter levels (peak/RMS per block, linear).
     struct MeterAtomics
     {
@@ -115,6 +121,13 @@ private:
     static constexpr int kKeyFifoCapacity = 128;
     juce::AbstractFifo keyFifo { kKeyFifoCapacity };
     KeyEvent keyEvents[kKeyFifoCapacity] {};
+
+    // Incoming MIDI notes for the keyboard display: audio thread writes,
+    // editor timer reads. Overflow drops events (display only).
+    static constexpr int kMidiDisplayCapacity = 256;
+    juce::AbstractFifo midiDisplayFifo { kMidiDisplayCapacity };
+    MidiDisplayEvent midiDisplayEvents[kMidiDisplayCapacity] {};
+    void pushMidiDisplayEvent (int note, float velocity, bool on) noexcept;
 
     MeterAtomics meterAtomics;
     std::atomic<float> audioLoad { 0.0f };
