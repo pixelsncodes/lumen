@@ -28,10 +28,11 @@ LumenAudioProcessor::LumenAudioProcessor()
     initializeModState();
     lens = std::make_unique<lumen::LensController> (apvts, engine);
 
-    // Default patch = Neon Tide (SPEC section 16). Hosts overwrite this via
+    // Default patch = Slow Aurora (user-approved deviation from SPEC section
+    // 16's Neon Tide — DECISIONS.md). Hosts overwrite this via
     // setStateInformation right after construction when restoring a session.
     presets = std::make_unique<lumen::PresetManager> (*this);
-    presets->loadFactory ("Neon Tide");
+    presets->loadFactory ("Slow Aurora");
 }
 
 LumenAudioProcessor::~LumenAudioProcessor()
