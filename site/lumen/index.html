@@ -446,6 +446,52 @@ figure.shot.inset img{ min-height:0; }
 .pillar-glyph svg{ display:block; height:14px; width:auto; }
 @media (max-width:820px){ .pillars{ grid-template-columns:1fr; } }
 
+/* ---------- lens diagram (Phase 3): one image, two read modes ---------- */
+.lens-diagram{
+  display:grid; grid-template-columns:150px 36px 1fr; align-items:stretch;
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); padding:22px; margin-top:26px;
+}
+.ld-src{ display:flex; flex-direction:column; justify-content:center; gap:8px; }
+.ld-img{
+  height:96px; border-radius:6px;
+  background:linear-gradient(120deg,#3d2a4d,#7a3350 40%,#c96b3f 75%,#e8b04a);
+}
+.ld-tag{
+  font-family:var(--mono); font-size:9px; letter-spacing:var(--track);
+  text-transform:uppercase; color:var(--muted); text-align:center;
+}
+.ld-fork{ display:block; width:100%; height:100%; }
+.ld-fork path{ stroke:var(--line); stroke-width:2; fill:none; vector-effect:non-scaling-stroke; }
+.ld-lanes{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+.ld-lane{ display:flex; flex-direction:column; gap:6px; }
+.ld-lab{ display:flex; align-items:baseline; gap:12px; font-family:var(--mono); text-transform:uppercase; }
+.ld-lab b{ font-size:10px; letter-spacing:var(--track); color:var(--neon); font-weight:700; }
+.ld-lab span{ font-size:8.5px; letter-spacing:.18em; color:var(--muted); }
+.ld-vis{
+  height:56px; border:1px solid var(--line); border-radius:8px;
+  background:#101014; padding:8px 10px; overflow:hidden;
+}
+.ld-vis svg{ display:block; width:100%; height:100%; }
+/* base styles below are the completed end-state; the reduced-motion kill
+   rule finishes the animations instantly, so this is what remains */
+.ld-trace{ stroke:var(--neon); stroke-width:2; fill:none; vector-effect:non-scaling-stroke; animation:ldtrace 3.2s linear infinite; }
+@keyframes ldtrace{ 0%{ clip-path:inset(0 100% 0 0); } 72%, 100%{ clip-path:inset(0 0 0 0); } }
+.ld-bars{ display:flex; align-items:flex-end; gap:4px; }
+.ld-bars i{
+  flex:1; height:var(--h); border-radius:2px 2px 0 0;
+  background:linear-gradient(to top, rgba(250,255,0,.25), var(--neon));
+  transform-origin:bottom;
+  animation:ldgrow 3.2s ease-in-out infinite;
+  animation-delay:calc(var(--i) * .16s - 3.2s);
+}
+@keyframes ldgrow{ 0%{ transform:scaleY(.05); } 14%{ transform:scaleY(1); } 86%{ transform:scaleY(1); } 100%{ transform:scaleY(.05); } }
+@media (max-width:640px){
+  .lens-diagram{ grid-template-columns:1fr; gap:16px; }
+  .ld-fork{ display:none; }
+  .ld-img{ height:72px; }
+}
+
 /* ---------- steps (real sequences only) ---------- */
 ol.steps{ counter-reset:step; list-style:none; margin:18px 0; }
 ol.steps > li{
@@ -1005,27 +1051,39 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="eyebrow">The Lens</span>
     <h2 class="sec-title">Drop an image. Hear it.</h2>
-    <p class="lead">The Lens is Lumen's image-to-tone engine. It reads the actual bytes of your picture and turns them into a wavetable, a harmonic recipe, and a macro gesture — deterministically. The same image always makes the same sound.</p>
+    <p class="lead">The Lens is Lumen's image-to-tone engine. It reads the actual bytes of your picture and turns them into a wavetable, a harmonic recipe, and a macro gesture. Deterministically: the same image always makes the same sound.</p>
 
-    <div class="cols" style="margin-top:26px">
-      <div class="panel">
-        <h3 style="margin-top:0">Scan</h3>
-        <p>Reads the image like a record groove: brightness along each line becomes the waveform itself. Morphing moves the read position through the picture, so a sunset fades differently than a city grid — you can hear the composition.</p>
+    <div class="lens-diagram" role="img" aria-label="One image feeds two read modes. Scan mode traces a waveform from image brightness; Spectral mode builds harmonic bars from image structure.">
+      <div class="ld-src">
+        <div class="ld-img"></div>
+        <span class="ld-tag">Image</span>
       </div>
-      <div class="panel">
-        <h3 style="margin-top:0">Spectral</h3>
-        <p>Reads the image as a harmonic recipe: structure in the picture places energy at specific harmonics. Stripes become distinct partials; texture becomes shimmer. Same photo, completely different instrument.</p>
+      <svg class="ld-fork" viewBox="0 0 36 100" preserveAspectRatio="none">
+        <path d="M0 50 H14 M14 50 V27 H36 M14 50 V73 H36"/>
+      </svg>
+      <div class="ld-lanes">
+        <div class="ld-lane">
+          <div class="ld-lab"><b>Scan</b><span>Brightness &#8594; wave</span></div>
+          <div class="ld-vis">
+            <svg viewBox="0 0 220 56" preserveAspectRatio="none">
+              <path class="ld-trace" d="M0 30 C8 10 14 8 20 22 C26 36 32 46 40 34 C48 22 52 10 60 16 C68 22 72 42 80 32 C88 22 94 12 102 24 C110 36 116 44 124 30 C132 16 138 8 146 20 C154 32 160 40 168 28 C176 16 182 14 190 24 C198 34 208 32 220 26"/>
+            </svg>
+          </div>
+        </div>
+        <div class="ld-lane">
+          <div class="ld-lab"><b>Spectral</b><span>Structure &#8594; partials</span></div>
+          <div class="ld-vis ld-bars">
+            <i style="--i:0;--h:96%"></i><i style="--i:1;--h:34%"></i><i style="--i:2;--h:78%"></i><i style="--i:3;--h:28%"></i><i style="--i:4;--h:62%"></i><i style="--i:5;--h:24%"></i><i style="--i:6;--h:50%"></i><i style="--i:7;--h:20%"></i><i style="--i:8;--h:40%"></i><i style="--i:9;--h:17%"></i><i style="--i:10;--h:32%"></i><i style="--i:11;--h:14%"></i>
+          </div>
+        </div>
       </div>
     </div>
 
     <h3>Colors</h3>
-    <p>With <b>COLORS</b> on (it's on by default), the image's overall color character drives the four macro knobs — a warm photo and a cold one land the knobs in different places before you play a note. Turn it off and only the image's structure speaks; the macros stay where you left them.</p>
+    <p>With <b>COLORS</b> on (the default), the image's overall color character drives the four macros: a warm photo and a cold one land the knobs in different places before you play a note. It is a live Lens mode in the same family as Scan and Spectral, not a saved property of the patch. Turn it off and only the image's structure speaks; the macros stay where you left them.</p>
 
-    <h3>Every note is a journey</h3>
-    <p>When an image is loaded, each note glides through the whole picture over its lifetime — attack at one edge, release at the other — with the <b>Motion</b> macro scaling the travel speed. The full-height white beam over the image is the playhead: it shows exactly where in the picture the sound is right now.</p>
-
-    <h3>It's a layer, and it's reversible</h3>
-    <p>Dropping an image <b>blends</b> onto the patch you're on — it doesn't erase your sound, it refracts it. Lumen snapshots your settings the moment an image lands, and removing the image restores them exactly, including hand-tweaked knobs. Experiment freely; clearing the image always takes you home.</p>
+    <h3>The journey is reversible</h3>
+    <p>When an image is loaded, every note travels the whole picture over its lifetime: attack at one edge, release at the other, with the <b>Motion</b> macro scaling the travel speed. In the app, the full-height white beam over the image is the playhead. The trip is also safe. Dropping an image <b>blends</b> onto your current patch instead of erasing it; Lumen snapshots your settings the moment the image lands, and clearing it restores them exactly, including hand-tweaked knobs.</p>
 
     <div class="note">
       <b>Try this first:</b> load <b>Init</b>, drop a photo with a strong horizon (a beach, a skyline), play one long note in Scan mode, and watch the beam cross the image while the waterfall redraws the timbre. That's the whole idea in one note.
@@ -1034,11 +1092,11 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     <figure class="shot tall">
       <video src="/lumen/web-assets/vid/lens_scan.mp4" controls loop muted playsinline preload="none"
              poster="/lumen/web-assets/img/lens_panel.png"></video>
-      <figcaption>The scan beam traveling through an image while a chord is held. <span class="pending">Live capture — drops in here.</span></figcaption>
+      <figcaption>The scan beam traveling through an image while a chord is held. <span class="pending">Live capture drops in here.</span></figcaption>
     </figure>
     <figure class="shot">
-      <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded — the scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy">
-      <figcaption>An image loaded into the Lens — clear it with × and your knobs snap back.</figcaption>
+      <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded. The scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy">
+      <figcaption>An image loaded into the Lens. Clear it with × and your knobs snap back.</figcaption>
     </figure>
   </div>
 </section>
