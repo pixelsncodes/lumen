@@ -304,6 +304,13 @@ html.js .hi-plus{ animation:hibreathe 2s ease-in-out infinite; }
   color:var(--muted); margin:0;
 }
 .hi-chevron{ width:14px; height:8px; color:var(--neon); display:block; }
+/* the empty tile is a live shuffle button: same look, plus hover affordance */
+.hi-shuffle{
+  appearance:none; font:inherit; color:inherit; cursor:pointer;
+  transition:border-color .15s ease, background-color .15s ease;
+}
+html.js .hi-shuffle:hover{ border-color:rgba(250,255,0,.8); background:rgba(250,255,0,.06); }
+html:not(.js) .hi-shuffle{ pointer-events:none; }
 .lg-thumb.hint{
   border-color:var(--neon);
   box-shadow:0 0 0 1px var(--neon), 0 0 14px rgba(250,255,0,.45);
@@ -871,12 +878,12 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
         <div class="hi-lens">
           <div class="hi-lens-label" id="hiFile">LENS</div>
           <div class="lg-stage" id="hiStage">
-            <div class="hi-empty" id="hiEmpty">
+            <button class="hi-empty hi-shuffle" id="hiEmpty" type="button" aria-label="Load a random image and play its sound">
               <span class="hi-plus" aria-hidden="true">+</span>
-              <p class="hi-cta-main">Your image becomes the sound</p>
-              <p class="hi-cta-sub">Pick one below to play</p>
+              <span class="hi-cta-main">Your image becomes the sound</span>
+              <span class="hi-cta-sub">Pick one below to play</span>
               <svg class="hi-chevron" viewBox="0 0 14 8" aria-hidden="true"><path d="M1 1l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            </button>
             <img id="hiImg" alt="" width="800" height="800" hidden>
           </div>
           <div class="hi-chips" aria-hidden="true">
@@ -2093,6 +2100,12 @@ function makeWaterfall(canvas){
         select(i); play();
       }
     });
+  });
+
+  // The empty tile is a shuffle: forward to a random thumb's own
+  // click so it runs the identical path (select, play, hint clear).
+  emptyEl.addEventListener("click", function(){
+    thumbs[Math.floor(Math.random()*IMAGES.length)].click();
   });
 
   /* roving arrow-key nav across the image grid */
