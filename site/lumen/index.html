@@ -492,6 +492,111 @@ figure.shot.inset img{ min-height:0; }
   .ld-img{ height:72px; }
 }
 
+/* ---------- quickstart walkthrough (Phase 4): PLAY + DEEP mocks with callout pins.
+   Recycles the orphaned .d-* demo widgets (same pattern as .pillar and .lens-diagram):
+   every override lives under .qs- scope, the .d-* base rules stay untouched.
+   The mocks are posed statically; they are documentation, not the hero demo. ---------- */
+.qs-tabs{
+  display:inline-flex; border:1px solid var(--line); border-radius:8px;
+  overflow:hidden; margin:6px 0 20px;
+}
+.qs-tab{
+  font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--muted); background:transparent; border:0; cursor:pointer;
+  padding:9px 20px; transition:background .15s, color .15s;
+}
+.qs-tab:hover{ color:var(--ink); }
+.qs-tab[aria-selected="true"]{ background:var(--neon-dim); color:var(--neon); }
+.qs-view{ display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:26px; align-items:start; }
+.qs-view[hidden]{ display:none; }
+.qs-view ol.steps{ margin:2px 0 0; }
+.qs-view ol.steps > li{ padding-bottom:18px; }
+html:not(.js) .qs-tabs{ display:none; }
+html:not(.js) .qs-view[hidden]{ display:grid; margin-top:34px; }
+
+.qs-mock{
+  position:relative; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius);
+}
+.qs-ui{ display:flex; flex-direction:column; gap:12px; padding:14px; }
+.qs-mhead{ display:flex; align-items:center; gap:10px; min-height:24px; }
+.qs-mdot{ width:7px; height:7px; border-radius:50%; background:var(--neon); box-shadow:0 0 8px var(--neon); flex:none; }
+.qs-mname{ font-family:var(--mono); font-size:10px; letter-spacing:var(--track); color:var(--ink); white-space:nowrap; }
+.qs-mname i{ font-style:normal; color:var(--muted); }
+.qs-mtabs{ margin-left:auto; display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.qs-mtab{ font-family:var(--mono); font-size:9px; letter-spacing:.16em; color:var(--muted); padding:4px 10px; }
+.qs-mtab.on{ background:var(--neon-dim); color:var(--neon); }
+.qs-row{ display:grid; grid-template-columns:minmax(0,1fr) 128px; gap:12px; }
+/* recycled widgets, posed */
+.qs-mock .d-fall{ height:128px; }
+.qs-mock .d-bar{ animation:none; height:var(--hi); }
+.qs-mock .d-lens{ height:100%; min-height:128px; }
+.qs-mock .d-lens::after{ animation:none; left:38%; }
+.qs-mock .d-knobs{ margin:2px auto 0; width:100%; max-width:420px; }
+.qs-mock .d-knob .ring{ border-top-color:var(--mc,var(--neon)); border-right-color:var(--mc,var(--neon)); }
+.qs-mock .d-knob .ring i{ animation:none; background:var(--mc,var(--neon)); transform:rotate(var(--rot,0deg)); }
+.qs-mock .d-keys{ margin-top:2px; }
+.qs-mock .d-key.lit{ animation:none; background:var(--neon); }
+.qs-mock .d-deep-grid{ height:auto; }
+.qs-mock .d-mod{ min-height:122px; }
+.qs-mock .d-wave svg{ animation:none; width:100%; }
+.qs-mock .d-wave path{ stroke:var(--neon); stroke-width:2; fill:none; opacity:.9; }
+.qs-mock .d-sl{ animation:none; height:var(--h,50%); }
+.qs-mock .d-matrix{ max-width:240px; }
+.qs-mock .d-cell.hot{ animation:none; }
+.qs-fx{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:10px; }
+.qs-fxrow{ display:flex; align-items:center; gap:8px; }
+.qs-fxrow b{
+  font-family:var(--mono); font-weight:400; font-size:8px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--muted); flex:none; width:56px;
+}
+.qs-fxrow span{ flex:1; height:3px; border-radius:2px; background:var(--line); position:relative; }
+.qs-fxrow span::after{
+  content:""; position:absolute; top:0; bottom:0; left:0; width:var(--w,40%);
+  border-radius:2px; background:var(--neon); opacity:.85;
+}
+/* numbered callout pins + tooltips (hover AND focus, Escape dismisses) */
+.qs-spot{
+  position:absolute; left:var(--x); top:var(--y); width:26px; height:26px;
+  transform:translate(-50%,-50%); z-index:4;
+}
+.qs-pin{
+  width:100%; height:100%; border-radius:999px; border:1px solid var(--neon);
+  background:var(--bg); color:var(--neon); cursor:pointer; padding:0;
+  font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.06em;
+  display:grid; place-items:center;
+  box-shadow:0 0 0 3px rgba(12,12,14,.7), 0 0 12px rgba(250,255,0,.28);
+  transition:background .15s, color .15s;
+}
+.qs-pin:hover{ background:var(--neon); color:#0c0c0e; }
+.qs-tip{
+  position:absolute; z-index:6; width:220px; top:calc(100% + 10px); left:50%;
+  transform:translateX(-50%);
+  background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+  padding:9px 12px; font-size:12.5px; line-height:1.55; color:var(--ink);
+  font-family:var(--sans); font-weight:400; letter-spacing:normal; text-align:left;
+  opacity:0; visibility:hidden; transition:opacity .15s;
+}
+.qs-spot:hover .qs-tip, .qs-spot:focus-within .qs-tip{ opacity:1; visibility:visible; }
+.qs-spot.qs-off .qs-tip{ opacity:0; visibility:hidden; }
+/* per-pin bubble placement so tooltips stay inside the mock at 380px:
+   t = above · br = below extending right · bl = below extending left ·
+   tr/tl = above extending right/left. Default is below, centered. */
+.qs-spot[data-tip="t"] .qs-tip{ top:auto; bottom:calc(100% + 10px); }
+.qs-spot[data-tip="br"] .qs-tip{ left:-13px; transform:none; }
+.qs-spot[data-tip="bl"] .qs-tip{ left:auto; right:-13px; transform:none; }
+.qs-spot[data-tip="tr"] .qs-tip{ top:auto; bottom:calc(100% + 10px); left:-13px; transform:none; }
+.qs-spot[data-tip="tl"] .qs-tip{ top:auto; bottom:calc(100% + 10px); left:auto; right:-13px; transform:none; }
+@media (max-width:900px){
+  .qs-view{ grid-template-columns:1fr; gap:18px; }
+}
+@media (max-width:560px){
+  .qs-row{ grid-template-columns:minmax(0,1fr) 88px; }
+  .qs-mock .d-fall, .qs-mock .d-lens{ height:96px; min-height:96px; }
+  .qs-mock .d-knob .ring{ width:44px; height:44px; }
+  .qs-tip{ width:190px; }
+}
+
 /* ---------- steps (real sequences only) ---------- */
 ol.steps{ counter-reset:step; list-style:none; margin:18px 0; }
 ol.steps > li{
@@ -1025,24 +1130,127 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="eyebrow">Quick start</span>
     <h2 class="sec-title">The first five minutes</h2>
-    <p>Lumen opens on <b>Slow Aurora</b>, a slow-blooming pad, and stays silent until you play. Here's the whole instrument, fast:</p>
-    <ol class="steps">
-      <li><b>Play something.</b> Use your MIDI keyboard or the on-screen keys. The waterfall starts drawing the sound immediately — that picture is live analysis, not decoration. If you play off the visible key range, the keyboard follows you by octave (watch the lit edge arrows).</li>
-      <li><b>Step through the bank.</b> The <kbd>&lt;</kbd> <kbd>&gt;</kbd> buttons by the preset name walk all 32 factory patches. Notice the four big knobs land at different resting spots per preset — the positions are part of each patch's character.</li>
-      <li><b>Grab the four macros.</b> On every preset, all four do something worth automating. They're also the first four knobs on your controller once MIDI Learn is set up.</li>
-      <li><b>Drop an image.</b> Drag any photo onto the Lens panel. Play — each note now travels through the picture, and the <b>Motion</b> macro scales how fast. The white beam shows where in the image the sound is right now.</li>
-      <li><b>Go deeper when ready.</b> <b>PLAY</b> is the performance view. <b>DEEP</b> opens the full engine: oscillators, filter, envelopes, LFOs, the mod matrix, FX.</li>
-    </ol>
+    <p>Lumen opens on <b>Slow Aurora</b>, a slow-blooming pad, and stays silent until you play. Two views cover the whole instrument: <b>PLAY</b> for performing, <b>DEEP</b> for the engine. The numbered pins hold the detail; point at one, or tab to it.</p>
+
+    <div class="qs-tabs" role="tablist" aria-label="Instrument views">
+      <button class="qs-tab" id="qsTabPlay" type="button" role="tab" aria-selected="true" aria-controls="qsViewPlay">Play</button>
+      <button class="qs-tab" id="qsTabDeep" type="button" role="tab" aria-selected="false" aria-controls="qsViewDeep" tabindex="-1">Deep</button>
+    </div>
+
+    <div class="qs-view" id="qsViewPlay" role="tabpanel" aria-labelledby="qsTabPlay">
+      <div class="qs-mock">
+        <div class="qs-ui" aria-hidden="true">
+          <div class="qs-mhead">
+            <span class="qs-mdot"></span>
+            <span class="qs-mname"><i>&lt;</i>&nbsp; SLOW AURORA &nbsp;<i>&gt;</i></span>
+            <span class="qs-mtabs"><span class="qs-mtab on">PLAY</span><span class="qs-mtab">DEEP</span></span>
+          </div>
+          <div class="qs-row">
+            <div class="d-fall">
+              <span class="d-bar" style="--hi:18%"></span><span class="d-bar" style="--hi:26%"></span><span class="d-bar" style="--hi:40%"></span><span class="d-bar" style="--hi:62%"></span><span class="d-bar" style="--hi:84%"></span><span class="d-bar" style="--hi:92%"></span><span class="d-bar" style="--hi:74%"></span><span class="d-bar" style="--hi:58%"></span><span class="d-bar" style="--hi:66%"></span><span class="d-bar" style="--hi:78%"></span><span class="d-bar" style="--hi:60%"></span><span class="d-bar" style="--hi:44%"></span><span class="d-bar" style="--hi:52%"></span><span class="d-bar" style="--hi:38%"></span><span class="d-bar" style="--hi:28%"></span><span class="d-bar" style="--hi:34%"></span><span class="d-bar" style="--hi:24%"></span><span class="d-bar" style="--hi:18%"></span><span class="d-bar" style="--hi:14%"></span><span class="d-bar" style="--hi:10%"></span>
+            </div>
+            <div class="d-lens"></div>
+          </div>
+          <div class="d-knobs">
+            <div class="d-knob" style="--mc:#FF2E9F;--rot:-42deg"><div class="ring"><i></i></div><b>Tone</b></div>
+            <div class="d-knob" style="--mc:#19E3E3;--rot:28deg"><div class="ring"><i></i></div><b>Motion</b></div>
+            <div class="d-knob" style="--mc:#FAFF00;--rot:74deg"><div class="ring"><i></i></div><b>Space</b></div>
+            <div class="d-knob" style="--mc:#E8E6E3;--rot:-8deg"><div class="ring"><i></i></div><b>Texture</b></div>
+          </div>
+          <div class="d-keys">
+            <i class="d-key"></i><i class="d-key blk"></i><i class="d-key"></i><i class="d-key blk"></i><i class="d-key"></i><i class="d-key"></i><i class="d-key blk"></i><i class="d-key"></i><i class="d-key blk"></i><i class="d-key lit"></i><i class="d-key blk"></i><i class="d-key"></i><i class="d-key"></i><i class="d-key blk"></i><i class="d-key"></i><i class="d-key blk"></i><i class="d-key"></i>
+          </div>
+        </div>
+        <span class="qs-spot" style="--x:35%;--y:89%" data-tip="t">
+          <button class="qs-pin" type="button" aria-label="Step 1: Play something" aria-describedby="qsTipP1">01</button>
+          <span class="qs-tip" role="tooltip" id="qsTipP1">Use your MIDI keyboard or the on-screen keys. The waterfall starts drawing the sound immediately; that picture is live analysis, not decoration. Play off the visible range and the keyboard follows you by octave.</span>
+        </span>
+        <span class="qs-spot" style="--x:168px;--y:27px" data-tip="br">
+          <button class="qs-pin" type="button" aria-label="Step 2: Step through the bank" aria-describedby="qsTipP2">02</button>
+          <span class="qs-tip" role="tooltip" id="qsTipP2">The &lt; &gt; steppers by the preset name walk all 32 factory patches. The four knobs land at different resting spots per preset; the positions are part of each patch's character.</span>
+        </span>
+        <span class="qs-spot" style="--x:50%;--y:61%" data-tip="t">
+          <button class="qs-pin" type="button" aria-label="Step 3: Grab the four macros" aria-describedby="qsTipP3">03</button>
+          <span class="qs-tip" role="tooltip" id="qsTipP3">Tone, Motion, Space, Texture. On every preset all four do something worth automating, and they map to the first four knobs on your controller once MIDI Learn is set up.</span>
+        </span>
+        <span class="qs-spot" style="--x:88%;--y:32%" data-tip="bl">
+          <button class="qs-pin" type="button" aria-label="Step 4: Drop an image" aria-describedby="qsTipP4">04</button>
+          <span class="qs-tip" role="tooltip" id="qsTipP4">Drag any photo onto the Lens panel. Each note now travels through the picture, the Motion macro scales how fast, and the white beam shows where in the image the sound is right now.</span>
+        </span>
+        <span class="qs-spot" style="--x:calc(100% - 63px);--y:27px" data-tip="bl">
+          <button class="qs-pin" type="button" aria-label="Step 5: Go deeper when ready" aria-describedby="qsTipP5">05</button>
+          <span class="qs-tip" role="tooltip" id="qsTipP5">PLAY is the performance view. DEEP opens the full engine: oscillators, filter, envelopes, LFOs, the mod matrix, FX.</span>
+        </span>
+      </div>
+      <ol class="steps">
+        <li><b>Play something.</b> Keys or MIDI; the waterfall draws it live.</li>
+        <li><b>Step through the bank.</b> The steppers walk all 32 patches.</li>
+        <li><b>Grab the four macros.</b> All four earn their knob on every preset.</li>
+        <li><b>Drop an image.</b> Every note then travels through the picture.</li>
+        <li><b>Go deeper when ready.</b> DEEP opens the full engine.</li>
+      </ol>
+    </div>
+
+    <div class="qs-view" id="qsViewDeep" role="tabpanel" aria-labelledby="qsTabDeep" hidden>
+      <div class="qs-mock">
+        <div class="qs-ui" aria-hidden="true">
+          <div class="qs-mhead">
+            <span class="qs-mdot"></span>
+            <span class="qs-mname"><i>&lt;</i>&nbsp; SAW HERO &nbsp;<i>&gt;</i></span>
+            <span class="qs-mtabs"><span class="qs-mtab">PLAY</span><span class="qs-mtab on">DEEP</span></span>
+          </div>
+          <div class="d-deep-grid">
+            <div class="d-mod"><span class="t">OSC A · MORPH</span>
+              <div class="d-wave"><svg viewBox="0 0 200 56" preserveAspectRatio="none"><path d="M0 28 Q12 4 25 28 T50 28 T75 28 T100 28 T125 28 T150 28 T175 28 T200 28"/></svg></div>
+            </div>
+            <div class="d-mod"><span class="t">FILTER · ENV 1</span>
+              <div class="d-sliders"><span class="d-sl" style="--h:72%"></span><span class="d-sl" style="--h:44%"></span><span class="d-sl" style="--h:58%"></span><span class="d-sl" style="--h:30%"></span></div>
+            </div>
+            <div class="d-mod"><span class="t">MOD MATRIX</span>
+              <div class="d-matrix">
+                <span class="d-cell"></span><span class="d-cell"></span><span class="d-cell hot"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell hot"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell"></span><span class="d-cell hot"></span><span class="d-cell"></span><span class="d-cell"></span>
+              </div>
+            </div>
+            <div class="d-mod"><span class="t">FX CHAIN</span>
+              <div class="qs-fx">
+                <span class="qs-fxrow"><b>Chorus</b><span style="--w:34%"></span></span>
+                <span class="qs-fxrow"><b>Delay</b><span style="--w:52%"></span></span>
+                <span class="qs-fxrow"><b>Reverb</b><span style="--w:26%"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="qs-spot" style="--x:26%;--y:35%" data-tip="br">
+          <button class="qs-pin" type="button" aria-label="Oscillators" aria-describedby="qsTipD1">01</button>
+          <span class="qs-tip" role="tooltip" id="qsTipD1">Two wavetable oscillators with smooth frame morph. Mip-mapped tables keep high notes alias-clean; voice modes are poly, mono, and legato with glide.</span>
+        </span>
+        <span class="qs-spot" style="--x:74%;--y:35%" data-tip="bl">
+          <button class="qs-pin" type="button" aria-label="Filter and envelopes" aria-describedby="qsTipD2">02</button>
+          <span class="qs-tip" role="tooltip" id="qsTipD2">A state-variable filter (LP, BP, HP) with a drive stage, shaped by ADSR envelopes and LFOs. It stays stable even with cutoff modulated at audio rate.</span>
+        </span>
+        <span class="qs-spot" style="--x:26%;--y:76%" data-tip="tr">
+          <button class="qs-pin" type="button" aria-label="Mod matrix" aria-describedby="qsTipD3">03</button>
+          <span class="qs-tip" role="tooltip" id="qsTipD3">Envelopes, LFOs, velocity, MIDI and the four macros meet in one routing matrix with per-route depth. Anything can drive anything.</span>
+        </span>
+        <span class="qs-spot" style="--x:74%;--y:76%" data-tip="tl">
+          <button class="qs-pin" type="button" aria-label="FX" aria-describedby="qsTipD4">04</button>
+          <span class="qs-tip" role="tooltip" id="qsTipD4">Drive into chorus, delay, and reverb, with a limiter as the safety ceiling on the way out.</span>
+        </span>
+      </div>
+      <ol class="steps">
+        <li><b>Oscillators.</b> Two wavetables, morphing between frames.</li>
+        <li><b>Filter and envelopes.</b> One SVF with drive, ADSR, LFOs.</li>
+        <li><b>Mod matrix.</b> Any source to any target, per-route depth.</li>
+        <li><b>FX.</b> Chorus, delay, reverb, then the limiter.</li>
+      </ol>
+    </div>
+
     <div class="kbdrow">
       <span class="chip">Preset step <b>&lt; &gt;</b></span>
       <span class="chip">Views <b>PLAY / DEEP</b></span>
       <span class="chip">Settings <b>gear</b></span>
       <span class="chip">Save <b>Save Preset…</b></span>
     </div>
-    <figure class="shot">
-      <img src="/lumen/web-assets/img/deep_view.png" alt="Lumen DEEP view on Saw Hero — dual wavetable oscillators, state-variable filter, envelopes, LFOs, the modulation matrix and FX, all in one editor." loading="lazy">
-      <figcaption>DEEP view on Saw Hero — the whole engine at once.</figcaption>
-    </figure>
   </div>
 </section>
 
@@ -1106,39 +1314,35 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="eyebrow">Sound design</span>
     <h2 class="sec-title">Making your own sounds</h2>
-    <p class="lead">Three recipes, easiest first. Each starts from <b>Init</b> — the blank patch at the end of the preset menu — and ends with <b>Save Preset…</b>, which files your sound under your own <b>User</b> section in the browser. Name it; that's the whole dialog.</p>
+    <p class="lead">Three recipes, easiest first. Each starts from <b>Init</b>, the blank patch at the end of the preset menu, and ends with <b>Save Preset…</b>, which files your sound under your own <b>User</b> section in the browser. Name it; that's the whole dialog.</p>
 
-    <h3>Recipe 1 — A photo pad</h3>
+    <h3>Recipe 1: A photo pad</h3>
     <ol class="steps">
-      <li>Load <b>Init</b>, then drop a photo you like onto the Lens. COLORS is on by default, so the macros move to the image's character — that's your starting palette.</li>
-      <li>Switch between <b>Scan</b> and <b>Spectral</b> and keep whichever flatters the picture. Landscapes usually scan; architecture usually goes spectral.</li>
-      <li>In <b>DEEP</b>, slow the amp envelope: long attack, long release. The per-note journey through the image now becomes a slow bloom.</li>
-      <li>Pull <b>Motion</b> down until the movement feels like weather instead of a slideshow.</li>
-      <li><b>Save Preset…</b> — done. The image is baked into the patch state, so it recalls perfectly even if the photo file moves.</li>
+      <li>Load <b>Init</b> and drop a photo you like onto the Lens; COLORS moves the macros to the image's character.</li>
+      <li>Try <b>Scan</b> and <b>Spectral</b>; landscapes usually scan, architecture goes spectral.</li>
+      <li>In <b>DEEP</b>, slow the amp envelope: long attack, long release, so each note blooms.</li>
+      <li>Pull <b>Motion</b> down until the movement feels like weather, then <b>Save Preset…</b></li>
     </ol>
 
-    <h3>Recipe 2 — A mono glide bass</h3>
+    <h3>Recipe 2: A mono glide bass</h3>
     <ol class="steps">
-      <li>From <b>Init</b>, in DEEP set the voice mode to <b>Mono</b> and raise <b>Glide</b> until sliding between two low notes feels elastic rather than delayed.</li>
-      <li>Pick a wavetable position with real low-end weight, then close the filter partway and add drive — the SVF's drive stage is where bass gets its teeth.</li>
-      <li>Route velocity → filter cutoff in the mod matrix. Now soft playing is round, hard playing digs. (This is the trick behind the factory patch <b>Rubber</b>.)</li>
-      <li>Shorten the amp release so bass lines stay tight, and check the low end on the waterfall — you can see mud before you hear it.</li>
+      <li>From <b>Init</b>, set the voice mode to <b>Mono</b> in DEEP and raise <b>Glide</b> until slides feel elastic.</li>
+      <li>Pick a wavetable position with low-end weight, close the filter partway, and add drive.</li>
+      <li>Route velocity to filter cutoff in the mod matrix: soft playing is round, hard playing digs.</li>
+      <li>Shorten the amp release, watch the low end on the waterfall, then <b>Save Preset…</b></li>
     </ol>
 
-    <h3>Recipe 3 — Designing to the four-knob contract</h3>
+    <h3>Recipe 3: Designing to the four-knob contract</h3>
     <ol class="steps">
-      <li>Build any sound you like, then ask: what are the four moves a player would want on stage? Assign those to the macros in the mod matrix.</li>
-      <li>Set each macro's resting position so the knob positions <i>look</i> like the sound — a gentle pad rests low and cool, an aggressive lead rests hot. In Lumen, knob positions are part of a patch's face.</li>
-      <li>Sweep every macro end to end. Each should stay musical across its whole range — if the top of a knob turns to mush, shrink its range in the matrix rather than shipping the mush.</li>
+      <li>Build any sound you like, then assign the four moves a player would want on stage to the macros.</li>
+      <li>Set each macro's resting position so the knobs look like the sound: pads rest low, leads rest hot.</li>
+      <li>Sweep every macro end to end; if a range turns to mush, shrink it in the matrix.</li>
+      <li>When all four stay musical, <b>Save Preset…</b></li>
     </ol>
 
     <div class="note">
       <b>House rule from the factory bank:</b> every one of the 32 presets passes an automated check that each macro actually sweeps somewhere (no dead knobs) and rests sound-neutral. Hold your own patches to the same bar and they'll feel factory-grade.
     </div>
-    <figure class="shot">
-      <img src="/lumen/web-assets/img/tooltip.png" alt="A tooltip in the Lumen interface explaining that a macro maps to several targets at once." loading="lazy">
-      <figcaption>Hover any control for a plain-words tooltip — no manual required for the basics.</figcaption>
-    </figure>
   </div>
 </section>
 
@@ -1825,6 +2029,55 @@ function makeWaterfall(canvas){
 
   // initial state: empty Lens, knobs at rest, idle ridge drawn
   wf.draw();
+})();
+
+/* ============================================================
+   Quickstart walkthrough (Phase 4). PLAY/DEEP tabs (WAI-ARIA
+   tabs pattern, arrow-key nav, automatic activation) + Escape
+   dismissal for the callout-pin tooltips (WCAG 1.4.13). The
+   tooltips themselves are pure CSS on hover/focus-within.
+   ============================================================ */
+(function(){
+  var root = document.getElementById("quickstart");
+  if (!root) return;
+
+  var tabs = Array.prototype.slice.call(root.querySelectorAll(".qs-tab"));
+  var views = tabs.map(function(t){ return document.getElementById(t.getAttribute("aria-controls")); });
+  if (tabs.length && views.every(function(v){ return v; })){
+    var activate = function(i, focus){
+      tabs.forEach(function(t, j){
+        t.setAttribute("aria-selected", j===i ? "true" : "false");
+        t.tabIndex = j===i ? 0 : -1;
+        views[j].hidden = j!==i;
+      });
+      if (focus) tabs[i].focus();
+    };
+    tabs.forEach(function(t, i){
+      t.addEventListener("click", function(){ activate(i, false); });
+      t.addEventListener("keydown", function(e){
+        var n = e.key==="ArrowRight" ? (i+1)%tabs.length
+              : e.key==="ArrowLeft"  ? (i-1+tabs.length)%tabs.length
+              : e.key==="Home"       ? 0
+              : e.key==="End"        ? tabs.length-1 : -1;
+        if (n<0) return;
+        activate(n, true);
+        e.preventDefault();
+      });
+    });
+  }
+
+  // Escape hides any open pin tooltip; it returns on the next hover or focus
+  var spots = Array.prototype.slice.call(root.querySelectorAll(".qs-spot"));
+  spots.forEach(function(spot){
+    var pin = spot.querySelector(".qs-pin");
+    function show(){ spot.classList.remove("qs-off"); }
+    spot.addEventListener("mouseover", show);
+    if (pin) pin.addEventListener("focus", show);
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key !== "Escape") return;
+    spots.forEach(function(s){ s.classList.add("qs-off"); });
+  });
 })();
 </script>
 </body>
