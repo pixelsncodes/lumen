@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>L U M E N — Wavetable synthesizer with an image engine</title>
+<title>L U M E N · A wavetable synthesizer that plays images</title>
 <meta name="description" content="Lumen is a free wavetable synthesizer for Windows (VST3 + standalone). Drop an image, hear it. Four live knobs, a spectral waterfall, 32 factory presets.">
 <script>document.documentElement.className += " js";</script>
 <style>
 /* ============================================================
-   LUMEN — design tokens (inherited from the instrument)
+   LUMEN design tokens (inherited from the instrument)
    ============================================================ */
 :root{
   --bg:        #0c0c0e;   /* page ground, one step darker than panels */
@@ -172,28 +172,7 @@ h1.hero-head{
   .hero-meta{ white-space:normal; }
 }
 
-/* ---------- the live synth demo panel ---------- */
-.demo{
-  background:var(--panel); border:1px solid var(--line); border-radius:14px;
-  padding:16px 16px 14px; box-shadow:0 24px 70px rgba(0,0,0,.5);
-  max-width:430px; width:100%; justify-self:center; user-select:none;
-}
-.d-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-.d-dot{ width:7px; height:7px; border-radius:50%; background:var(--neon); box-shadow:0 0 8px var(--neon); }
-.d-name{ font-family:var(--mono); font-size:10px; letter-spacing:var(--track); color:var(--ink); }
-.d-tabs{ margin-left:auto; display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-.d-tab{
-  font-family:var(--mono); font-size:9px; letter-spacing:.16em; color:var(--muted);
-  padding:5px 12px; transition:background .3s,color .3s;
-}
-.d-tab.on{ background:var(--neon-dim); color:var(--neon); }
-.d-stage{ position:relative; height:288px; }
-.d-view{
-  position:absolute; inset:0; opacity:0; transform:translateY(6px);
-  transition:opacity .45s ease, transform .45s ease; pointer-events:none;
-}
-.d-view.on{ opacity:1; transform:none; }
-/* --- PLAY view --- */
+/* ---------- recycled demo widgets (posed by .pillar/.qs- scopes) ---------- */
 .d-fall{
   height:104px; border:1px solid var(--line); border-radius:8px; background:#101014;
   display:flex; align-items:flex-end; gap:3px; padding:8px; overflow:hidden; position:relative;
@@ -234,9 +213,7 @@ h1.hero-head{
 .d-key.blk{ background:#0a0a0c; flex:.62; margin:0 -4% ; z-index:2; height:62%; border-radius:0 0 2px 2px; }
 .d-key.lit{ animation:dkey 3.6s steps(1) infinite; }
 @keyframes dkey{ 0%,100%{ background:#e8e5dc; } 12%,30%{ background:var(--neon); } }
-.d-key.lit2{ animation:dkey2 3.6s steps(1) infinite; }
-@keyframes dkey2{ 0%,100%{ background:#e8e5dc; } 42%,64%{ background:var(--neon); } }
-/* --- DEEP view --- */
+/* --- DEEP widgets --- */
 .d-deep-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; height:100%; }
 .d-mod{
   border:1px solid var(--line); border-radius:8px; background:#101014; padding:10px;
@@ -389,34 +366,14 @@ figure.shot img, figure.shot video{
   width:100%; border:1px solid var(--line); border-radius:var(--radius);
   background:var(--panel); display:block;
 }
-figure.shot.tall img, figure.shot.tall video{ min-height:220px; object-fit:cover; }
 figure.shot figcaption{
   font-family:var(--mono); font-size:11px; letter-spacing:.04em; color:var(--muted);
   margin-top:10px; line-height:1.5;
 }
-figure.shot .pending{ color:var(--neon); }
-figure.shot.inset{ max-width:320px; }
-figure.shot.inset img{ min-height:0; }
-
-/* ---------- asset slots (self-documenting placeholders) ---------- */
-.asset{
-  border:1px dashed var(--line); border-radius:var(--radius);
-  background:var(--panel);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:8px; padding:34px 20px; margin:20px 0; text-align:center; min-height:190px;
-}
-.asset.tall{ min-height:300px; }
-.asset .a-kind{
-  font-family:var(--mono); font-size:10px; letter-spacing:var(--track);
-  text-transform:uppercase; color:var(--neon);
-}
-.asset .a-file{ font-family:var(--mono); font-size:12px; color:var(--ink); }
-.asset .a-src{ font-family:var(--mono); font-size:11px; color:var(--muted); }
 
 /* ---------- two-column helpers ---------- */
 .cols{ display:grid; grid-template-columns:1fr 1fr; gap:26px; }
-.cols-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
-@media (max-width:820px){ .cols, .cols-3{ grid-template-columns:1fr; } }
+@media (max-width:820px){ .cols{ grid-template-columns:1fr; } }
 
 /* ---------- pillar cards (overview): recycled demo widgets ---------- */
 .pillars{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:26px; }
@@ -685,30 +642,13 @@ ol.steps b{ color:var(--ink); }
   .pb-time{ order:6; margin-left:auto; }
 }
 
-/* ---------- Lens image lab: gallery + reacting macros ---------- */
-.lg{
-  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-  padding:0; overflow:hidden; margin-top:22px;
-}
-.lg-top{
-  display:grid; grid-template-columns:minmax(220px,400px) minmax(0,1fr);
-  gap:26px; padding:22px; align-items:center;
-}
+/* ---------- Lens image-lab widgets (live in the hero instrument) ---------- */
 .lg-stage{
   position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden;
   border:1px solid var(--line); background:#101014;
 }
 .lg-stage img{ width:100%; height:100%; object-fit:cover; display:block; }
 .lg-stage img[hidden]{ display:none; }
-.lg-side{ min-width:0; }
-.lg-name{
-  font-family:var(--mono); font-size:15px; letter-spacing:.1em; text-transform:uppercase;
-  color:var(--ink); display:flex; align-items:center; gap:10px; margin-bottom:4px;
-}
-.lg-sub{ font-size:12.5px; color:var(--muted); margin-bottom:20px; }
-.lg-knobs{
-  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; max-width:460px;
-}
 .lg-knob{ text-align:center; }
 .lg-knob svg{ width:100%; max-width:84px; height:auto; display:block; margin:0 auto; }
 .lg-knob .trk{ fill:none; stroke:#2a2a2f; stroke-width:5; stroke-linecap:round; }
@@ -725,15 +665,6 @@ ol.steps b{ color:var(--ink); }
   display:block; margin-top:8px; font-family:var(--mono); font-weight:400;
   font-size:9px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase;
 }
-.lg-knob .num{
-  display:block; font-family:var(--mono); font-size:10px; color:var(--ink);
-  margin-top:2px; font-variant-numeric:tabular-nums;
-}
-.lg .pb-transport{ border-top:1px solid var(--line); }
-.lg-grid{
-  display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:8px;
-  padding:16px 18px 18px; border-top:1px solid var(--line);
-}
 .lg-thumb{
   padding:0; border:1px solid var(--line); border-radius:8px; overflow:hidden;
   background:#101014; cursor:pointer; aspect-ratio:1; position:relative;
@@ -744,14 +675,6 @@ ol.steps b{ color:var(--ink); }
 .lg-thumb:hover{ transform:translateY(-2px); }
 .lg-thumb[aria-current="true"]{ border-color:var(--neon); box-shadow:0 0 0 1px var(--neon); }
 .lg-thumb[aria-current="true"] img{ opacity:1; }
-@media (max-width:900px){
-  .lg-top{ grid-template-columns:1fr; }
-  .lg-stage{ max-width:400px; margin:0 auto; }
-  .lg-knobs{ max-width:none; }
-  .lg .pb-transport{ flex-wrap:wrap; }
-  .lg .pb-seek{ flex:1 1 100%; order:5; }
-  .lg .pb-time{ order:6; margin-left:auto; }
-}
 
 /* ---------- signal-flow SVG ---------- */
 .flow{ margin:22px 0; }
@@ -788,6 +711,84 @@ ol.steps b{ color:var(--ink); }
 .eng-tap{ animation:engtap .9s linear infinite; }
 @keyframes engtap{ to{ stroke-dashoffset:-8; } }
 
+/* ---------- MIDI section (Phase 6): 2x2 card grid.
+   Scoped under .midi- (same pattern as .pillar/.qs-/.eng-). The pins copy
+   the .qs-pin values, the knobs copy the .lg-knob geometry (r=25, 270deg
+   sweep from -135deg), the value chips copy .hi-chip. Fully static. ---------- */
+.midi-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:8px; }
+.midi-card{
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); padding:20px;
+  display:flex; flex-direction:column;
+}
+.midi-card h3{ margin:0 0 16px; font-size:12px; letter-spacing:var(--track); }
+.midi-card p{ font-size:14px; }
+.midi-card .small{ font-size:13px; margin-top:auto; margin-bottom:0; }
+ol.midi-steps{
+  list-style:none; margin:0 0 18px; flex:1;
+  display:flex; flex-direction:column; justify-content:space-evenly; gap:16px;
+}
+.midi-steps li{ display:flex; align-items:flex-start; gap:12px; }
+.midi-steps p{ margin:0; }
+.midi-pin{
+  width:26px; height:26px; flex:none; margin-top:1px;
+  border-radius:999px; border:1px solid var(--neon);
+  background:var(--bg); color:var(--neon);
+  font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.06em;
+  display:grid; place-items:center;
+  box-shadow:0 0 0 3px rgba(12,12,14,.7), 0 0 12px rgba(250,255,0,.28);
+}
+.midi-fig{ margin:0 0 16px; }
+.midi-mock{
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); padding:12px 14px;
+}
+.midi-mhead{
+  display:flex; align-items:center; gap:9px;
+  padding-bottom:10px; margin-bottom:4px; border-bottom:1px solid var(--line);
+  font-family:var(--mono); font-size:10px; letter-spacing:var(--track);
+  text-transform:uppercase; color:var(--ink);
+}
+.midi-mtick{ width:7px; height:7px; border-radius:50%; background:#FF2E9F; box-shadow:0 0 8px #FF2E9F; flex:none; }
+.midi-mrow{
+  display:grid; grid-template-columns:52px minmax(0,1fr) 58px;
+  align-items:center; gap:10px; padding:7px 0;
+}
+.midi-mrow + .midi-mrow{ border-top:1px solid var(--line); }
+.midi-mrow > b{
+  font-family:var(--mono); font-weight:400; font-size:9px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--muted);
+}
+.midi-vals{ display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.midi-val{
+  font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:3px 10px;
+  white-space:nowrap;
+}
+.midi-knob{ text-align:center; }
+.midi-knob svg{ width:100%; max-width:44px; height:auto; display:block; margin:0 auto; }
+.midi-knob .trk{ fill:none; stroke:#2a2a2f; stroke-width:5; stroke-linecap:round; }
+.midi-knob .val{ fill:none; stroke-width:5; stroke-linecap:round; }
+.midi-knob .ind{ transform-box:view-box; transform-origin:center; }
+.midi-knob .ind line{ stroke:var(--ink); stroke-width:2.6; stroke-linecap:round; }
+.midi-knob b{
+  display:block; margin-top:4px; font-family:var(--mono); font-weight:400;
+  font-size:8px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase;
+}
+.midi-fig figcaption{
+  font-family:var(--mono); font-size:11px; letter-spacing:.04em; color:var(--muted);
+  margin-top:10px; line-height:1.5;
+}
+.midi-srcs{ display:flex; flex-wrap:wrap; gap:10px; margin:4px 0 18px; }
+.midi-src{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink); background:var(--bg);
+  border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+}
+.midi-src::before{ content:""; width:12px; height:2px; border-radius:1px; background:#19E3E3; flex:none; }
+@media (max-width:820px){ .midi-grid{ grid-template-columns:1fr; } }
+
 /* ---------- FAQ ---------- */
 details{ border-bottom:1px solid var(--line); padding:16px 4px; }
 details summary{
@@ -795,7 +796,7 @@ details summary{
   color:var(--ink); list-style:none; display:flex; align-items:center; gap:12px;
 }
 details summary::before{ content:"+"; color:var(--neon); font-weight:700; width:14px; }
-details[open] summary::before{ content:"–"; }
+details[open] summary::before{ content:"▾"; }
 details p{ margin-top:12px; font-size:14px; color:var(--ink); }
 
 /* ---------- footer ---------- */
@@ -811,7 +812,6 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   border-radius:0 var(--radius) var(--radius) 0; padding:14px 18px; margin:18px 0; font-size:14px;
 }
 .note.warn{ border-left-color:var(--warn); }
-.divider{ height:1px; background:var(--line); margin:30px 0; }
 .kbdrow{ display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 18px; }
 </style>
 </head>
@@ -1031,11 +1031,11 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     <p>This is Lumen's real preset browser, rebuilt for this page. Pick any patch and its clip plays: every clip was rendered by Lumen's own command-line engine, so what you audition is the actual synth, and the waterfall beside it <b>redraws from the exact audio you are hearing</b>. In the app, patches you save show up in this same browser the moment you save them, under a <b>User</b> section at the end of the menu.</p>
     <!-- clips via lumen_render --preset "<name>" --note 60 --vel 100 --dur 2 --tail 2 --out web-assets/audio/<slug>.wav (mp3-encoded for the page) -->
     <div class="pb">
-      <div class="pb-browser" role="listbox" aria-label="Factory presets — click to audition">
+      <div class="pb-browser" role="listbox" aria-label="Factory presets. Click one to audition it.">
         <div class="pb-cat">Bass</div>
         <button class="pb-item" type="button" data-name="Sub Zero" data-desc="Pure low-end foundation."
           data-src="/lumen/web-assets/audio/sub-zero.mp3"><span class="tick" aria-hidden="true">✓</span>Sub Zero</button>
-        <button class="pb-item" type="button" data-name="Rubber" data-desc="Velocity digs into the filter — play it soft, then hard."
+        <button class="pb-item" type="button" data-name="Rubber" data-desc="Velocity digs into the filter. Play it soft, then hard."
           data-src="/lumen/web-assets/audio/rubber.mp3"><span class="tick" aria-hidden="true">✓</span>Rubber</button>
         <button class="pb-item" type="button" data-name="Neon Growl" data-desc="Aggressive mono movement."
           data-src="/lumen/web-assets/audio/neon-growl.mp3"><span class="tick" aria-hidden="true">✓</span>Neon Growl</button>
@@ -1050,7 +1050,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
           data-src="/lumen/web-assets/audio/laser.mp3"><span class="tick" aria-hidden="true">✓</span>Laser</button>
         <button class="pb-item" type="button" data-name="Glass Whistle" data-desc="Thin, pure, high."
           data-src="/lumen/web-assets/audio/glass-whistle.mp3"><span class="tick" aria-hidden="true">✓</span>Glass Whistle</button>
-        <button class="pb-item" type="button" data-name="Saw Hero" data-desc="The big supersaw — Texture makes it huge."
+        <button class="pb-item" type="button" data-name="Saw Hero" data-desc="The big supersaw. Texture makes it huge."
           data-src="/lumen/web-assets/audio/saw-hero.mp3"><span class="tick" aria-hidden="true">✓</span>Saw Hero</button>
         <button class="pb-item" type="button" data-name="Vapor" data-desc="Soft-focus solo voice."
           data-src="/lumen/web-assets/audio/vapor.mp3"><span class="tick" aria-hidden="true">✓</span>Vapor</button>
@@ -1061,7 +1061,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
         <div class="pb-cat">Pads</div>
         <button class="pb-item" type="button" data-name="Neon Tide" data-desc="Slow synthwave wash."
           data-src="/lumen/web-assets/audio/neon-tide.mp3"><span class="tick" aria-hidden="true">✓</span>Neon Tide</button>
-        <button class="pb-item" type="button" data-name="Slow Aurora" data-desc="The opening patch — a pad that blooms." data-default="1"
+        <button class="pb-item" type="button" data-name="Slow Aurora" data-desc="The opening patch, a pad that blooms." data-default="1"
           data-src="/lumen/web-assets/audio/slow-aurora.mp3"><span class="tick" aria-hidden="true">✓</span>Slow Aurora</button>
         <button class="pb-item" type="button" data-name="Warm Fog" data-desc="Low, close, enveloping."
           data-src="/lumen/web-assets/audio/warm-fog.mp3"><span class="tick" aria-hidden="true">✓</span>Warm Fog</button>
@@ -1097,7 +1097,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
           data-src="/lumen/web-assets/audio/machine-hum.mp3"><span class="tick" aria-hidden="true">✓</span>Machine Hum</button>
         <button class="pb-item" type="button" data-name="Wind Tunnel" data-desc="Filtered air in motion."
           data-src="/lumen/web-assets/audio/wind-tunnel.mp3"><span class="tick" aria-hidden="true">✓</span>Wind Tunnel</button>
-        <button class="pb-item" type="button" data-name="Photograph" data-desc="The Lens showpiece — an image, playable."
+        <button class="pb-item" type="button" data-name="Photograph" data-desc="The Lens showpiece: an image, playable."
           data-src="/lumen/web-assets/audio/photograph.mp3"><span class="tick" aria-hidden="true">✓</span>Photograph</button>
         <div class="pb-cat">Blank slate</div>
         <button class="pb-item" type="button" data-name="Init" data-desc="Where your patches start."
@@ -1114,14 +1114,14 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
           </button>
           <div class="pb-now">
             <div class="n1"><span id="pbName">Slow Aurora</span><span class="df-badge" id="pbBadge">DEFAULT</span></div>
-            <div class="n2" id="pbDesc">The opening patch — a pad that blooms.</div>
+            <div class="n2" id="pbDesc">The opening patch, a pad that blooms.</div>
           </div>
           <input class="pb-seek" id="pbSeek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
           <span class="pb-time" id="pbTime">0:00 / 0:00</span>
         </div>
       </div>
     </div>
-    <p class="small" style="margin-top:14px">Audio loads only when you press play — nothing streams until you ask.</p>
+    <p class="small" style="margin-top:14px">Audio loads only when you press play; nothing streams until you ask.</p>
   </div>
 </section>
 
@@ -1139,8 +1139,8 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       </div>
       <div class="panel">
         <h3 style="margin-top:0">macOS</h3>
-        <p>In development. Lumen is built on a cross-platform foundation and a macOS build is planned — it isn't ready yet, and we won't ship one we haven't tested on real hardware.</p>
-        <p class="small">Want to know when it lands? Watch the GitHub repository — releases show up there first.</p>
+        <p>In development. Lumen is built on a cross-platform foundation and a macOS build is planned, but it isn't ready yet, and we won't ship one we haven't tested on real hardware.</p>
+        <p class="small">Want to know when it lands? Watch the GitHub repository; releases show up there first.</p>
       </div>
     </div>
 
@@ -1151,7 +1151,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       <li><b>Standalone:</b> run <code>Lumen.exe</code> from wherever you like. Audio and MIDI settings live behind the gear icon; your device choice is remembered.</li>
     </ol>
     <div class="note warn">
-      <b>Windows SmartScreen:</b> the first launch may warn about an unknown publisher — Lumen is a free, unsigned indie build. Click <i>More info → Run anyway</i>. If that makes you uncomfortable (fair), you can build it from source instead.
+      <b>Windows SmartScreen:</b> the first launch may warn about an unknown publisher, because Lumen is a free, unsigned indie build. Click <i>More info → Run anyway</i>. If that makes you uncomfortable (fair), you can build it from source instead.
     </div>
   </div>
 </section>
@@ -1196,7 +1196,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
           <button class="qs-pin" type="button" aria-label="Step 1: Play something" aria-describedby="qsTipP1">01</button>
           <span class="qs-tip" role="tooltip" id="qsTipP1">Use your MIDI keyboard or the on-screen keys. The waterfall starts drawing the sound immediately; that picture is live analysis, not decoration. Play off the visible range and the keyboard follows you by octave.</span>
         </span>
-        <span class="qs-spot" style="--x:168px;--y:27px" data-tip="br">
+        <span class="qs-spot" style="--x:168px;--y:27px">
           <button class="qs-pin" type="button" aria-label="Step 2: Step through the bank" aria-describedby="qsTipP2">02</button>
           <span class="qs-tip" role="tooltip" id="qsTipP2">The &lt; &gt; steppers by the preset name walk all 32 factory patches. The four knobs land at different resting spots per preset; the positions are part of each patch's character.</span>
         </span>
@@ -1328,13 +1328,16 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       <b>Try this first:</b> load <b>Init</b>, drop a photo with a strong horizon (a beach, a skyline), play one long note in Scan mode, and watch the beam cross the image while the waterfall redraws the timbre. That's the whole idea in one note.
     </div>
 
+    <!-- TODO(video:lens_scan): once the live capture exists, uncomment this figure.
+         (lens_panel.png stays a live asset regardless: the figure below uses it.)
     <figure class="shot tall">
       <video src="/lumen/web-assets/vid/lens_scan.mp4" controls loop muted playsinline preload="none"
              poster="/lumen/web-assets/img/lens_panel.png"></video>
       <figcaption>The scan beam traveling through an image while a chord is held. <span class="pending">Live capture drops in here.</span></figcaption>
     </figure>
+    -->
     <figure class="shot">
-      <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded. The scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy">
+      <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded. The scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy" width="1040" height="660">
       <figcaption>An image loaded into the Lens. Clear it with × and your knobs snap back.</figcaption>
     </figure>
   </div>
@@ -1462,10 +1465,12 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       </div>
     </div>
 
+    <!-- TODO(video:waterfall): once the live capture exists, uncomment this figure.
     <figure class="shot">
       <video src="/lumen/web-assets/vid/waterfall.mp4" controls loop muted playsinline preload="none"></video>
       <figcaption>The waterfall reading a live performance: every filter sweep and morph, drawn from the actual output. <span class="pending">Live capture drops in here.</span></figcaption>
     </figure>
+    -->
 
     <h3>The parts, in one line each</h3>
     <table>
@@ -1495,33 +1500,88 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="eyebrow">MIDI & control</span>
     <h2 class="sec-title">Your hardware, mapped once</h2>
-    <div class="cols">
-      <div>
-        <h3 style="margin-top:0">MIDI Learn</h3>
-        <ol class="steps">
-          <li><b>Right-click</b> any knob or control and choose <b>Learn</b>.</li>
-          <li><b>Move</b> a knob or fader on your hardware. Bound.</li>
-          <li>That's it — the map is saved globally and survives restarts, so you map your controller once, not per project.</li>
+    <div class="midi-grid">
+      <div class="midi-card">
+        <h3>MIDI Learn</h3>
+        <ol class="midi-steps">
+          <li><span class="midi-pin" aria-hidden="true">01</span>
+            <p><b>Right-click</b> any knob or control and choose <b>Learn</b>.</p></li>
+          <li><span class="midi-pin" aria-hidden="true">02</span>
+            <p><b>Move</b> a knob or fader on your hardware. Bound.</p></li>
+          <li><span class="midi-pin" aria-hidden="true">03</span>
+            <p><b>That's it.</b> The map is saved globally and survives restarts, so you map your controller once, not per project.</p></li>
         </ol>
-        <p class="small">The map lives at <code>%APPDATA%\Lumen\midi_map.xml</code>. Delete the file to start over; right-click → unlearn to clear one binding.</p>
+        <p class="small">The map lives at <code>%APPDATA%\Lumen\midi_map.xml</code>. Delete the file to start over; right-click a mapped control and choose unlearn to clear one binding.</p>
       </div>
-      <div>
-        <h3 style="margin-top:0">Performance MIDI</h3>
-        <p>Lumen responds to velocity, sustain (CC64), mod wheel (CC1), channel aftertouch, and pitch bend — all available as sources in the mod matrix.</p>
+      <div class="midi-card">
         <h3>Voice modes & glide</h3>
-        <p>Poly for chords; <b>Mono</b> for basses and leads with last-note priority; <b>Legato</b> to keep envelopes from retriggering on overlapped notes. <b>Glide</b> slides pitch between notes — the classic portamento lead and elastic bass live here.</p>
-        <figure class="shot inset">
-          <img src="/lumen/web-assets/img/deep_view_voice.png" alt="The VOICE section of the DEEP editor showing Mono mode selected with a glide time set." loading="lazy">
-          <figcaption>The VOICE section, Mono + glide engaged.</figcaption>
+        <figure class="midi-fig">
+          <div class="midi-mock" aria-hidden="true">
+            <div class="midi-mhead"><i class="midi-mtick"></i><span>SUB / NOISE / VOICE</span></div>
+            <div class="midi-mrow">
+              <b>Sub</b>
+              <span class="midi-vals"><span class="midi-val">Sine</span><span class="midi-val">-1 Oct</span></span>
+              <span class="midi-knob">
+                <svg viewBox="0 0 64 64">
+                  <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+                  <circle class="val" cx="32" cy="32" r="25" stroke="#E8E6E3" stroke-dasharray="73.04 157.08" transform="rotate(135 32 32)"/>
+                  <g class="ind" style="transform:rotate(32.4deg)"><line x1="32" y1="13" x2="32" y2="23"/></g>
+                </svg>
+                <b>Level</b>
+              </span>
+            </div>
+            <div class="midi-mrow">
+              <b>Noise</b>
+              <span class="midi-vals"><span class="midi-val">White</span></span>
+              <span class="midi-knob">
+                <svg viewBox="0 0 64 64">
+                  <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+                  <circle class="val" cx="32" cy="32" r="25" stroke="#E8E6E3" stroke-dasharray="35.34 157.08" transform="rotate(135 32 32)"/>
+                  <g class="ind" style="transform:rotate(-54deg)"><line x1="32" y1="13" x2="32" y2="23"/></g>
+                </svg>
+                <b>Level</b>
+              </span>
+            </div>
+            <div class="midi-mrow">
+              <b>Voice</b>
+              <span class="midi-vals"><span class="midi-val">Mono</span></span>
+              <span class="midi-knob">
+                <svg viewBox="0 0 64 64">
+                  <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+                  <circle class="val" cx="32" cy="32" r="25" stroke="#FF2E9F" stroke-dasharray="53.01 157.08" transform="rotate(135 32 32)"/>
+                  <g class="ind" style="transform:rotate(-13.5deg)"><line x1="32" y1="13" x2="32" y2="23"/></g>
+                </svg>
+                <b>Glide</b>
+              </span>
+            </div>
+          </div>
+          <figcaption>The VOICE panel in the DEEP view: a sine sub an octave down and a white-noise layer, each with its own level, and the voice mode set to Mono with glide partly raised.</figcaption>
         </figure>
+        <p>Poly for chords; <b>Mono</b> for basses and leads with last-note priority; <b>Legato</b> keeps envelopes from retriggering on overlapped notes. <b>Glide</b> slides pitch between notes: the classic portamento lead and the elastic bass both live here.</p>
+      </div>
+      <div class="midi-card">
+        <h3>Performance MIDI</h3>
+        <p>Your playing already carries five control signals, and Lumen reads every one of them.</p>
+        <div class="midi-srcs">
+          <span class="midi-src">Velocity</span>
+          <span class="midi-src">Sustain CC64</span>
+          <span class="midi-src">Mod wheel CC1</span>
+          <span class="midi-src">Aftertouch</span>
+          <span class="midi-src">Pitch bend</span>
+        </div>
+        <p class="small">All five show up as sources in the mod matrix, the same boxes that feed the routing grid in the engine diagram above.</p>
+      </div>
+      <div class="midi-card">
         <h3>Standalone audio</h3>
-        <p>WASAPI works out of the box with any interface; ASIO is supported. Pick your device behind the gear icon — the choice persists.</p>
+        <p>WASAPI works out of the box with any interface; ASIO is supported. Pick your device behind the gear icon and the choice persists.</p>
       </div>
     </div>
+    <!-- TODO(video:midi_learn): once the live capture exists, uncomment this figure.
     <figure class="shot">
       <video src="/lumen/web-assets/vid/midi_learn.mp4" controls loop muted playsinline preload="none"></video>
-      <figcaption>MIDI Learn: right-click a macro, choose Learn, move a hardware knob. <span class="pending">Live capture — drops in here.</span></figcaption>
+      <figcaption>MIDI Learn: right-click a macro, choose Learn, move a hardware knob. <span class="pending">Live capture drops in here.</span></figcaption>
     </figure>
+    -->
   </div>
 </section>
 
@@ -1530,29 +1590,29 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="eyebrow">Provenance</span>
     <h2 class="sec-title">How Lumen was built</h2>
-    <p class="lead">Lumen was built by a human–AI pair: a person acting as designer, ear, and final judge, and an AI coding agent (Claude Code) writing the C++ and — the unusual part — <b>verifying its own work</b> before the human ever heard it.</p>
+    <p class="lead">Lumen was built by a human and an AI working as a pair: a person acting as designer, ear, and final judge, and an AI coding agent (Claude Code) writing the C++ and, unusually, <b>verifying its own work</b> before the human ever heard it.</p>
 
     <h3>Spec first, phases with gates</h3>
-    <p>The entire synth was specified before the first line of code: a design document (what to build), a phase plan (the order, with explicit acceptance criteria per phase), and a rules file the agent reloads every session. Eight phases — engine core, filter and FX, modulation, the waterfall, the Lens, presets — each one tagged in git only after every acceptance criterion was demonstrated, and every decision along the way logged to a running <code>DECISIONS.md</code>.</p>
+    <p>The entire synth was specified before the first line of code: a design document (what to build), a phase plan (the order, with explicit acceptance criteria per phase), and a rules file the agent reloads every session. Eight phases (engine core, filter and FX, modulation, the waterfall, the Lens, presets), each one tagged in git only after every acceptance criterion was demonstrated, and every decision along the way logged to a running <code>DECISIONS.md</code>.</p>
 
     <h3>An agent that listens with instruments</h3>
-    <p>The agent can't hear — so the project gave it instruments instead of ears. A command-line render tool plays any preset headlessly and measures the result: loudness, clipping, DC offset, tuning error, aliasing floor, attack and release times. After every engine change, the agent renders audio and <i>reads the numbers</i>. After every interface change, it launches the app, screenshots itself, and inspects the image. The human ear was reserved for the one thing it's actually needed for: taste.</p>
+    <p>The agent can't hear, so the project gave it instruments instead of ears. A command-line render tool plays any preset headlessly and measures the result: loudness, clipping, DC offset, tuning error, aliasing floor, attack and release times. After every engine change, the agent renders audio and <i>reads the numbers</i>. After every interface change, it launches the app, screenshots itself, and inspects the image. The human ear was reserved for the one thing it's actually needed for: taste.</p>
 
     <h3>Guarantees, not promises</h3>
     <div class="chips">
-      <span class="chip">Preset stability <b>SHA-256 proofed</b> — UI work provably never changed the sound</span>
+      <span class="chip">Preset stability <b>SHA-256 proofed</b>: UI work provably never changed the sound</span>
       <span class="chip">Plugin validation <b>pluginval, max strictness</b></span>
       <span class="chip">Compiler <b>warnings = errors</b></span>
-      <span class="chip">Lens <b>deterministic</b> — same image, same sound, forever</span>
+      <span class="chip">Lens <b>deterministic</b>: same image, same sound, forever</span>
       <span class="chip">No dead knobs <b>unit-tested</b></span>
     </div>
-    <p>Two of these deserve a sentence. First: every time the interface was restyled, all 32 factory presets were re-rendered and byte-compared against their previous renders — cosmetic work was <i>proven</i>, not assumed, to leave the sound untouched. Second: the four-knob contract (every macro musical, every rest position sound-neutral) is enforced by tests, so it can't quietly rot.</p>
+    <p>Two of these deserve a sentence. First: every time the interface was restyled, all 32 factory presets were re-rendered and byte-compared against their previous renders, so cosmetic work was <i>proven</i>, not assumed, to leave the sound untouched. Second: the four-knob contract (every macro musical, every rest position sound-neutral) is enforced by tests, so it can't quietly rot.</p>
 
     <h3>What the human did</h3>
-    <p>Everything a metric can't: chose what Lumen should be, judged whether patches were worth keeping, decided the default sound, caught what only a live window shows (a squished label, a popup's corners, knobs that didn't spring back), and called the taste questions — like whether dropping an image should blend with your patch or replace it. (It blends. It's reversible. That was a deliberate call.)</p>
+    <p>Everything a metric can't: chose what Lumen should be, judged whether patches were worth keeping, decided the default sound, caught what only a live window shows (a squished label, a popup's corners, knobs that didn't spring back), and called the taste questions, like whether dropping an image should blend with your patch or replace it. (It blends. It's reversible. That was a deliberate call.)</p>
 
     <div class="note">
-      Curious about the approach? The repository's <code>SPEC.md</code>, <code>PHASES.md</code>, and <code>DECISIONS.md</code> are the honest record — the design, the gates, and every trade-off, in the order they actually happened.
+      Curious about the approach? The repository's <code>SPEC.md</code>, <code>PHASES.md</code>, and <code>DECISIONS.md</code> are the honest record: the design, the gates, and every trade-off, in the order they actually happened.
     </div>
   </div>
 </section>
@@ -1565,15 +1625,15 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
 
     <details>
       <summary>My DAW doesn't see Lumen after install</summary>
-      <p>Confirm <code>Lumen.vst3</code> is in <code>C:\Program Files\Common Files\VST3</code>, then force a plugin rescan in your DAW (most hide it in plugin settings; some need a "clear cache and rescan"). Lumen is 64-bit VST3 only — 32-bit hosts and VST2-only hosts won't find it.</p>
+      <p>Confirm <code>Lumen.vst3</code> is in <code>C:\Program Files\Common Files\VST3</code>, then force a plugin rescan in your DAW (most hide it in plugin settings; some need a "clear cache and rescan"). Lumen is 64-bit VST3 only, so 32-bit hosts and VST2-only hosts won't find it.</p>
     </details>
     <details>
       <summary>Windows warns me about an unknown publisher</summary>
-      <p>Expected for now — Lumen is free and the binaries aren't code-signed yet. <i>More info → Run anyway</i> proceeds. Only download Lumen from this page or the project's GitHub releases, so you know what you're running.</p>
+      <p>Expected for now: Lumen is free and the binaries aren't code-signed yet. <i>More info → Run anyway</i> proceeds. Only download Lumen from this page or the project's GitHub releases, so you know what you're running.</p>
     </details>
     <details>
       <summary>No sound in the standalone</summary>
-      <p>Open the gear icon and check the output device — pick your interface (WASAPI) and confirm the sample rate. Then play a note and watch the output meter in the header: if the meter moves but you hear nothing, the problem is downstream of Lumen (system mixer, monitor routing).</p>
+      <p>Open the gear icon and check the output device: pick your interface (WASAPI) and confirm the sample rate. Then play a note and watch the output meter in the header: if the meter moves but you hear nothing, the problem is downstream of Lumen (system mixer, monitor routing).</p>
     </details>
     <details>
       <summary>Where do my saved presets and settings live?</summary>
@@ -1585,7 +1645,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     </details>
     <details>
       <summary>Why does dropping an image move my knobs? Can I undo it?</summary>
-      <p>That's COLORS — the image's color character steering the four macros. It's fully reversible: remove the image and every knob returns exactly where it was, including positions you'd set by hand. Prefer the image to leave your knobs alone? Toggle COLORS off; it stays off until you turn it back on.</p>
+      <p>That's COLORS, the image's color character steering the four macros. It's fully reversible: remove the image and every knob returns exactly where it was, including positions you'd set by hand. Prefer the image to leave your knobs alone? Toggle COLORS off; it stays off until you turn it back on.</p>
     </details>
     <details>
       <summary>Is Lumen really free? What's the catch?</summary>
@@ -1593,7 +1653,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     </details>
     <details>
       <summary>macOS? Linux?</summary>
-      <p>macOS is planned — the codebase is cross-platform-ready, but we won't publish a build we haven't tested on real Apple hardware. Linux isn't on the roadmap for 1.x.</p>
+      <p>macOS is planned: the codebase is cross-platform-ready, but we won't publish a build we haven't tested on real Apple hardware. Linux isn't on the roadmap for 1.x.</p>
     </details>
   </div>
 </section>
@@ -1608,10 +1668,10 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
 
 <script>
 /* ============================================================
-   Shared waterfall factory. One canvas ridgeline renderer —
+   Shared waterfall factory. One canvas ridgeline renderer;
    the hero instrument and the preset browser each own an
    instance. Same tuning as the instrument: ROWS 26, BINS 72,
-   55–16k log map, 46 ms slice push, painter's occlusion.
+   55 to 16k log map, 46 ms slice push, painter's occlusion.
    ============================================================ */
 function makeWaterfall(canvas){
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1681,7 +1741,7 @@ function makeWaterfall(canvas){
       var t = i/(ROWS-1);
       var slice = history[i];
       // back rows are narrower and centered, receding like the
-      // instrument's projection — never pinned to either edge
+      // instrument's projection; never pinned to either edge
       var wRow = plotW * (0.94 + 0.06*t);
       var x0   = padL + (plotW - wRow)/2;
       var baseY = padT + ampMax*0.55 + i*rowGap;
@@ -1763,7 +1823,7 @@ function makeWaterfall(canvas){
 /* ============================================================
    Interactive preset browser + live spectral waterfall.
    One shared <audio> element; Web Audio AnalyserNode feeds a
-   canvas ridgeline — the same view the instrument draws.
+   canvas ridgeline, the same view the instrument draws.
    ============================================================ */
 (function(){
   var root = document.getElementById("presets");
@@ -1885,7 +1945,7 @@ function makeWaterfall(canvas){
 })();
 
 /* ============================================================
-   Hero instrument — the Lens image lab promoted to the hero.
+   Hero instrument: the Lens image lab promoted to the hero.
    Loads empty: a drop-zone CTA where the image goes, knobs at
    rest (0.50), idle waterfall. Click any thumb: the image lands
    in the Lens, the macros animate to the values its colors set
@@ -2034,7 +2094,7 @@ function makeWaterfall(canvas){
   });
 
   playBt.addEventListener("click", function(){
-    if (cur < 0) return;   // nothing engaged yet — pick an image first
+    if (cur < 0) return;   // nothing engaged yet; pick an image first
     audio.paused ? play() : audio.pause();
   });
 

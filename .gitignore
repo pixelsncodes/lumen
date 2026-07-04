@@ -18,6 +18,8 @@ preset_baseline/
 preset_after/
 site/lumen/web-assets/audio/*.wav
 !web-assets/**/*.mp3   # ...but keep the site's mp3 clips tracked
+# release zips live on GitHub Releases; this folder is only a stray local copy
+site/lumen/web-assets/release/
 out.json
 frames.csv
 
