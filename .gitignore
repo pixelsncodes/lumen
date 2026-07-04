@@ -1,24 +1,50 @@
-# Build output
+# ── Build output (the big one — never commit this) ──
 build/
+build-*/
+cmake-build-*/
 out/
+*.o
+*.obj
+*.a
+*.lib
+*.exp
+*.ilk
+*.pdb
+
+# ── Render + verification artifacts (reproducible via lumen_render) ──
+shots/
+baseline/
+preset_baseline/
+preset_after/
+site/lumen/web-assets/audio/*.wav
+!web-assets/**/*.mp3   # ...but keep the site's mp3 clips tracked
+out.json
+frames.csv
+
+# ── Third-party SDKs that must NOT be redistributed ──
+# The Steinberg ASIO SDK is licensed to you, not to redistribute — keep it local.
+asio-sdk/
+ASIOSDK*/
+extras/asio/
+
+# ── JUCE (fetched at configure time; don't vendor it into the repo) ──
+# If you vendor JUCE instead of fetching, delete the next line.
+JUCE/
+
+# ── pluginval / tools binaries (downloaded per machine) ──
+tools/pluginval*
+tools/*.exe
+
+# ── IDE / editor ──
 .vs/
+.vscode/
+.idea/
 *.user
-
-# Downloaded tooling (re-fetch, don't commit)
-Tools/pluginval.exe
-Tools/pluginval_*.zip
-tools/pluginval.exe
-tools/pluginval_*.zip
-
-# Render/verification scratch output
-*.wav
-render*.json
-shot*.png
-ui*.png
-
-# OS noise
+*.suo
+*.DS_Store
 Thumbs.db
-Desktop.ini
-.DS_Store
-/t.json
-/out.json
+
+# ── Local env / notes you don't want public ──
+*.local
+.env
+scratch/
