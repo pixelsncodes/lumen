@@ -342,24 +342,76 @@ ol.steps > li::before{
 }
 ol.steps b{ color:var(--ink); }
 
-/* ---------- preset gallery ---------- */
-.bank{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; margin-top:18px; }
-.bank-cat{
-  grid-column:1/-1; font-family:var(--mono); font-size:10px;
-  letter-spacing:var(--track); text-transform:uppercase; color:var(--muted);
-  margin-top:16px; padding-bottom:6px; border-bottom:1px solid var(--line);
-}
-.pcard{
+/* ---------- interactive preset browser + live waterfall ---------- */
+.pb{
   background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-  padding:14px 16px;
+  padding:0; overflow:hidden; margin-top:22px;
+  display:grid; grid-template-columns:280px minmax(0,1fr);
 }
-.pcard .pname{ font-family:var(--mono); font-size:13px; color:var(--ink); letter-spacing:.06em; margin-bottom:2px; }
-.pcard .pdesc{ font-size:12px; color:var(--muted); line-height:1.45; margin-bottom:10px; }
-.pcard audio{ width:100%; height:30px; filter:invert(.92) hue-rotate(180deg) saturate(.4); }
-.pcard.default-p{ border-color:rgba(250,255,0,.45); }
-.pcard.default-p .pname::after{
-  content:"DEFAULT"; font-size:9px; letter-spacing:.16em; color:var(--neon);
-  border:1px solid rgba(250,255,0,.45); border-radius:999px; padding:2px 7px; margin-left:8px;
+.pb-browser{
+  border-right:1px solid var(--line);
+  max-height:560px; overflow-y:auto; overscroll-behavior:contain;
+  padding:16px 12px 22px; scrollbar-width:thin; scrollbar-color:var(--line) transparent;
+}
+.pb-cat{
+  font-family:var(--mono); font-size:10px; letter-spacing:var(--track);
+  text-transform:uppercase; color:var(--muted); margin:20px 10px 8px;
+}
+.pb-browser .pb-cat:first-child{ margin-top:2px; }
+.pb-item{
+  display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+  font-family:var(--sans); font-size:14px; color:var(--ink);
+  background:transparent; border:0; border-radius:8px; padding:8px 12px;
+  cursor:pointer; transition:background .12s;
+}
+.pb-item:hover{ background:var(--panel-2); }
+.pb-item .tick{ width:14px; flex:none; color:var(--neon); font-weight:700; opacity:0; }
+.pb-item[aria-current="true"]{ color:var(--neon); background:var(--neon-dim); }
+.pb-item[aria-current="true"] .tick{ opacity:1; }
+.pb-main{ display:flex; flex-direction:column; min-width:0; }
+.pb-stage{ position:relative; flex:1; min-height:340px; background:#101014; }
+.pb-stage canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.pb-transport{
+  display:flex; align-items:center; gap:14px;
+  padding:13px 18px; border-top:1px solid var(--line); background:var(--panel);
+}
+.pb-play{
+  width:44px; height:44px; flex:none; border-radius:50%;
+  border:1px solid var(--neon); background:transparent; color:var(--neon);
+  cursor:pointer; display:grid; place-items:center;
+  transition:background .15s, color .15s;
+}
+.pb-play:hover{ background:var(--neon); color:#0c0c0e; }
+.pb-now{ min-width:0; flex:0 1 34%; }
+.pb-now .n1{
+  font-family:var(--mono); font-size:13px; letter-spacing:.06em; color:var(--ink);
+  display:flex; align-items:center; gap:8px; white-space:nowrap;
+}
+.pb-now .n2{
+  font-size:12px; color:var(--muted); line-height:1.4;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.df-badge{
+  font-family:var(--mono); font-size:9px; letter-spacing:.16em; color:var(--neon);
+  border:1px solid rgba(250,255,0,.45); border-radius:999px; padding:1px 7px; flex:none;
+}
+.pb-seek{ flex:1 1 auto; min-width:60px; accent-color:var(--neon); cursor:pointer; }
+.pb-time{
+  font-family:var(--mono); font-size:11px; color:var(--muted);
+  flex:none; min-width:78px; text-align:right; font-variant-numeric:tabular-nums;
+}
+@media (max-width:900px){
+  .pb{ grid-template-columns:1fr; }
+  .pb-main{ order:1; }
+  .pb-browser{
+    order:2; border-right:0; border-top:1px solid var(--line);
+    max-height:320px;
+  }
+  .pb-stage{ min-height:220px; }
+  .pb-transport{ flex-wrap:wrap; }
+  .pb-now{ flex:1 1 calc(100% - 58px); }
+  .pb-seek{ flex:1 1 100%; order:5; }
+  .pb-time{ order:6; margin-left:auto; }
 }
 
 /* ---------- signal-flow SVG ---------- */
@@ -399,12 +451,12 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="bar">
     <span class="wordmark">L U M E N<span class="dot"> ●</span></span>
     <div class="links">
+      <a href="#presets">Presets</a>
       <a href="#download">Download</a>
       <a href="#quickstart">Quick start</a>
       <a href="#lens">The Lens</a>
       <a href="#sound-design">Sound design</a>
       <a href="#engine">Engine</a>
-      <a href="#presets">Presets</a>
       <a href="#midi">MIDI</a>
       <a href="#build">How it's built</a>
       <a href="#faq">FAQ</a>
@@ -496,6 +548,108 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   </div>
 </section>
 
+<!-- ================= PRESETS (interactive) ================= -->
+<section id="presets">
+  <div class="wrap">
+    <span class="eyebrow">Factory bank</span>
+    <h2 class="sec-title">32 presets. Click one. Hear it.</h2>
+    <p>This is Lumen's preset browser, live on the page. Pick any patch and the clip plays — and the ridgeline waterfall next to it is <b>drawn in real time from the audio you're hearing</b>, the same spectral view the instrument itself uses. Every clip was rendered by Lumen's own command-line engine: what you hear is the actual synth. In the app, your own saves collect under a <b>User</b> section at the end of this menu.</p>
+    <!-- clips via lumen_render --preset "<name>" --note 60 --vel 100 --dur 2 --tail 2 --out web-assets/audio/<slug>.wav (mp3-encoded for the page) -->
+    <div class="pb">
+      <div class="pb-browser" role="listbox" aria-label="Factory presets — click to audition">
+        <div class="pb-cat">Bass</div>
+        <button class="pb-item" type="button" data-name="Sub Zero" data-desc="Pure low-end foundation."
+          data-src="/lumen/web-assets/audio/sub-zero.mp3"><span class="tick" aria-hidden="true">✓</span>Sub Zero</button>
+        <button class="pb-item" type="button" data-name="Rubber" data-desc="Velocity digs into the filter — play it soft, then hard."
+          data-src="/lumen/web-assets/audio/rubber.mp3"><span class="tick" aria-hidden="true">✓</span>Rubber</button>
+        <button class="pb-item" type="button" data-name="Neon Growl" data-desc="Aggressive mono movement."
+          data-src="/lumen/web-assets/audio/neon-growl.mp3"><span class="tick" aria-hidden="true">✓</span>Neon Growl</button>
+        <button class="pb-item" type="button" data-name="Deep Field" data-desc="Wide, slow, subterranean."
+          data-src="/lumen/web-assets/audio/deep-field.mp3"><span class="tick" aria-hidden="true">✓</span>Deep Field</button>
+        <button class="pb-item" type="button" data-name="Knuckle" data-desc="Short, percussive punch."
+          data-src="/lumen/web-assets/audio/knuckle.mp3"><span class="tick" aria-hidden="true">✓</span>Knuckle</button>
+        <button class="pb-item" type="button" data-name="Tape Bass" data-desc="Soft-edged, worn, warm."
+          data-src="/lumen/web-assets/audio/tape-bass.mp3"><span class="tick" aria-hidden="true">✓</span>Tape Bass</button>
+        <div class="pb-cat">Leads</div>
+        <button class="pb-item" type="button" data-name="Laser" data-desc="Instant attack, glide-ready."
+          data-src="/lumen/web-assets/audio/laser.mp3"><span class="tick" aria-hidden="true">✓</span>Laser</button>
+        <button class="pb-item" type="button" data-name="Glass Whistle" data-desc="Thin, pure, high."
+          data-src="/lumen/web-assets/audio/glass-whistle.mp3"><span class="tick" aria-hidden="true">✓</span>Glass Whistle</button>
+        <button class="pb-item" type="button" data-name="Saw Hero" data-desc="The big supersaw — Texture makes it huge."
+          data-src="/lumen/web-assets/audio/saw-hero.mp3"><span class="tick" aria-hidden="true">✓</span>Saw Hero</button>
+        <button class="pb-item" type="button" data-name="Vapor" data-desc="Soft-focus solo voice."
+          data-src="/lumen/web-assets/audio/vapor.mp3"><span class="tick" aria-hidden="true">✓</span>Vapor</button>
+        <button class="pb-item" type="button" data-name="Chrome" data-desc="Hard, reflective, precise."
+          data-src="/lumen/web-assets/audio/chrome.mp3"><span class="tick" aria-hidden="true">✓</span>Chrome</button>
+        <button class="pb-item" type="button" data-name="Solar Flare" data-desc="Bright drive that stays clean up high."
+          data-src="/lumen/web-assets/audio/solar-flare.mp3"><span class="tick" aria-hidden="true">✓</span>Solar Flare</button>
+        <div class="pb-cat">Pads</div>
+        <button class="pb-item" type="button" data-name="Neon Tide" data-desc="Slow synthwave wash."
+          data-src="/lumen/web-assets/audio/neon-tide.mp3"><span class="tick" aria-hidden="true">✓</span>Neon Tide</button>
+        <button class="pb-item" type="button" data-name="Slow Aurora" data-desc="The opening patch — a pad that blooms." data-default="1"
+          data-src="/lumen/web-assets/audio/slow-aurora.mp3"><span class="tick" aria-hidden="true">✓</span>Slow Aurora</button>
+        <button class="pb-item" type="button" data-name="Warm Fog" data-desc="Low, close, enveloping."
+          data-src="/lumen/web-assets/audio/warm-fog.mp3"><span class="tick" aria-hidden="true">✓</span>Warm Fog</button>
+        <button class="pb-item" type="button" data-name="Choir Ghost" data-desc="Vowel-ish, distant, haunted."
+          data-src="/lumen/web-assets/audio/choir-ghost.mp3"><span class="tick" aria-hidden="true">✓</span>Choir Ghost</button>
+        <button class="pb-item" type="button" data-name="Polar Drift" data-desc="Cold and slowly moving."
+          data-src="/lumen/web-assets/audio/polar-drift.mp3"><span class="tick" aria-hidden="true">✓</span>Polar Drift</button>
+        <button class="pb-item" type="button" data-name="Amber Haze" data-desc="Warm dusk, soft edges."
+          data-src="/lumen/web-assets/audio/amber-haze.mp3"><span class="tick" aria-hidden="true">✓</span>Amber Haze</button>
+        <div class="pb-cat">Keys</div>
+        <button class="pb-item" type="button" data-name="Dial Tone" data-desc="Retro-electric key tone."
+          data-src="/lumen/web-assets/audio/dial-tone.mp3"><span class="tick" aria-hidden="true">✓</span>Dial Tone</button>
+        <button class="pb-item" type="button" data-name="Marble Pluck" data-desc="Hard stone attack, quick decay."
+          data-src="/lumen/web-assets/audio/marble-pluck.mp3"><span class="tick" aria-hidden="true">✓</span>Marble Pluck</button>
+        <button class="pb-item" type="button" data-name="Music Box" data-desc="Tiny, bright, nostalgic."
+          data-src="/lumen/web-assets/audio/music-box.mp3"><span class="tick" aria-hidden="true">✓</span>Music Box</button>
+        <button class="pb-item" type="button" data-name="Soft EP" data-desc="Gentle electric piano with slow pan."
+          data-src="/lumen/web-assets/audio/soft-ep.mp3"><span class="tick" aria-hidden="true">✓</span>Soft EP</button>
+        <button class="pb-item" type="button" data-name="Pixel Pluck" data-desc="Chiptune-adjacent snap."
+          data-src="/lumen/web-assets/audio/pixel-pluck.mp3"><span class="tick" aria-hidden="true">✓</span>Pixel Pluck</button>
+        <button class="pb-item" type="button" data-name="Kalimba Dust" data-desc="Thumb-piano intimacy."
+          data-src="/lumen/web-assets/audio/kalimba-dust.mp3"><span class="tick" aria-hidden="true">✓</span>Kalimba Dust</button>
+        <button class="pb-item" type="button" data-name="Bell Garden" data-desc="Inharmonic bells with a 19-semitone shimmer."
+          data-src="/lumen/web-assets/audio/bell-garden.mp3"><span class="tick" aria-hidden="true">✓</span>Bell Garden</button>
+        <div class="pb-cat">Textures</div>
+        <button class="pb-item" type="button" data-name="Static Bloom" data-desc="Noise that flowers."
+          data-src="/lumen/web-assets/audio/static-bloom.mp3"><span class="tick" aria-hidden="true">✓</span>Static Bloom</button>
+        <button class="pb-item" type="button" data-name="Scanline" data-desc="Built through the Lens from a procedural image."
+          data-src="/lumen/web-assets/audio/scanline.mp3"><span class="tick" aria-hidden="true">✓</span>Scanline</button>
+        <button class="pb-item" type="button" data-name="Radio Sky" data-desc="Station-hopping shortwave drift."
+          data-src="/lumen/web-assets/audio/radio-sky.mp3"><span class="tick" aria-hidden="true">✓</span>Radio Sky</button>
+        <button class="pb-item" type="button" data-name="Machine Hum" data-desc="Room tone with intent."
+          data-src="/lumen/web-assets/audio/machine-hum.mp3"><span class="tick" aria-hidden="true">✓</span>Machine Hum</button>
+        <button class="pb-item" type="button" data-name="Wind Tunnel" data-desc="Filtered air in motion."
+          data-src="/lumen/web-assets/audio/wind-tunnel.mp3"><span class="tick" aria-hidden="true">✓</span>Wind Tunnel</button>
+        <button class="pb-item" type="button" data-name="Photograph" data-desc="The Lens showpiece — an image, playable."
+          data-src="/lumen/web-assets/audio/photograph.mp3"><span class="tick" aria-hidden="true">✓</span>Photograph</button>
+        <div class="pb-cat">Blank slate</div>
+        <button class="pb-item" type="button" data-name="Init" data-desc="Where your patches start."
+          data-src="/lumen/web-assets/audio/init.mp3"><span class="tick" aria-hidden="true">✓</span>Init</button>
+      </div>
+      <div class="pb-main">
+        <div class="pb-stage">
+          <canvas id="pbCanvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="pb-transport">
+          <button class="pb-play" id="pbPlay" type="button" aria-label="Play">
+            <svg id="pbIcoPlay" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M3.4 1.8 12 7 3.4 12.2z" fill="currentColor"/></svg>
+            <svg id="pbIcoPause" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true" style="display:none"><path d="M3 2h3v10H3zM8 2h3v10H8z" fill="currentColor"/></svg>
+          </button>
+          <div class="pb-now">
+            <div class="n1"><span id="pbName">Slow Aurora</span><span class="df-badge" id="pbBadge">DEFAULT</span></div>
+            <div class="n2" id="pbDesc">The opening patch — a pad that blooms.</div>
+          </div>
+          <input class="pb-seek" id="pbSeek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+          <span class="pb-time" id="pbTime">0:00 / 0:00</span>
+        </div>
+      </div>
+    </div>
+    <p class="small" style="margin-top:14px">Audio loads only when you press play — nothing streams until you ask.</p>
+  </div>
+</section>
+
 <!-- ================= DOWNLOAD ================= -->
 <section id="download">
   <div class="wrap">
@@ -505,8 +659,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       <div class="panel">
         <h3 style="margin-top:0">Windows</h3>
         <p>One zip, two builds: the <b>VST3</b> for your DAW and a <b>standalone</b> app that needs nothing else.</p>
-        <!-- TODO(release): point at the real GitHub Releases asset once v1.0.0 is published -->
-        <p style="margin-top:20px"><a class="btn solid" href="https://github.com/OWNER/lumen/releases/latest/download/Lumen-1.0.0-win64.zip">Lumen 1.0.0 · Win64 zip</a></p>
+        <p style="margin-top:20px"><a class="btn solid" href="https://github.com/pixelsncodes/lumen/releases/latest/download/Lumen-1.0.0-win64.zip">Lumen 1.0.0 · Win64 zip</a></p>
         <p class="small" style="margin-top:14px">Windows 10/11, 64-bit · VST3 host or standalone · WASAPI out of the box (ASIO supported)</p>
       </div>
       <div class="panel">
@@ -525,10 +678,6 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     <div class="note warn">
       <b>Windows SmartScreen:</b> the first launch may warn about an unknown publisher — Lumen is a free, unsigned indie build. Click <i>More info → Run anyway</i>. If that makes you uncomfortable (fair), you can build it from source instead.
     </div>
-    <figure class="shot">
-      <img src="/lumen/web-assets/img/preset_menu.png" alt="Lumen's branded three-column preset menu, with Slow Aurora ticked as current and a User section holding a saved patch." loading="lazy">
-      <figcaption>The preset browser — factory bank in three columns, your saves collected under User.</figcaption>
-    </figure>
   </div>
 </section>
 
@@ -739,61 +888,6 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   </div>
 </section>
 
-<!-- ================= PRESETS ================= -->
-<section id="presets">
-  <div class="wrap">
-    <span class="eyebrow">Factory bank</span>
-    <h2 class="sec-title">32 presets, four knobs each</h2>
-    <p>Every patch below was designed against measured renders and auditioned by ear. Clips are rendered by Lumen's own command-line engine — what you hear is the actual instrument. Your own saves appear in a <b>User</b> section at the end of this menu.</p>
-    <!-- TODO(assets): clips via lumen_render --preset "<name>" --note 60 --vel 100 --dur 2 --tail 2 --out web-assets/audio/<slug>.wav (mp3-encode for the page) -->
-    <div class="bank">
-      <div class="bank-cat">Bass</div>
-      <div class="pcard"><div class="pname">Sub Zero</div><div class="pdesc">Pure low-end foundation.</div><audio controls preload="none" src="/lumen/web-assets/audio/sub-zero.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Rubber</div><div class="pdesc">Velocity digs into the filter — play it soft, then hard.</div><audio controls preload="none" src="/lumen/web-assets/audio/rubber.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Neon Growl</div><div class="pdesc">Aggressive mono movement.</div><audio controls preload="none" src="/lumen/web-assets/audio/neon-growl.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Deep Field</div><div class="pdesc">Wide, slow, subterranean.</div><audio controls preload="none" src="/lumen/web-assets/audio/deep-field.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Knuckle</div><div class="pdesc">Short, percussive punch.</div><audio controls preload="none" src="/lumen/web-assets/audio/knuckle.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Tape Bass</div><div class="pdesc">Soft-edged, worn, warm.</div><audio controls preload="none" src="/lumen/web-assets/audio/tape-bass.mp3"></audio></div>
-
-      <div class="bank-cat">Leads</div>
-      <div class="pcard"><div class="pname">Laser</div><div class="pdesc">Instant attack, glide-ready.</div><audio controls preload="none" src="/lumen/web-assets/audio/laser.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Glass Whistle</div><div class="pdesc">Thin, pure, high.</div><audio controls preload="none" src="/lumen/web-assets/audio/glass-whistle.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Saw Hero</div><div class="pdesc">The big supersaw — Texture makes it huge.</div><audio controls preload="none" src="/lumen/web-assets/audio/saw-hero.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Vapor</div><div class="pdesc">Soft-focus solo voice.</div><audio controls preload="none" src="/lumen/web-assets/audio/vapor.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Chrome</div><div class="pdesc">Hard, reflective, precise.</div><audio controls preload="none" src="/lumen/web-assets/audio/chrome.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Solar Flare</div><div class="pdesc">Bright drive that stays clean up high.</div><audio controls preload="none" src="/lumen/web-assets/audio/solar-flare.mp3"></audio></div>
-
-      <div class="bank-cat">Pads</div>
-      <div class="pcard"><div class="pname">Neon Tide</div><div class="pdesc">Slow synthwave wash.</div><audio controls preload="none" src="/lumen/web-assets/audio/neon-tide.mp3"></audio></div>
-      <div class="pcard default-p"><div class="pname">Slow Aurora</div><div class="pdesc">The opening patch — a pad that blooms.</div><audio controls preload="none" src="/lumen/web-assets/audio/slow-aurora.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Warm Fog</div><div class="pdesc">Low, close, enveloping.</div><audio controls preload="none" src="/lumen/web-assets/audio/warm-fog.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Choir Ghost</div><div class="pdesc">Vowel-ish, distant, haunted.</div><audio controls preload="none" src="/lumen/web-assets/audio/choir-ghost.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Polar Drift</div><div class="pdesc">Cold and slowly moving.</div><audio controls preload="none" src="/lumen/web-assets/audio/polar-drift.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Amber Haze</div><div class="pdesc">Warm dusk, soft edges.</div><audio controls preload="none" src="/lumen/web-assets/audio/amber-haze.mp3"></audio></div>
-
-      <div class="bank-cat">Keys</div>
-      <div class="pcard"><div class="pname">Dial Tone</div><div class="pdesc">Retro-electric key tone.</div><audio controls preload="none" src="/lumen/web-assets/audio/dial-tone.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Marble Pluck</div><div class="pdesc">Hard stone attack, quick decay.</div><audio controls preload="none" src="/lumen/web-assets/audio/marble-pluck.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Music Box</div><div class="pdesc">Tiny, bright, nostalgic.</div><audio controls preload="none" src="/lumen/web-assets/audio/music-box.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Soft EP</div><div class="pdesc">Gentle electric piano with slow pan.</div><audio controls preload="none" src="/lumen/web-assets/audio/soft-ep.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Pixel Pluck</div><div class="pdesc">Chiptune-adjacent snap.</div><audio controls preload="none" src="/lumen/web-assets/audio/pixel-pluck.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Kalimba Dust</div><div class="pdesc">Thumb-piano intimacy.</div><audio controls preload="none" src="/lumen/web-assets/audio/kalimba-dust.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Bell Garden</div><div class="pdesc">Inharmonic bells with a 19-semitone shimmer.</div><audio controls preload="none" src="/lumen/web-assets/audio/bell-garden.mp3"></audio></div>
-
-      <div class="bank-cat">Textures</div>
-      <div class="pcard"><div class="pname">Static Bloom</div><div class="pdesc">Noise that flowers.</div><audio controls preload="none" src="/lumen/web-assets/audio/static-bloom.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Scanline</div><div class="pdesc">Built through the Lens from a procedural image.</div><audio controls preload="none" src="/lumen/web-assets/audio/scanline.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Radio Sky</div><div class="pdesc">Station-hopping shortwave drift.</div><audio controls preload="none" src="/lumen/web-assets/audio/radio-sky.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Machine Hum</div><div class="pdesc">Room tone with intent.</div><audio controls preload="none" src="/lumen/web-assets/audio/machine-hum.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Wind Tunnel</div><div class="pdesc">Filtered air in motion.</div><audio controls preload="none" src="/lumen/web-assets/audio/wind-tunnel.mp3"></audio></div>
-      <div class="pcard"><div class="pname">Photograph</div><div class="pdesc">The Lens showpiece — an image, playable.</div><audio controls preload="none" src="/lumen/web-assets/audio/photograph.mp3"></audio></div>
-
-      <div class="bank-cat">Blank slate</div>
-      <div class="pcard"><div class="pname">Init</div><div class="pdesc">Where your patches start.</div><audio controls preload="none" src="/lumen/web-assets/audio/init.mp3"></audio></div>
-    </div>
-  </div>
-</section>
-
 <!-- ================= MIDI ================= -->
 <section id="midi">
   <div class="wrap">
@@ -906,7 +1000,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="wrap">
     <span class="wordmark">L U M E N<span class="dot"> ●</span></span>
     <span>v1.0.0 · free for everyone · made loud by you</span>
-    <span><a href="https://github.com/OWNER/lumen">Source & releases</a> · <a href="#download">Download</a></span>
+    <span><a href="https://github.com/pixelsncodes/lumen">Source & releases</a> · <a href="#download">Download</a></span>
   </div>
 </footer>
 
@@ -923,6 +1017,263 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     tp.classList.toggle("on",!deep); td.classList.toggle("on",deep);
     vp.classList.toggle("on",!deep); vd.classList.toggle("on",deep);
   },4500);
+})();
+
+/* ============================================================
+   Interactive preset browser + live spectral waterfall.
+   One shared <audio> element; Web Audio AnalyserNode feeds a
+   canvas ridgeline — the same view the instrument draws.
+   ============================================================ */
+(function(){
+  var root = document.getElementById("presets");
+  if (!root) return;
+
+  var items  = Array.prototype.slice.call(root.querySelectorAll(".pb-item"));
+  var listEl = root.querySelector(".pb-browser");
+  var canvas = document.getElementById("pbCanvas");
+  var playBt = document.getElementById("pbPlay");
+  var icoPlay= document.getElementById("pbIcoPlay");
+  var icoPause=document.getElementById("pbIcoPause");
+  var seekEl = document.getElementById("pbSeek");
+  var timeEl = document.getElementById("pbTime");
+  var nameEl = document.getElementById("pbName");
+  var descEl = document.getElementById("pbDesc");
+  var badgeEl= document.getElementById("pbBadge");
+  if (!items.length || !canvas) return;
+
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- audio ---------- */
+  var audio = new Audio();
+  audio.preload = "none";
+  var actx=null, analyser=null, freqData=null;
+
+  function ensureGraph(){
+    if (actx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return; // no Web Audio: playback still works, waterfall stays idle
+    actx = new AC();
+    var src = actx.createMediaElementSource(audio);
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.7;
+    src.connect(analyser);
+    analyser.connect(actx.destination);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    buildBinMap();
+  }
+
+  var current = null;
+  function select(item){
+    items.forEach(function(i){ i.setAttribute("aria-current", i===item ? "true" : "false"); });
+    current = item;
+    nameEl.textContent = item.dataset.name;
+    descEl.textContent = item.dataset.desc;
+    badgeEl.style.display = item.dataset.default ? "" : "none";
+    var abs = new URL(item.dataset.src, location.href).href;
+    if (audio.src !== abs){ audio.src = item.dataset.src; seekEl.value = 0; }
+  }
+  function play(){
+    ensureGraph();
+    if (actx && actx.state === "suspended") actx.resume();
+    audio.play().catch(function(){});
+  }
+
+  items.forEach(function(item){
+    item.addEventListener("click", function(){
+      if (item === current){
+        audio.paused ? play() : audio.pause();
+      } else {
+        select(item); play();
+      }
+    });
+  });
+
+  /* roving arrow-key nav in the browser list */
+  listEl.addEventListener("keydown", function(e){
+    var k = e.key;
+    if (k!=="ArrowDown" && k!=="ArrowUp" && k!=="Home" && k!=="End") return;
+    var idx = items.indexOf(document.activeElement);
+    var next = k==="ArrowDown" ? Math.min(items.length-1, (idx<0?0:idx+1))
+             : k==="ArrowUp"   ? Math.max(0, (idx<0?0:idx-1))
+             : k==="Home"      ? 0 : items.length-1;
+    items[next].focus(); e.preventDefault();
+  });
+
+  playBt.addEventListener("click", function(){
+    if (!current) select(items.find ? items.find(function(i){return i.dataset.default;}) || items[0] : items[0]);
+    audio.paused ? play() : audio.pause();
+  });
+
+  function fmt(t){
+    if (!isFinite(t) || t<0) t = 0;
+    var m = Math.floor(t/60), s = Math.floor(t%60);
+    return m + ":" + (s<10?"0":"") + s;
+  }
+  function syncTime(){
+    var d = audio.duration;
+    timeEl.textContent = fmt(audio.currentTime) + " / " + fmt(d);
+    if (isFinite(d) && d>0 && !seeking) seekEl.value = (audio.currentTime/d)*100;
+  }
+  var seeking=false;
+  seekEl.addEventListener("input", function(){
+    seeking=true;
+    if (isFinite(audio.duration)) audio.currentTime = (seekEl.value/100)*audio.duration;
+  });
+  seekEl.addEventListener("change", function(){ seeking=false; });
+  audio.addEventListener("timeupdate", syncTime);
+  audio.addEventListener("loadedmetadata", syncTime);
+  audio.addEventListener("play",  function(){ setIcon(true);  startLoop(); playBt.setAttribute("aria-label","Pause"); });
+  audio.addEventListener("pause", function(){ setIcon(false); playBt.setAttribute("aria-label","Play"); });
+  audio.addEventListener("ended", function(){ setIcon(false); playBt.setAttribute("aria-label","Play"); });
+  function setIcon(playing){
+    icoPlay.style.display  = playing ? "none" : "";
+    icoPause.style.display = playing ? "" : "none";
+  }
+
+  /* ---------- waterfall renderer ---------- */
+  var ROWS = 26, BINS = 72;
+  var FMIN = 55, FMAX = 16000;
+  var history = [];
+  var binMap = null; // log-spaced analyser bin index per column
+
+  function idleSlice(seed){
+    var a = new Float32Array(BINS);
+    for (var j=0;j<BINS;j++){
+      var hump = Math.exp(-Math.pow((j-BINS*0.3)/(BINS*0.34),2)) * 0.16;
+      a[j] = hump + 0.02 + 0.02*Math.sin(seed*1.7 + j*0.55) + Math.random()*0.012;
+    }
+    return a;
+  }
+  for (var r=0;r<ROWS;r++) history.push(idleSlice(r));
+
+  function buildBinMap(){
+    if (!analyser) return;
+    var sr = actx.sampleRate, half = analyser.frequencyBinCount;
+    binMap = new Uint16Array(BINS);
+    for (var j=0;j<BINS;j++){
+      var f = FMIN * Math.pow(FMAX/FMIN, j/(BINS-1));
+      var idx = Math.round(f / (sr/2) * half);
+      binMap[j] = Math.max(1, Math.min(half-1, idx));
+    }
+  }
+  function captureSlice(){
+    analyser.getByteFrequencyData(freqData);
+    var a = new Float32Array(BINS);
+    for (var j=0;j<BINS;j++){
+      var i0 = binMap[j], i1 = (j<BINS-1) ? Math.max(i0+1, binMap[j+1]) : i0+1;
+      var v = 0;
+      for (var k=i0;k<i1;k++) v = Math.max(v, freqData[k]);
+      a[j] = v/255;
+    }
+    return a;
+  }
+
+  var dpr = Math.max(1, window.devicePixelRatio||1);
+  var g = canvas.getContext("2d");
+  function sizeCanvas(){
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return false;
+    if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)){
+      canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+    }
+    return true;
+  }
+
+  function draw(){
+    if (!sizeCanvas()) return;
+    var W = canvas.width, H = canvas.height, s = dpr;
+    g.fillStyle = "#101014";
+    g.fillRect(0,0,W,H);
+
+    var padL = 26*s, padR = 20*s, padT = 26*s, padB = 34*s;
+    var plotW = W - padL - padR;
+    var span  = H - padT - padB;
+    var rowGap = span / (ROWS+3);
+    var ampMax = rowGap * 5.2;
+
+    for (var i=0;i<ROWS;i++){          // back (oldest) → front (newest)
+      var t = i/(ROWS-1);
+      var slice = history[i];
+      var shear = (1-t) * plotW * 0.055;      // back rows drift right
+      var wRow  = plotW * (0.94 + 0.06*t);    // and are slightly narrower
+      var baseY = padT + ampMax*0.55 + i*rowGap;
+      var amp   = ampMax * (0.6 + 0.4*t);
+
+      g.beginPath();
+      for (var j=0;j<BINS;j++){
+        var x = padL + shear + (j/(BINS-1))*wRow;
+        var y = baseY - slice[j]*amp;
+        j===0 ? g.moveTo(x,y) : g.lineTo(x,y);
+      }
+      // occlude ridges behind (painter's algorithm), then stroke
+      g.lineTo(padL + shear + wRow, baseY + rowGap*1.5);
+      g.lineTo(padL + shear,        baseY + rowGap*1.5);
+      g.closePath();
+      g.fillStyle = "#101014";
+      g.fill();
+      g.strokeStyle = "rgba(250,255,0," + (0.22 + 0.7*t).toFixed(3) + ")";
+      g.lineWidth = 1.1*s;
+      g.beginPath();
+      for (j=0;j<BINS;j++){
+        var x2 = padL + shear + (j/(BINS-1))*wRow;
+        var y2 = baseY - slice[j]*amp;
+        j===0 ? g.moveTo(x2,y2) : g.lineTo(x2,y2);
+      }
+      g.stroke();
+    }
+
+    // frequency axis (front-row coordinates)
+    var axisY = H - padB + 12*s;
+    g.strokeStyle = "rgba(42,42,47,1)";
+    g.lineWidth = 1*s;
+    g.beginPath(); g.moveTo(padL, axisY-7*s); g.lineTo(padL+plotW, axisY-7*s); g.stroke();
+    g.fillStyle = "#6f6d64";
+    g.font = (9*s) + "px ui-monospace, Consolas, monospace";
+    g.textAlign = "center";
+    [[100,"100"],[1000,"1k"],[10000,"10k"]].forEach(function(tk){
+      var x = padL + (Math.log(tk[0]/FMIN)/Math.log(FMAX/FMIN))*plotW;
+      g.fillRect(x-0.5*s, axisY-11*s, 1*s, 4*s);
+      g.fillText(tk[1], x, axisY+3*s);
+    });
+    g.fillStyle = "rgba(250,255,0,.8)";
+    g.textAlign = "right";
+    g.fillText("Hz", padL+plotW, axisY+3*s);
+  }
+
+  var raf = null, lastPush = 0;
+  function loop(ts){
+    raf = null;
+    if (analyser && !audio.paused){
+      if (reduce){
+        // reduced motion: refresh the front ridge in place, no scroll
+        if (ts - lastPush > 250){ history[ROWS-1] = captureSlice(); lastPush = ts; draw(); }
+      } else if (ts - lastPush > 46){
+        history.shift();
+        history.push(captureSlice());
+        lastPush = ts;
+        draw();
+      } else {
+        draw();
+      }
+      raf = requestAnimationFrame(loop);
+    } else {
+      draw(); // final frame, then rest
+    }
+  }
+  function startLoop(){ if (!raf) raf = requestAnimationFrame(loop); }
+
+  if (window.ResizeObserver){
+    new ResizeObserver(function(){ draw(); }).observe(canvas);
+  } else {
+    window.addEventListener("resize", draw);
+  }
+
+  // initial state: default preset selected, idle ridge drawn
+  var def = null;
+  for (var d=0; d<items.length; d++){ if (items[d].dataset.default){ def = items[d]; break; } }
+  select(def || items[0]);
+  draw();
 })();
 </script>
 </body>
