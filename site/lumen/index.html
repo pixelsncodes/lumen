@@ -155,24 +155,31 @@ header.hero{
 .hero-inner{ position:relative; z-index:2; width:100%; padding:24px 0 56px; }
 .hero .wrap{ max-width:1200px; }
 .hero-copy{ text-align:center; }
-h1.hero-mark{
+h1.hero-head{
   font-family:var(--mono); font-weight:700;
-  font-size:clamp(38px,5vw,56px); line-height:1.15;
-  letter-spacing:.34em; margin-right:-.34em; /* trailing tracking compensation */
-  color:var(--ink); text-transform:uppercase; white-space:nowrap;
+  font-size:clamp(22px,3.5vw,34px); line-height:1.25;
+  letter-spacing:.06em; color:var(--ink);
 }
+.hero-head .n{ color:var(--neon); }
 .hero-sub{
-  font-size:clamp(16px,2vw,20px); color:var(--ink);
-  max-width:46ch; margin:12px auto 6px;
+  font-size:clamp(14px,1.6vw,17px); color:var(--muted);
+  max-width:46ch; margin:10px auto 0;
 }
-.hero-sub .n{ color:var(--neon); }
+.hero-lede{ text-align:center; margin-top:26px; }
+.hero-lens{
+  max-width:none; margin:0 auto 8px;
+  font-size:clamp(14px,1.6vw,16px); color:var(--ink);
+}
 .hero-meta{
   font-family:var(--mono); font-size:10px; letter-spacing:.18em;
   text-transform:uppercase; color:var(--muted); margin:0 auto;
+  white-space:nowrap;
 }
 @media (max-width:900px){
   .hero-inner{ padding:40px 0 56px; }
-  h1.hero-mark{ font-size:clamp(34px,10vw,56px); }
+}
+@media (max-width:420px){
+  .hero-meta{ white-space:normal; }
 }
 
 /* ---------- the live synth demo panel ---------- */
@@ -635,8 +642,12 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   <div class="scan-beam" aria-hidden="true"></div>
   <div class="wrap hero-inner">
     <div class="hero-copy">
-      <h1 class="hero-mark">Lumen</h1>
-      <p class="hero-sub">A wavetable synthesizer that <span class="n">plays images</span>. Drop a photo. Every note travels through it.</p>
+      <h1 class="hero-head">A wavetable synthesizer that <span class="n">plays images</span>.</h1>
+      <p class="hero-sub">Drop a photo. Every note travels through it.</p>
+    </div>
+
+    <div class="hero-lede">
+      <p class="hero-lens">This is the Lens, live on the page: 24 pictures, one patch. Click an image and the synth plays it. The knobs land where the image's colors put them, and the ridgeline is the real spectrum of what you hear.</p>
       <p class="hero-meta">Free · Windows VST3 + Standalone · v1.0.0</p>
     </div>
 
