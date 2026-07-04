@@ -140,18 +140,6 @@ header.hero{
   position:absolute; inset:0;
   background:radial-gradient(ellipse at 50% 24%, rgba(21,21,24,0) 0%, var(--bg) 82%);
 }
-.scan-beam{
-  position:absolute; top:0; bottom:0; width:2px;
-  background:linear-gradient(to bottom, transparent, rgba(255,255,255,0.9) 30%, rgba(255,255,255,0.9) 70%, transparent);
-  box-shadow:0 0 18px 2px rgba(255,255,255,0.35);
-  left:-5%; animation:scan 9s cubic-bezier(.4,0,.6,1) infinite;
-  pointer-events:none;
-}
-@keyframes scan{
-  0%{ left:-5%; opacity:0; } 6%{ opacity:1; }
-  46%{ left:105%; opacity:1; } 52%{ opacity:0; left:105%; }
-  100%{ left:105%; opacity:0; }
-}
 .hero-inner{ position:relative; z-index:2; width:100%; padding:24px 0 56px; }
 .hero .wrap{ max-width:1200px; }
 .hero-copy{ text-align:center; }
@@ -165,10 +153,11 @@ h1.hero-head{
   font-size:clamp(14px,1.6vw,17px); color:var(--muted);
   max-width:46ch; margin:10px auto 0;
 }
-.hero-lede{ text-align:center; margin-top:26px; }
+.hero-lede{ text-align:center; margin-top:18px; }
 .hero-lens{
   max-width:none; margin:0 auto 8px;
-  font-size:clamp(14px,1.6vw,16px); color:var(--ink);
+  font-size:clamp(9px,1vw,12px); letter-spacing:-0.02em; color:var(--muted);
+  white-space:nowrap;
 }
 .hero-meta{
   font-family:var(--mono); font-size:10px; letter-spacing:.18em;
@@ -177,6 +166,7 @@ h1.hero-head{
 }
 @media (max-width:900px){
   .hero-inner{ padding:40px 0 56px; }
+  .hero-lens{ white-space:normal; font-size:12.5px; }
 }
 @media (max-width:420px){
   .hero-meta{ white-space:normal; }
@@ -357,7 +347,6 @@ html.js .hi-plus{ animation:hibreathe 2s ease-in-out infinite; }
   padding:12px 16px; border-top:1px solid var(--line);
 }
 .hi .hi-transport{ border-top:1px solid var(--line); }
-.hi-note{ margin-top:14px; }
 html:not(.js) .hi-transport, html:not(.js) .hi-meter{ display:none; }
 html:not(.js) .hi-grid .lg-thumb{ pointer-events:none; }
 @media (max-width:900px){
@@ -639,16 +628,10 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
 <header class="hero">
   <div class="grid-floor" aria-hidden="true"></div>
   <div class="hero-fade" aria-hidden="true"></div>
-  <div class="scan-beam" aria-hidden="true"></div>
   <div class="wrap hero-inner">
     <div class="hero-copy">
       <h1 class="hero-head">A wavetable synthesizer that <span class="n">plays images</span>.</h1>
       <p class="hero-sub">Drop a photo. Every note travels through it.</p>
-    </div>
-
-    <div class="hero-lede">
-      <p class="hero-lens">This is the Lens, live on the page: 24 pictures, one patch. Click an image and the synth plays it. The knobs land where the image's colors put them, and the ridgeline is the real spectrum of what you hear.</p>
-      <p class="hero-meta">Free · Windows VST3 + Standalone · v1.0.0</p>
     </div>
 
     <div class="hi" id="heroSynth">
@@ -768,7 +751,10 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
           <img src="/lumen/web-assets/img/lens/24.jpg" alt="XO Skull, Lens image 24" loading="lazy" width="800" height="800"></button>
       </div>
     </div>
-    <p class="small hi-note">This is the Lens, live on the page: 24 pictures, one patch. Click an image and the synth plays it. The knobs land where the image's colors put them, and the ridgeline is the real spectrum of what you hear.</p>
+    <div class="hero-lede">
+      <p class="hero-lens">This is the Lens, live on the page: 24 pictures, one patch. Click an image and the synth plays it. The knobs land where the image's colors put them, and the ridgeline is the real spectrum of what you hear.</p>
+      <p class="hero-meta">Free · Windows VST3 + Standalone · v1.0.0</p>
+    </div>
     <!-- TODO(pack): once the image pack zip is attached to the GitHub release, uncomment:
     <p style="margin-top:16px"><a class="btn" href="https://github.com/pixelsncodes/lumen/releases/latest/download/Lumen-Lens-Pack.zip">Download the image pack</a>
     <span class="small" style="margin-left:12px">Drop any of them on your own Lumen.</span></p>
