@@ -414,6 +414,81 @@ ol.steps b{ color:var(--ink); }
   .pb-time{ order:6; margin-left:auto; }
 }
 
+/* ---------- Lens image lab: gallery + reacting macros ---------- */
+.lg{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:0; overflow:hidden; margin-top:22px;
+}
+.lg-top{
+  display:grid; grid-template-columns:minmax(220px,400px) minmax(0,1fr);
+  gap:26px; padding:22px; align-items:center;
+}
+.lg-stage{
+  position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden;
+  border:1px solid var(--line); background:#101014;
+}
+.lg-stage img{ width:100%; height:100%; object-fit:cover; display:block; }
+.lg-beam{
+  position:absolute; top:0; bottom:0; left:0; width:2px;
+  background:linear-gradient(to bottom, transparent, rgba(255,255,255,.95) 22%, rgba(255,255,255,.95) 78%, transparent);
+  box-shadow:0 0 12px 1px rgba(255,255,255,.6);
+  opacity:0; pointer-events:none;
+}
+.lg-stage.scanning .lg-beam{ opacity:1; }
+@media (prefers-reduced-motion: reduce){ .lg-beam{ display:none; } }
+.lg-side{ min-width:0; }
+.lg-name{
+  font-family:var(--mono); font-size:15px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink); display:flex; align-items:center; gap:10px; margin-bottom:4px;
+}
+.lg-sub{ font-size:12.5px; color:var(--muted); margin-bottom:20px; }
+.lg-knobs{
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; max-width:460px;
+}
+.lg-knob{ text-align:center; }
+.lg-knob svg{ width:100%; max-width:84px; height:auto; display:block; margin:0 auto; }
+.lg-knob .trk{ fill:none; stroke:#2a2a2f; stroke-width:5; stroke-linecap:round; }
+.lg-knob .val{
+  fill:none; stroke-width:5; stroke-linecap:round;
+  transition:stroke-dasharray .7s cubic-bezier(.25,.8,.3,1);
+}
+.lg-knob .ind{
+  transform-box:view-box; transform-origin:center;
+  transition:transform .7s cubic-bezier(.25,.8,.3,1);
+}
+.lg-knob .ind line{ stroke:var(--ink); stroke-width:2.6; stroke-linecap:round; }
+.lg-knob b{
+  display:block; margin-top:8px; font-family:var(--mono); font-weight:400;
+  font-size:9px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase;
+}
+.lg-knob .num{
+  display:block; font-family:var(--mono); font-size:10px; color:var(--ink);
+  margin-top:2px; font-variant-numeric:tabular-nums;
+}
+.lg .pb-transport{ border-top:1px solid var(--line); }
+.lg-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:8px;
+  padding:16px 18px 18px; border-top:1px solid var(--line);
+}
+.lg-thumb{
+  padding:0; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+  background:#101014; cursor:pointer; aspect-ratio:1; position:relative;
+  transition:border-color .15s, transform .15s;
+}
+.lg-thumb img{ width:100%; height:100%; object-fit:cover; display:block; opacity:.82; transition:opacity .15s; }
+.lg-thumb:hover img{ opacity:1; }
+.lg-thumb:hover{ transform:translateY(-2px); }
+.lg-thumb[aria-current="true"]{ border-color:var(--neon); box-shadow:0 0 0 1px var(--neon); }
+.lg-thumb[aria-current="true"] img{ opacity:1; }
+@media (max-width:900px){
+  .lg-top{ grid-template-columns:1fr; }
+  .lg-stage{ max-width:400px; margin:0 auto; }
+  .lg-knobs{ max-width:none; }
+  .lg .pb-transport{ flex-wrap:wrap; }
+  .lg .pb-seek{ flex:1 1 100%; order:5; }
+  .lg .pb-time{ order:6; margin-left:auto; }
+}
+
 /* ---------- signal-flow SVG ---------- */
 .flow{ margin:22px 0; }
 .flow svg{ width:100%; height:auto; display:block; }
@@ -455,6 +530,7 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       <a href="#download">Download</a>
       <a href="#quickstart">Quick start</a>
       <a href="#lens">The Lens</a>
+      <a href="#image-lab">Image lab</a>
       <a href="#sound-design">Sound design</a>
       <a href="#engine">Engine</a>
       <a href="#midi">MIDI</a>
@@ -491,10 +567,10 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
             <span class="d-bar" style="--lo:12%;--hi:64%"></span><span class="d-bar" style="--lo:30%;--hi:88%;animation-delay:-.4s"></span><span class="d-bar" style="--lo:18%;--hi:70%;animation-delay:-.9s"></span><span class="d-bar" style="--lo:40%;--hi:96%;animation-delay:-1.3s"></span><span class="d-bar" style="--lo:22%;--hi:58%;animation-delay:-.2s"></span><span class="d-bar" style="--lo:34%;--hi:82%;animation-delay:-1.6s"></span><span class="d-bar" style="--lo:14%;--hi:52%;animation-delay:-.7s"></span><span class="d-bar" style="--lo:26%;--hi:74%;animation-delay:-1.1s"></span><span class="d-bar" style="--lo:10%;--hi:44%;animation-delay:-.5s"></span><span class="d-bar" style="--lo:20%;--hi:66%;animation-delay:-1.8s"></span><span class="d-bar" style="--lo:8%;--hi:36%;animation-delay:-.3s"></span><span class="d-bar" style="--lo:16%;--hi:48%;animation-delay:-1.4s"></span><span class="d-bar" style="--lo:6%;--hi:28%;animation-delay:-.8s"></span><span class="d-bar" style="--lo:12%;--hi:38%;animation-delay:-1.9s"></span><span class="d-bar" style="--lo:5%;--hi:22%;animation-delay:-.6s"></span><span class="d-bar" style="--lo:8%;--hi:26%;animation-delay:-1.2s"></span>
           </div>
           <div class="d-knobs">
-            <div class="d-knob"><div class="ring"><i></i></div><b>Macro 1</b></div>
-            <div class="d-knob"><div class="ring"><i></i></div><b>Macro 2</b></div>
-            <div class="d-knob"><div class="ring"><i></i></div><b>Macro 3</b></div>
-            <div class="d-knob"><div class="ring"><i></i></div><b>Macro 4</b></div>
+            <div class="d-knob"><div class="ring"><i></i></div><b>Tone</b></div>
+            <div class="d-knob"><div class="ring"><i></i></div><b>Motion</b></div>
+            <div class="d-knob"><div class="ring"><i></i></div><b>Space</b></div>
+            <div class="d-knob"><div class="ring"><i></i></div><b>Texture</b></div>
           </div>
           <div class="d-keys">
             <span class="d-key"></span><span class="d-key blk"></span><span class="d-key lit"></span><span class="d-key blk"></span><span class="d-key"></span><span class="d-key"></span><span class="d-key blk"></span><span class="d-key lit2"></span><span class="d-key blk"></span><span class="d-key"></span><span class="d-key blk"></span><span class="d-key"></span>
@@ -747,6 +823,147 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
       <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded — the scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy">
       <figcaption>An image loaded into the Lens — clear it with × and your knobs snap back.</figcaption>
     </figure>
+  </div>
+</section>
+
+<!-- ================= LENS IMAGE LAB ================= -->
+<section id="image-lab">
+  <div class="wrap">
+    <span class="eyebrow">Image lab</span>
+    <h2 class="sec-title">24 images. Same patch. 24 instruments.</h2>
+    <p>A controlled experiment you can hear: every clip below is the <b>same patch and the same phrase</b> — the only thing that changes is the picture dropped on the Lens (all in Scan mode). Watch the four macros move as each image's color character lands, exactly as COLORS does in the instrument. The beam is the playhead: it shows where in the image the sound is. Clips loop while selected.</p>
+    <div class="lg">
+      <div class="lg-top">
+        <div class="lg-stage" id="lgStage">
+          <img id="lgImg" src="/lumen/web-assets/img/lens/01.jpg" alt="Halo Cat — Lens image 01" width="800" height="800">
+          <div class="lg-beam" id="lgBeam" aria-hidden="true"></div>
+        </div>
+        <div class="lg-side">
+          <div class="lg-name"><span id="lgName">Halo Cat</span></div>
+          <div class="lg-sub">Scan mode · the image set these knobs</div>
+          <div class="lg-knobs" id="lgKnobs">
+          <div class="lg-knob">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+              <circle class="val" cx="32" cy="32" r="25" stroke="#FF2E9F" stroke-dasharray="0 157.08" transform="rotate(135 32 32)" data-k="0"/>
+              <g class="ind" data-k="0"><line x1="32" y1="13" x2="32" y2="23"/></g>
+            </svg>
+            <b>Tone</b><span class="num" data-k="0">0.00</span>
+          </div>
+          <div class="lg-knob">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+              <circle class="val" cx="32" cy="32" r="25" stroke="#19E3E3" stroke-dasharray="0 157.08" transform="rotate(135 32 32)" data-k="1"/>
+              <g class="ind" data-k="1"><line x1="32" y1="13" x2="32" y2="23"/></g>
+            </svg>
+            <b>Motion</b><span class="num" data-k="1">0.00</span>
+          </div>
+          <div class="lg-knob">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+              <circle class="val" cx="32" cy="32" r="25" stroke="#FAFF00" stroke-dasharray="0 157.08" transform="rotate(135 32 32)" data-k="2"/>
+              <g class="ind" data-k="2"><line x1="32" y1="13" x2="32" y2="23"/></g>
+            </svg>
+            <b>Space</b><span class="num" data-k="2">0.00</span>
+          </div>
+          <div class="lg-knob">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <circle class="trk" cx="32" cy="32" r="25" stroke-dasharray="117.81 157.08" transform="rotate(135 32 32)"/>
+              <circle class="val" cx="32" cy="32" r="25" stroke="#E8E6E3" stroke-dasharray="0 157.08" transform="rotate(135 32 32)" data-k="3"/>
+              <g class="ind" data-k="3"><line x1="32" y1="13" x2="32" y2="23"/></g>
+            </svg>
+            <b>Texture</b><span class="num" data-k="3">0.00</span>
+          </div>
+          </div>
+        </div>
+      </div>
+      <div class="pb-transport">
+        <button class="pb-play" id="lgPlay" type="button" aria-label="Play">
+          <svg id="lgIcoPlay" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M3.4 1.8 12 7 3.4 12.2z" fill="currentColor"/></svg>
+          <svg id="lgIcoPause" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true" style="display:none"><path d="M3 2h3v10H3zM8 2h3v10H8z" fill="currentColor"/></svg>
+        </button>
+        <input class="pb-seek" id="lgSeek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+        <span class="pb-time" id="lgTime">0:00 / 0:00</span>
+      </div>
+      <div class="lg-grid" role="listbox" aria-label="Lens images — click to hear the same patch through each picture">
+        <button class="lg-thumb" type="button" data-name="Halo Cat" data-m="0.74 0.43 0.56 0.00"
+          data-img="/lumen/web-assets/img/lens/01.jpg" data-src="/lumen/web-assets/audio/lens/01.mp3">
+          <img src="/lumen/web-assets/img/lens/01.jpg" alt="Halo Cat — Lens image 01" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Afterglow" data-m="0.81 0.34 0.63 0.00"
+          data-img="/lumen/web-assets/img/lens/02.jpg" data-src="/lumen/web-assets/audio/lens/02.mp3">
+          <img src="/lumen/web-assets/img/lens/02.jpg" alt="Afterglow — Lens image 02" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Red Veil" data-m="0.57 0.26 0.63 0.00"
+          data-img="/lumen/web-assets/img/lens/03.jpg" data-src="/lumen/web-assets/audio/lens/03.mp3">
+          <img src="/lumen/web-assets/img/lens/03.jpg" alt="Red Veil — Lens image 03" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Pink Shore" data-m="0.50 0.43 0.54 0.00"
+          data-img="/lumen/web-assets/img/lens/04.jpg" data-src="/lumen/web-assets/audio/lens/04.mp3">
+          <img src="/lumen/web-assets/img/lens/04.jpg" alt="Pink Shore — Lens image 04" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Pop Static" data-m="0.54 0.50 0.22 0.28"
+          data-img="/lumen/web-assets/img/lens/05.jpg" data-src="/lumen/web-assets/audio/lens/05.mp3">
+          <img src="/lumen/web-assets/img/lens/05.jpg" alt="Pop Static — Lens image 05" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Halftone Stare" data-m="0.62 0.55 0.22 0.28"
+          data-img="/lumen/web-assets/img/lens/06.jpg" data-src="/lumen/web-assets/audio/lens/06.mp3">
+          <img src="/lumen/web-assets/img/lens/06.jpg" alt="Halftone Stare — Lens image 06" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Halftone Grin" data-m="0.64 0.52 0.34 0.16"
+          data-img="/lumen/web-assets/img/lens/07.jpg" data-src="/lumen/web-assets/audio/lens/07.mp3">
+          <img src="/lumen/web-assets/img/lens/07.jpg" alt="Halftone Grin — Lens image 07" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Tangerine Sun" data-m="0.65 0.45 0.57 0.00"
+          data-img="/lumen/web-assets/img/lens/08.jpg" data-src="/lumen/web-assets/audio/lens/08.mp3">
+          <img src="/lumen/web-assets/img/lens/08.jpg" alt="Tangerine Sun — Lens image 08" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Cloud Arch" data-m="0.62 0.48 0.60 0.00"
+          data-img="/lumen/web-assets/img/lens/09.jpg" data-src="/lumen/web-assets/audio/lens/09.mp3">
+          <img src="/lumen/web-assets/img/lens/09.jpg" alt="Cloud Arch — Lens image 09" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Liftoff" data-m="0.62 0.37 0.63 0.00"
+          data-img="/lumen/web-assets/img/lens/10.jpg" data-src="/lumen/web-assets/audio/lens/10.mp3">
+          <img src="/lumen/web-assets/img/lens/10.jpg" alt="Liftoff — Lens image 10" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Neon Howl" data-m="0.71 0.58 0.33 0.17"
+          data-img="/lumen/web-assets/img/lens/11.jpg" data-src="/lumen/web-assets/audio/lens/11.mp3">
+          <img src="/lumen/web-assets/img/lens/11.jpg" alt="Neon Howl — Lens image 11" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Glitch Knit" data-m="0.58 0.57 0.47 0.03"
+          data-img="/lumen/web-assets/img/lens/12.jpg" data-src="/lumen/web-assets/audio/lens/12.mp3">
+          <img src="/lumen/web-assets/img/lens/12.jpg" alt="Glitch Knit — Lens image 12" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Neon Rex" data-m="0.56 0.52 0.28 0.21"
+          data-img="/lumen/web-assets/img/lens/13.jpg" data-src="/lumen/web-assets/audio/lens/13.mp3">
+          <img src="/lumen/web-assets/img/lens/13.jpg" alt="Neon Rex — Lens image 13" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Jungle Peel" data-m="0.54 0.49 0.43 0.07"
+          data-img="/lumen/web-assets/img/lens/14.jpg" data-src="/lumen/web-assets/audio/lens/14.mp3">
+          <img src="/lumen/web-assets/img/lens/14.jpg" alt="Jungle Peel — Lens image 14" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Smug Pond" data-m="0.48 0.39 0.52 0.00"
+          data-img="/lumen/web-assets/img/lens/15.jpg" data-src="/lumen/web-assets/audio/lens/15.mp3">
+          <img src="/lumen/web-assets/img/lens/15.jpg" alt="Smug Pond — Lens image 15" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Candy Skull" data-m="0.83 0.32 0.61 0.00"
+          data-img="/lumen/web-assets/img/lens/16.jpg" data-src="/lumen/web-assets/audio/lens/16.mp3">
+          <img src="/lumen/web-assets/img/lens/16.jpg" alt="Candy Skull — Lens image 16" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Neon Drip" data-m="0.48 0.51 0.54 0.00"
+          data-img="/lumen/web-assets/img/lens/17.jpg" data-src="/lumen/web-assets/audio/lens/17.mp3">
+          <img src="/lumen/web-assets/img/lens/17.jpg" alt="Neon Drip — Lens image 17" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Bubblegum Bust" data-m="0.72 0.44 0.45 0.05"
+          data-img="/lumen/web-assets/img/lens/18.jpg" data-src="/lumen/web-assets/audio/lens/18.mp3">
+          <img src="/lumen/web-assets/img/lens/18.jpg" alt="Bubblegum Bust — Lens image 18" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Ember Walk" data-m="0.54 0.40 0.59 0.00"
+          data-img="/lumen/web-assets/img/lens/19.jpg" data-src="/lumen/web-assets/audio/lens/19.mp3">
+          <img src="/lumen/web-assets/img/lens/19.jpg" alt="Ember Walk — Lens image 19" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Vapor Peak" data-m="0.59 0.45 0.50 0.00"
+          data-img="/lumen/web-assets/img/lens/20.jpg" data-src="/lumen/web-assets/audio/lens/20.mp3">
+          <img src="/lumen/web-assets/img/lens/20.jpg" alt="Vapor Peak — Lens image 20" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Grid Horizon" data-m="0.51 0.37 0.52 0.00"
+          data-img="/lumen/web-assets/img/lens/21.jpg" data-src="/lumen/web-assets/audio/lens/21.mp3">
+          <img src="/lumen/web-assets/img/lens/21.jpg" alt="Grid Horizon — Lens image 21" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Liminal Hall" data-m="0.54 0.36 0.54 0.00"
+          data-img="/lumen/web-assets/img/lens/22.jpg" data-src="/lumen/web-assets/audio/lens/22.mp3">
+          <img src="/lumen/web-assets/img/lens/22.jpg" alt="Liminal Hall — Lens image 22" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="Night Drift" data-m="0.76 0.39 0.49 0.01"
+          data-img="/lumen/web-assets/img/lens/23.jpg" data-src="/lumen/web-assets/audio/lens/23.mp3">
+          <img src="/lumen/web-assets/img/lens/23.jpg" alt="Night Drift — Lens image 23" loading="lazy" width="800" height="800"></button>
+        <button class="lg-thumb" type="button" data-name="XO Skull" data-m="0.65 0.68 0.52 0.00"
+          data-img="/lumen/web-assets/img/lens/24.jpg" data-src="/lumen/web-assets/audio/lens/24.mp3">
+          <img src="/lumen/web-assets/img/lens/24.jpg" alt="XO Skull — Lens image 24" loading="lazy" width="800" height="800"></button>
+      </div>
+    </div>
+    <!-- TODO(pack): once the image pack zip is attached to the GitHub release, uncomment:
+    <p style="margin-top:16px"><a class="btn" href="https://github.com/pixelsncodes/lumen/releases/latest/download/Lumen-Lens-Pack.zip">Download the image pack</a>
+    <span class="small" style="margin-left:12px">Drop any of them on your own Lumen.</span></p>
+    -->
   </div>
 </section>
 
@@ -1046,6 +1263,12 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   /* ---------- audio ---------- */
   var audio = new Audio();
   audio.preload = "none";
+  audio.addEventListener("play", function(){
+    document.dispatchEvent(new CustomEvent("lumen-audio", { detail:"pb" }));
+  });
+  document.addEventListener("lumen-audio", function(e){
+    if (e.detail !== "pb" && !audio.paused) audio.pause();
+  });
   var actx=null, analyser=null, freqData=null;
 
   function ensureGraph(){
@@ -1274,6 +1497,124 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
   for (var d=0; d<items.length; d++){ if (items[d].dataset.default){ def = items[d]; break; } }
   select(def || items[0]);
   draw();
+})();
+
+/* ============================================================
+   Lens image lab — click an image, hear the same patch through
+   it; the four macros animate to the values the image's color
+   set (COLORS), and the beam tracks playback like the plugin.
+   ============================================================ */
+(function(){
+  var root = document.getElementById("image-lab");
+  if (!root) return;
+
+  var thumbs = Array.prototype.slice.call(root.querySelectorAll(".lg-thumb"));
+  var stage  = document.getElementById("lgStage");
+  var imgEl  = document.getElementById("lgImg");
+  var beam   = document.getElementById("lgBeam");
+  var nameEl = document.getElementById("lgName");
+  var playBt = document.getElementById("lgPlay");
+  var icoPlay= document.getElementById("lgIcoPlay");
+  var icoPause=document.getElementById("lgIcoPause");
+  var seekEl = document.getElementById("lgSeek");
+  var timeEl = document.getElementById("lgTime");
+  var vals   = Array.prototype.slice.call(root.querySelectorAll(".lg-knob .val"));
+  var inds   = Array.prototype.slice.call(root.querySelectorAll(".lg-knob .ind"));
+  var nums   = Array.prototype.slice.call(root.querySelectorAll(".lg-knob .num"));
+  if (!thumbs.length || !stage) return;
+
+  var C = 2*Math.PI*25, ARC = C*0.75;
+
+  var audio = new Audio();
+  audio.preload = "none";
+  audio.loop = true;
+  audio.addEventListener("play", function(){
+    document.dispatchEvent(new CustomEvent("lumen-audio", { detail:"lg" }));
+  });
+  document.addEventListener("lumen-audio", function(e){
+    if (e.detail !== "lg" && !audio.paused) audio.pause();
+  });
+
+  function setKnobs(m){
+    for (var i=0;i<4;i++){
+      var v = m[i];
+      vals[i].style.strokeDasharray = (ARC*v).toFixed(2) + " " + C.toFixed(2);
+      inds[i].style.transform = "rotate(" + (-135 + v*270).toFixed(1) + "deg)";
+      nums[i].textContent = v.toFixed(2);
+    }
+  }
+
+  var current = null;
+  function select(t){
+    thumbs.forEach(function(b){ b.setAttribute("aria-current", b===t ? "true" : "false"); });
+    current = t;
+    nameEl.textContent = t.dataset.name;
+    if (imgEl.getAttribute("src") !== t.dataset.img){
+      imgEl.src = t.dataset.img;
+      imgEl.alt = t.dataset.name + " — Lens image";
+    }
+    setKnobs(t.dataset.m.split(" ").map(Number));
+    var abs = new URL(t.dataset.src, location.href).href;
+    if (audio.src !== abs){ audio.src = t.dataset.src; seekEl.value = 0; }
+  }
+
+  thumbs.forEach(function(t){
+    t.addEventListener("click", function(){
+      if (t === current){
+        audio.paused ? audio.play().catch(function(){}) : audio.pause();
+      } else {
+        select(t);
+        audio.play().catch(function(){});
+      }
+    });
+  });
+
+  playBt.addEventListener("click", function(){
+    audio.paused ? audio.play().catch(function(){}) : audio.pause();
+  });
+
+  function fmt(t){
+    if (!isFinite(t) || t<0) t = 0;
+    var m = Math.floor(t/60), s = Math.floor(t%60);
+    return m + ":" + (s<10?"0":"") + s;
+  }
+  var seeking = false;
+  function syncTime(){
+    var d = audio.duration;
+    timeEl.textContent = fmt(audio.currentTime) + " / " + fmt(d);
+    if (isFinite(d) && d>0 && !seeking) seekEl.value = (audio.currentTime/d)*100;
+  }
+  seekEl.addEventListener("input", function(){
+    seeking = true;
+    if (isFinite(audio.duration)) audio.currentTime = (seekEl.value/100)*audio.duration;
+  });
+  seekEl.addEventListener("change", function(){ seeking=false; });
+  audio.addEventListener("timeupdate", syncTime);
+  audio.addEventListener("loadedmetadata", syncTime);
+
+  var raf = null;
+  function beamLoop(){
+    raf = null;
+    if (!audio.paused && isFinite(audio.duration) && audio.duration>0){
+      beam.style.left = ((audio.currentTime/audio.duration)*100).toFixed(2) + "%";
+      raf = requestAnimationFrame(beamLoop);
+    }
+  }
+  audio.addEventListener("play", function(){
+    setIcon(true); stage.classList.add("scanning");
+    if (!raf) raf = requestAnimationFrame(beamLoop);
+    playBt.setAttribute("aria-label","Pause");
+  });
+  audio.addEventListener("pause", function(){
+    setIcon(false); stage.classList.remove("scanning");
+    playBt.setAttribute("aria-label","Play");
+  });
+  function setIcon(playing){
+    icoPlay.style.display  = playing ? "none" : "";
+    icoPause.style.display = playing ? "" : "none";
+  }
+
+  select(thumbs[0]);
 })();
 </script>
 </body>
