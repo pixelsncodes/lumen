@@ -371,6 +371,18 @@ figure.shot figcaption{
   margin-top:10px; line-height:1.5;
 }
 
+/* ---------- lens UI pair (PLAY / DEEP) ---------- */
+.lens-ui{ display:flex; flex-direction:column; gap:18px; margin:22px 0; }
+.lens-ui figure{ margin:0; }
+.lens-ui img{
+  width:100%; height:auto; border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--panel); display:block;
+}
+.lens-ui figcaption{
+  font-family:var(--mono); font-size:11px; letter-spacing:var(--track); color:var(--muted);
+  margin-top:10px; line-height:1.5;
+}
+
 /* ---------- two-column helpers ---------- */
 .cols{ display:grid; grid-template-columns:1fr 1fr; gap:26px; }
 @media (max-width:820px){ .cols{ grid-template-columns:1fr; } }
@@ -1329,17 +1341,24 @@ footer .wrap{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-betw
     </div>
 
     <!-- TODO(video:lens_scan): once the live capture exists, uncomment this figure.
-         (lens_panel.png stays a live asset regardless: the figure below uses it.)
+         (the poster image is intentionally kept in the repo even though nothing in the
+         rendered page references it right now: this video needs it.)
     <figure class="shot tall">
       <video src="/lumen/web-assets/vid/lens_scan.mp4" controls loop muted playsinline preload="none"
              poster="/lumen/web-assets/img/lens_panel.png"></video>
       <figcaption>The scan beam traveling through an image while a chord is held. <span class="pending">Live capture drops in here.</span></figcaption>
     </figure>
     -->
-    <figure class="shot">
-      <img src="/lumen/web-assets/img/lens_panel.png" alt="The Lens panel with a warm image loaded. The scan playhead crosses the picture and the image's color has driven the four macros." loading="lazy" width="1040" height="660">
-      <figcaption>An image loaded into the Lens. Clear it with × and your knobs snap back.</figcaption>
-    </figure>
+    <div class="lens-ui">
+      <figure>
+        <img src="/lumen/web-assets/img/UI/lumen-play-mode.png" alt="Lumen in PLAY view: waterfall, Lens panel, four macro knobs, keyboard" loading="lazy" width="1040" height="660">
+        <figcaption>PLAY · the performance view</figcaption>
+      </figure>
+      <figure>
+        <img src="/lumen/web-assets/img/UI/lumen-deep-mode.png" alt="Lumen in DEEP view: oscillator, filters, envelopes, mod matrix, FX" loading="lazy" width="1040" height="660">
+        <figcaption>DEEP · the full engine</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 
