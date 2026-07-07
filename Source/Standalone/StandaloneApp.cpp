@@ -24,6 +24,7 @@
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
 #include "PluginProcessor.h"
 #include "State/PresetManager.h"
 #include "UI/LumenLookAndFeel.h"
@@ -172,6 +173,20 @@ public:
                     if (! lumenProcessor->lensController().loadImageFile (imageFile))
                         printToStdout ("Warning: --lens-image could not decode "
                                        + imageFile.getFullPathName() + "\n");
+                }
+
+            // --melody: generate a melody from the loaded Lens image and open
+            // the MELODY panel, so the screenshot shows the generator + the
+            // sampling-grid overlay (and prints the result for verification).
+            if (args.contains ("--melody"))
+                if (auto* lumenProcessor = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
+                {
+                    auto& mc = lumenProcessor->melodyController();
+                    mc.generate();
+                    mc.setPanelActive (true);
+                    printToStdout ("Melody: key='" + mc.detectedKey()
+                                   + "' notes=" + juce::String ((int) mc.sequence().steps.size())
+                                   + " hasMelody=" + juce::String (mc.hasMelody() ? 1 : 0) + "\n");
                 }
 
             harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
