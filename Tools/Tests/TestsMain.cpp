@@ -1451,9 +1451,16 @@ public:
             EngineParams stateParams;
             for (const auto& child : state)
                 if (child.hasType ("PARAM"))
-                    expect (bindings::set (stateParams, child["id"].toString(),
-                                           static_cast<float> (static_cast<double> (child["value"]))),
-                            "state param binds: " + child["id"].toString());
+                {
+                    const auto id = child["id"].toString();
+                    const bool bound = bindings::set (stateParams, id,
+                        static_cast<float> (static_cast<double> (child["value"])));
+                    // Melody params (the Lumena generator's controls) are UI /
+                    // generator state, not engine bindings, so they legitimately
+                    // don't bind — every other parameter must.
+                    if (! id.startsWith ("melody"))
+                        expect (bound, "state param binds: " + id);
+                }
             if (preset.initMods)
                 modstate::ensureTrees (state); // what loadPresetState() does
             modstate::buildConfig (state, stateParams.mod);
@@ -1560,7 +1567,8 @@ public:
                           juce::String (preset.category));
             expectEquals (state.getProperty ("presetAuthor").toString(),
                           juce::String (presets::kFactoryAuthor));
-            expectEquals (static_cast<int> (state.getProperty ("stateVersion")), 1);
+            expectEquals (static_cast<int> (state.getProperty ("stateVersion")),
+                          lumen::params::kStateVersion);
 
             const auto xml1 = state.toXmlString();
             const auto xml2 = juce::ValueTree::fromXml (xml1).toXmlString();
