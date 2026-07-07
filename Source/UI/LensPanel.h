@@ -2,6 +2,8 @@
 
 #include "UI/Controls.h"
 
+#include <cstdint>
+
 // Lens UI (SPEC sections 13/14): the image with an animated scanline synced
 // to the live morph position of the target oscillator, the Scan/Spectral
 // toggle, "Set patch from colors", and the A/B oscillator target selector.
@@ -59,6 +61,13 @@ private:
     int lastVersion = -1;
     int lastMode = -1;
     int lastOsc = -1;
+
+    // Melody sampling-grid overlay, drawn over the Lens image while the Melody
+    // panel is active; the sounding-cell glow fades over ~150 ms.
+    bool lastMelodyActive = false;
+    std::uint32_t melodyLastTrigger = 0;
+    float melodyGlow = 0.0f;
+    int melodyGlowCol = -1, melodyGlowRow = -1;
 };
 
 // Image view + the three Lens controls. `compact` = the Deep-view card
@@ -79,4 +88,5 @@ private:
     LensImageView image;
     TabsBar modeTabs, targetTabs;
     juce::TextButton colorsChip { "COLORS" };
+    juce::TextButton melodyChip { "MELODY" };
 };

@@ -1,6 +1,8 @@
 #include "UI/PluginEditor.h"
 
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
 #include "State/MidiLearn.h"
 #include "UI/Theme.h"
 #include "UI/Tooltips.h"
@@ -37,13 +39,17 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     deepView = std::make_unique<DeepView> (shared, history);
     playView = std::make_unique<PlayView> (shared, history, keyboardState);
 
+    melodyPanel = std::make_unique<MelodyPanel> (shared);
+
     content.addAndMakeVisible (*header);
     content.addAndMakeVisible (*playView);
     content.addChildComponent (*deepView);
+    content.addChildComponent (*melodyPanel); // on top of the views, hidden until toggled
     content.setBounds (0, 0, kBaseWidth, kBaseHeight);
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
+    melodyPanel->setBounds ((kBaseWidth - 580) / 2, 150, 580, 396);
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);
@@ -292,6 +298,21 @@ void LumenAudioProcessorEditor::timerCallback()
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
     else
         playView->animate();
+
+    // Melody overlay: follow the Lens "MELODY" toggle, animate while visible,
+    // and reclaim any sequence the audio thread retired.
+    {
+        const bool showMelody = processor.melodyController().isPanelActive();
+        if (melodyPanel->isVisible() != showMelody)
+        {
+            melodyPanel->setVisible (showMelody);
+            if (showMelody)
+                melodyPanel->toFront (false);
+        }
+        if (showMelody)
+            melodyPanel->animate();
+        processor.melodyPlayer().collectGarbage();
+    }
 
     if (dropMessageFrames > 0 && --dropMessageFrames == 0)
         repaint();

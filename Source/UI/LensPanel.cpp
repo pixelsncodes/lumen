@@ -2,7 +2,10 @@
 
 #include "Engine/ModDestinations.h"
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
 #include "State/ModState.h"
+#include "UI/MelodyPanel.h" // melodygrid::draw
 #include "UI/Theme.h"
 
 using namespace lumen;
@@ -214,6 +217,26 @@ void LensImageView::paint (juce::Graphics& g)
         g.setColour (white.withAlpha (0.95f));
         g.fillRect (juce::Rectangle<float> (x - beam * 0.5f, dest.getY(), beam, dest.getHeight()));
     }
+
+    // Melody sampling grid: while the Melody panel is active, overlay the grid
+    // (and the sampled path / sounding-cell glow) on the Lens image so the
+    // melody visibly traces its way across the picture.
+    auto& melody = shared.processor.melodyController();
+    if (melody.isPanelActive())
+    {
+        const auto live = shared.processor.melodyPlayer().liveState();
+        melodygrid::DrawInfo info;
+        info.imageArea = dest;
+        info.cols = melody.hasMelody() ? melody.gridCols() : MelodyController::kGridResolution;
+        info.rows = melody.hasMelody() ? melody.gridRows() : MelodyController::kGridResolution;
+        info.seq = melody.hasMelody() ? &melody.sequence() : nullptr;
+        info.liveCol = melodyGlowCol;
+        info.liveRow = melodyGlowRow;
+        info.glow = melodyGlow;
+        info.playing = live.playing;
+        info.accent = theme::neonYellow;
+        melodygrid::draw (g, info);
+    }
 }
 
 void LensImageView::animate()
@@ -224,8 +247,36 @@ void LensImageView::animate()
     const int version = lens.tableVersion();
     const int mode = lens.mode();
 
+    // Melody overlay glow: track the currently-sounding cell and fade it out.
+    auto& melody = shared.processor.melodyController();
+    const bool melodyActive = melody.isPanelActive();
+    bool melodyRepaint = melodyActive != lastMelodyActive;
+    lastMelodyActive = melodyActive;
+    if (melodyActive)
+    {
+        const auto live = shared.processor.melodyPlayer().liveState();
+        if (live.triggerSeq != melodyLastTrigger)
+        {
+            melodyLastTrigger = live.triggerSeq;
+            melodyGlow = 1.0f;
+            melodyGlowCol = live.col;
+            melodyGlowRow = live.row;
+            melodyRepaint = true;
+        }
+        else if (melodyGlow > 0.0f)
+        {
+            melodyGlow = juce::jmax (0.0f, melodyGlow - 0.11f);
+            melodyRepaint = true;
+        }
+        if (! live.playing && melodyGlow > 0.0f)
+        {
+            melodyGlow = 0.0f;
+            melodyRepaint = true;
+        }
+    }
+
     if (std::abs (morph - lastMorph) > 0.002f || version != lastVersion
-        || mode != lastMode || osc != lastOsc)
+        || mode != lastMode || osc != lastOsc || melodyRepaint)
     {
         lastMorph = morph;
         lastVersion = version;
@@ -267,6 +318,12 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
         lens.setChroma (! lens.chroma());
     };
     addAndMakeVisible (colorsChip);
+
+    melodyChip.setClickingTogglesState (false);
+    melodyChip.setColour (juce::TextButton::buttonOnColourId, theme::neonYellow);
+    melodyChip.setTooltip ("Open the MELODY panel: turn this image into a playable melody");
+    melodyChip.onClick = [this] { shared.processor.melodyController().togglePanel(); };
+    addAndMakeVisible (melodyChip);
 }
 
 void LensPanel::resized()
@@ -283,6 +340,8 @@ void LensPanel::resized()
         targetTabs.setBounds (column.removeFromTop (17));
         column.removeFromTop (5);
         colorsChip.setBounds (column.removeFromTop (17));
+        column.removeFromTop (5);
+        melodyChip.setBounds (column.removeFromTop (17));
     }
     else
     {
@@ -294,7 +353,9 @@ void LensPanel::resized()
         image.setBounds (area.withTrimmedBottom (6));
         targetTabs.setBounds (controls.removeFromRight (44));
         controls.removeFromRight (6);
-        colorsChip.setBounds (controls.removeFromRight (62));
+        melodyChip.setBounds (controls.removeFromRight (58));
+        controls.removeFromRight (6);
+        colorsChip.setBounds (controls.removeFromRight (58));
         controls.removeFromRight (6);
         modeTabs.setBounds (controls);
     }
@@ -344,4 +405,8 @@ void LensPanel::animate()
         colorsChip.setToggleState (lens.chroma(), juce::dontSendNotification);
         repaint();
     }
+
+    const bool melodyActive = shared.processor.melodyController().isPanelActive();
+    if (melodyChip.getToggleState() != melodyActive)
+        melodyChip.setToggleState (melodyActive, juce::dontSendNotification);
 }
