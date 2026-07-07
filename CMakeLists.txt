@@ -18,6 +18,10 @@ FetchContent_MakeAvailable(JUCE)
 # Built as a plain static lib; its own tests/demo stay off inside our tree.
 set(LUMENA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/lumena)
+# The VST3 is a shared module (.so/.dll), so every object linked into it must be
+# position-independent. Lumena is a static lib and doesn't set this itself, so
+# force PIC here (the Standalone exe links either way; the VST3 needs it).
+set_target_properties(Lumena PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # /W4 /WX (+ correct UTF-8 source decoding) on project sources only;
 # JUCE module code keeps its own warning setup.
