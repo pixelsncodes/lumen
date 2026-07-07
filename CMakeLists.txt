@@ -14,6 +14,11 @@ FetchContent_Declare(JUCE
 )
 FetchContent_MakeAvailable(JUCE)
 
+# Lumena — image-driven melody generator core (git submodule, external/lumena).
+# Built as a plain static lib; its own tests/demo stay off inside our tree.
+set(LUMENA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/lumena)
+
 # /W4 /WX (+ correct UTF-8 source decoding) on project sources only;
 # JUCE module code keeps its own warning setup.
 function(lumen_strict_sources)
@@ -133,6 +138,7 @@ target_compile_definitions(Lumen PUBLIC
 target_link_libraries(Lumen
     PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_opengl
             juce::juce_cryptography LumenAssets
+            Lumena::Lumena
     PUBLIC  juce::juce_recommended_config_flags
 )
 
