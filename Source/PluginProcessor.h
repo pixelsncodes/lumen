@@ -9,7 +9,8 @@
 #include <memory>
 #include <vector>
 
-namespace lumen { class LensController; class MidiLearnController; class PresetManager; }
+namespace lumen { class LensController; class MidiLearnController; class PresetManager;
+                  class MelodyController; class MelodyPlayer; }
 
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
@@ -67,6 +68,11 @@ public:
     // Message thread only.
     lumen::LensController& lensController() noexcept { return *lens; }
 
+    // Melody generator (Lumena integration). The controller is message-thread
+    // only; the player publishes live playback state read on the UI timer.
+    lumen::MelodyController& melodyController() noexcept { return *melody; }
+    lumen::MelodyPlayer& melodyPlayer() noexcept { return *melodyPlayerObj; }
+
     // Latest parsed matrix/macro config (stable between UI edits) — used by
     // knobs to know their modulation span without re-parsing the ValueTree.
     const lumen::mod::Config* currentModConfig() const noexcept
@@ -119,6 +125,8 @@ private:
 
     lumen::SynthEngine engine;
     std::unique_ptr<lumen::LensController> lens;
+    std::unique_ptr<lumen::MelodyPlayer> melodyPlayerObj;
+    std::unique_ptr<lumen::MelodyController> melody;
     std::unique_ptr<lumen::PresetManager> presets;
     std::unique_ptr<lumen::MidiLearnController> midiLearnController;
 

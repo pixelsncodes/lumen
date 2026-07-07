@@ -4,7 +4,8 @@
 
 namespace lumen::params
 {
-inline constexpr int kStateVersion = 1;
+// v2: adds the Melody generator's musical parameters (Lumena integration).
+inline constexpr int kStateVersion = 2;
 
 // Frozen first 8 (SPEC section 12, Maschine knob page 1).
 // NEVER reorder, remove, or insert before these.
@@ -121,6 +122,15 @@ inline constexpr const char* reverbWidth   = "reverbWidth";
 // --- Phase 7: voice modes + glide (SPEC section 11) ----------------------
 inline constexpr const char* voiceMode = "voiceMode";
 inline constexpr const char* glideTime = "glideTime";
+
+// --- Melody generator (Lumena integration) -------------------------------
+// The musical controls of the image-driven melody. The RNG seed and lock
+// toggle are NOT parameters (they live in the MELODY state sub-tree).
+inline constexpr const char* melodyKeyMode   = "melodyKeyMode";
+inline constexpr const char* melodyLength    = "melodyLength";
+inline constexpr const char* melodyBias      = "melodyBias";
+inline constexpr const char* melodyPhrase    = "melodyPhrase";
+inline constexpr const char* melodyOrnaments = "melodyOrnaments";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

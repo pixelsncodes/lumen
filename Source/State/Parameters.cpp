@@ -272,6 +272,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         glideRange, defaults.glideSeconds,
         Attributes().withLabel ("s").withStringFromValueFunction (secondsToText)));
 
+    // Melody generator (Lumena). Musical controls only — the RNG seed and lock
+    // toggle persist in the MELODY state sub-tree, not as parameters. Defaults
+    // mirror Lumena's MelodyOptions (bias 0.25, ornaments 0.15, Phrased).
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyKeyMode), "Melody Key Mode",
+        juce::StringArray { "From Image", "Random" }, 0));
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyLength), "Melody Length",
+        juce::StringArray { "8", "16", "32" }, 1)); // default 16
+    layout.add (std::make_unique<FloatParam> (pid (melodyBias), "Melody Brightness Bias",
+        unitRange, 0.25f, unitAttr));
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyPhrase), "Melody Mode",
+        juce::StringArray { "Phrased", "Freeform" }, 0));
+    layout.add (std::make_unique<FloatParam> (pid (melodyOrnaments), "Melody Ornaments",
+        unitRange, 0.15f, unitAttr));
+
     return layout;
 }
 } // namespace lumen::params

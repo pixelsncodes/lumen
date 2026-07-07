@@ -102,20 +102,32 @@ set(LUMEN_PLUGIN_SOURCES
     Source/Lens/LensController.cpp
     Source/State/MidiLearn.cpp
     Source/State/PresetManager.cpp
+    Source/State/MelodyState.cpp
+    Source/Melody/MelodyPlayer.cpp
     Source/UI/LumenLookAndFeel.cpp
     Source/UI/Controls.cpp
     Source/UI/Visualizers.cpp
     Source/UI/LensPanel.cpp
+    Source/UI/MelodyPanel.cpp
     Source/UI/Cards.cpp
     Source/UI/PluginEditor.cpp
     ${LUMEN_ENGINE_SOURCES}
 )
+# MelodyController.cpp is the one plugin TU that includes the Lumena headers.
+# It is kept out of LUMEN_PLUGIN_SOURCES so the /W4 /WX strict pass never sees
+# the third-party headers (the library builds under its own warning setup).
+set(LUMEN_MELODY_BRIDGE Source/Melody/MelodyController.cpp)
 target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
+    ${LUMEN_MELODY_BRIDGE}
     Source/PluginProcessor.h
     Source/Lens/LensController.h
     Source/State/MidiLearn.h
     Source/State/PresetManager.h
+    Source/State/MelodyState.h
+    Source/Melody/MelodySequence.h
+    Source/Melody/MelodyPlayer.h
+    Source/Melody/MelodyController.h
     Source/UI/Theme.h
     Source/UI/Tooltips.h
     Source/UI/LumenLookAndFeel.h
@@ -123,6 +135,7 @@ target_sources(Lumen PRIVATE
     Source/UI/WaterfallModel.h
     Source/UI/Visualizers.h
     Source/UI/LensPanel.h
+    Source/UI/MelodyPanel.h
     Source/UI/Cards.h
     Source/UI/PluginEditor.h
     Source/Engine/UiTap.h
