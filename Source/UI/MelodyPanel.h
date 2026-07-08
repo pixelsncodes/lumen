@@ -4,6 +4,8 @@
 #include "Melody/MelodySequence.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 // Shared grid-overlay drawing used by both the Melody overlay's image view and
 // the small Lens image view (so the sampling grid, the sounding-cell glow and
@@ -82,15 +84,30 @@ private:
     juce::TextButton closeButton { "x" };
     GridView grid;
 
-    juce::TextButton generateButton { "GENERATE" };
     juce::TextButton playButton { "PLAY" };
-    TabsBar keyModeTabs, lengthTabs, phraseTabs;
-    juce::TextButton rerollButton { "RE-ROLL" };
-    juce::TextButton lockButton { "LOCK" };
-    std::unique_ptr<ModKnob> biasKnob, ornamentsKnob;
 
+    // Mode selector + grouped controls.
+    TabsBar modeTabs;          // MELODY / CHORDS / ARP
+    TabsBar keyModeTabs;       // FROM IMAGE / RANDOM
+    TabsBar lengthTabs;        // 8 / 16 / 32  (LENGTH)
+    TabsBar phraseTabs;        // PHRASED / FREEFORM (Melody mode)
+    TabsBar arpPatternTabs;    // UP / DOWN / UP-DN / CONV / RAND (Arp mode)
+    TabsBar loopTabs;          // OFF / 1 / 2 / 4 / 8  (LOOP LENGTH)
+
+    // Four musical macro knobs.
+    std::unique_ptr<ModKnob> energyKnob, complexityKnob, imageKnob, repetitionKnob;
+
+    // Regeneration.
+    juce::TextButton regenerateButton { "REGENERATE" };
+    juce::TextButton mutateButton { "MUTATE" };
+    std::unique_ptr<ParamToggle> lockRhythm, lockPitch;
+
+    // Export.
     juce::TextButton saveButton { "SAVE .MID" };
     MidiDragSource dragMidi;
+
+    // Section captions, computed in resized() and drawn in paint().
+    std::vector<std::pair<juce::String, juce::Rectangle<int>>> sectionLabels;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPanel)
 };

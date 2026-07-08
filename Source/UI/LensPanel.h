@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Controls.h"
+#include "UI/Theme.h"
 
 #include <cstdint>
 
@@ -70,6 +71,34 @@ private:
     int melodyGlowCol = -1, melodyGlowRow = -1;
 };
 
+// A small square icon toggle used for the COLORS and MELODY chips, so they stop
+// eating the horizontal room the SCAN/SPECTRAL tabs need. Draws a vector glyph
+// (a colour-swatch palette or an eighth note) in a rounded well; tints with an
+// accent colour when toggled on.
+class LensIconToggle final : public juce::Component,
+                             public juce::SettableTooltipClient
+{
+public:
+    enum class Glyph { colors, melody };
+    LensIconToggle (Glyph glyphToDraw, juce::Colour onColour, juce::String tip);
+
+    std::function<void()> onClick;
+
+    bool getToggleState() const noexcept { return on; }
+    void setToggleState (bool shouldBeOn) { if (on != shouldBeOn) { on = shouldBeOn; repaint(); } }
+
+    void paint (juce::Graphics& g) override;
+    void mouseEnter (const juce::MouseEvent&) override { hovered = true; repaint(); }
+    void mouseExit  (const juce::MouseEvent&) override { hovered = false; repaint(); }
+    void mouseUp    (const juce::MouseEvent& e) override;
+
+private:
+    Glyph glyph;
+    juce::Colour accent;
+    bool on = false;
+    bool hovered = false;
+};
+
 // Image view + the three Lens controls. `compact` = the Deep-view card
 // interior (image left, controls right); otherwise the Play-view panel
 // (image on top, controls below, with its own frame + title).
@@ -87,6 +116,8 @@ private:
     bool compact;
     LensImageView image;
     TabsBar modeTabs, targetTabs;
-    juce::TextButton colorsChip { "COLORS" };
-    juce::TextButton melodyChip { "MELODY" };
+    LensIconToggle colorsChip { LensIconToggle::Glyph::colors, lumen::theme::accentMod,
+                               "COLORS: an image drop also sets the patch from the image's colors" };
+    LensIconToggle melodyChip { LensIconToggle::Glyph::melody, lumen::theme::neonYellow,
+                               "MELODY: turn this image into a playable melody" };
 };

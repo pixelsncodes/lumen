@@ -49,7 +49,7 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
-    melodyPanel->setBounds ((kBaseWidth - 580) / 2, 150, 580, 396);
+    melodyPanel->setBounds ((kBaseWidth - 580) / 2, 140, 580, 476);
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);

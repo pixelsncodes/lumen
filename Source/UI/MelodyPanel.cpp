@@ -216,12 +216,18 @@ void MelodyPanel::MidiDragSource::mouseDrag (const juce::MouseEvent& e)
 MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     : shared (sharedContext),
       grid (sharedContext),
+      modeTabs ({ "MELODY", "CHORDS", "ARP" },
+                [this] (int i) { setChoiceParam (params::melodyMode, i); }),
       keyModeTabs ({ "FROM IMAGE", "RANDOM" },
                    [this] (int i) { setChoiceParam (params::melodyKeyMode, i); }),
       lengthTabs ({ "8", "16", "32" },
                   [this] (int i) { setChoiceParam (params::melodyLength, i); }),
       phraseTabs ({ "PHRASED", "FREEFORM" },
                   [this] (int i) { setChoiceParam (params::melodyPhrase, i); }),
+      arpPatternTabs ({ "UP", "DOWN", "UP/DN", "CONV", "RAND" },
+                      [this] (int i) { setChoiceParam (params::melodyArpPattern, i); }),
+      loopTabs ({ "OFF", "1", "2", "4", "8" },
+                [this] (int i) { setChoiceParam (params::melodyLoopLength, i); }),
       dragMidi (sharedContext)
 {
     addAndMakeVisible (grid);
@@ -230,11 +236,6 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     closeButton.setColour (juce::TextButton::textColourOffId, theme::textSecondary);
     closeButton.onClick = [this] { shared.processor.melodyController().setPanelActive (false); };
     addAndMakeVisible (closeButton);
-
-    styleChip (generateButton, theme::neonYellow);
-    generateButton.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
-    generateButton.onClick = [this] { shared.processor.melodyController().generate(); };
-    addAndMakeVisible (generateButton);
 
     styleChip (playButton, theme::neonYellow);
     playButton.onClick = [this]
@@ -254,37 +255,57 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     };
     addAndMakeVisible (playButton);
 
-    // These choice params are driven by the tab strips above (not via a JUCE
-    // attachment), so register them for the --check-params UI-coverage audit.
+    // Tab strips drive their choice params directly (no JUCE attachment), so
+    // register them for the --check-params UI-coverage audit.
+    shared.registerAttachment (params::melodyMode);
     shared.registerAttachment (params::melodyKeyMode);
     shared.registerAttachment (params::melodyLength);
     shared.registerAttachment (params::melodyPhrase);
+    shared.registerAttachment (params::melodyArpPattern);
+    shared.registerAttachment (params::melodyLoopLength);
 
+    modeTabs.setTooltip ("Melody: a single line. Chords: a block-chord progression. Arp: a chord-tone arpeggio");
     keyModeTabs.setTooltip ("Derive the key from the image, or pick one at random");
-    lengthTabs.setTooltip ("Number of notes in the generated melody");
+    lengthTabs.setTooltip ("LENGTH: number of notes (chords: number of chords) generated");
     phraseTabs.setTooltip ("Phrased: motif/variation/cadence structure. Freeform: one continuous walk");
+    arpPatternTabs.setTooltip ("Arpeggiator direction: up, down, up/down, converge (outside-in), or random");
+    loopTabs.setTooltip ("Loop length in bars (Off = one-shot). Loops are bar-aligned so playback repeats seamlessly");
+    addAndMakeVisible (modeTabs);
     addAndMakeVisible (keyModeTabs);
     addAndMakeVisible (lengthTabs);
     addAndMakeVisible (phraseTabs);
+    addAndMakeVisible (arpPatternTabs);
+    addAndMakeVisible (loopTabs);
 
-    styleChip (rerollButton, theme::accentMod);
-    rerollButton.setTooltip ("Generate a new melody from a fresh random seed");
-    rerollButton.onClick = [this] { shared.processor.melodyController().reroll(); };
-    addAndMakeVisible (rerollButton);
+    // Four macro knobs.
+    energyKnob     = std::make_unique<ModKnob> (shared, params::melodyEnergy,         "ENERGY",   theme::neonYellow);
+    complexityKnob = std::make_unique<ModKnob> (shared, params::melodyComplexity,     "COMPLEX",  theme::neonYellow);
+    imageKnob      = std::make_unique<ModKnob> (shared, params::melodyImageInfluence, "IMAGE",    theme::neonYellow);
+    repetitionKnob = std::make_unique<ModKnob> (shared, params::melodyRepetition,     "REPEAT",   theme::neonYellow);
+    addAndMakeVisible (*energyKnob);
+    addAndMakeVisible (*complexityKnob);
+    addAndMakeVisible (*imageKnob);
+    addAndMakeVisible (*repetitionKnob);
 
-    styleChip (lockButton, theme::neonYellow);
-    lockButton.setTooltip ("Lock the seed so re-roll keeps the current melody");
-    lockButton.onClick = [this]
-    {
-        auto& m = shared.processor.melodyController();
-        m.setLocked (! m.locked());
-    };
-    addAndMakeVisible (lockButton);
+    // Regeneration: fresh material, or a small mutation of the current one; the
+    // two locks constrain what either is allowed to change.
+    styleChip (regenerateButton, theme::neonYellow);
+    regenerateButton.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
+    regenerateButton.setTooltip ("Generate a fresh melody (keeps any locked dimension)");
+    regenerateButton.onClick = [this] { shared.processor.melodyController().regenerate(); };
+    addAndMakeVisible (regenerateButton);
 
-    biasKnob      = std::make_unique<ModKnob> (shared, params::melodyBias, "BRIGHT", theme::neonYellow);
-    ornamentsKnob = std::make_unique<ModKnob> (shared, params::melodyOrnaments, "ORNAMENT", theme::neonYellow);
-    addAndMakeVisible (*biasKnob);
-    addAndMakeVisible (*ornamentsKnob);
+    styleChip (mutateButton, theme::accentMod);
+    mutateButton.setTooltip ("Nudge the current melody into a variation (keeps any locked dimension)");
+    mutateButton.onClick = [this] { shared.processor.melodyController().mutate(); };
+    addAndMakeVisible (mutateButton);
+
+    lockRhythm = std::make_unique<ParamToggle> (shared, params::melodyLockRhythm, "LOCK RHYTHM", theme::neonYellow);
+    lockPitch  = std::make_unique<ParamToggle> (shared, params::melodyLockPitch,  "LOCK PITCH",  theme::neonYellow);
+    lockRhythm->button.setTooltip ("Keep the timing; Regenerate/Mutate change only pitch");
+    lockPitch->button.setTooltip ("Keep the pitches; Regenerate/Mutate change only rhythm");
+    addAndMakeVisible (*lockRhythm);
+    addAndMakeVisible (*lockPitch);
 
     styleChip (saveButton, theme::accentMod);
     saveButton.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
@@ -335,6 +356,8 @@ void MelodyPanel::refreshTransportLabel()
 
 void MelodyPanel::resized()
 {
+    sectionLabels.clear();
+
     auto area = getLocalBounds().reduced (14);
     area.removeFromTop (24); // title strip
 
@@ -344,31 +367,58 @@ void MelodyPanel::resized()
     auto left = area.removeFromLeft (280);
     grid.setBounds (left.removeFromTop (280));
 
-    area.removeFromLeft (14);
+    area.removeFromLeft (16);
     auto col = area; // right control column
 
-    generateButton.setBounds (col.removeFromTop (30));
-    col.removeFromTop (8);
-    playButton.setBounds (col.removeFromTop (26));
-    col.removeFromTop (12);
+    // Helpers: a plain row (control + gap) and a captioned section (small
+    // uppercase label + control beneath it).
+    auto row = [&col] (int h, int gap = 6)
+    {
+        auto r = col.removeFromTop (h);
+        col.removeFromTop (gap);
+        return r;
+    };
+    auto section = [&] (const juce::String& caption, int h, int gap = 8)
+    {
+        auto cap = col.removeFromTop (12);
+        sectionLabels.emplace_back (caption, cap);
+        col.removeFromTop (2);
+        return row (h, gap);
+    };
 
-    auto row = [&col] (int h, int gap = 8) { auto r = col.removeFromTop (h); col.removeFromTop (gap); return r; };
+    // Transport (no caption).
+    playButton.setBounds (row (26, 10));
 
-    keyModeTabs.setBounds (row (18));
-    lengthTabs.setBounds (row (18));
-    phraseTabs.setBounds (row (18));
+    modeTabs.setBounds    (section ("MODE",   18));
+    keyModeTabs.setBounds (section ("KEY",    18));
+    lengthTabs.setBounds  (section ("LENGTH", 18));
 
-    auto lockRow = row (18);
-    rerollButton.setBounds (lockRow.removeFromLeft (lockRow.getWidth() / 2 - 4));
-    lockButton.setBounds (lockRow.removeFromRight (lockRow.getWidth()));
+    // SHAPE: phrase toggle (Melody) and arp direction (Arp) share one row;
+    // animate() shows whichever the current mode uses.
+    auto shapeRow = section ("SHAPE", 18);
+    phraseTabs.setBounds (shapeRow);
+    arpPatternTabs.setBounds (shapeRow);
 
-    col.removeFromTop (6);
-    auto knobs = col.removeFromTop (58);
-    biasKnob->setBounds (knobs.removeFromLeft (knobs.getWidth() / 2).reduced (4, 0));
-    ornamentsKnob->setBounds (knobs.reduced (4, 0));
+    // FEEL: four macro knobs across the column.
+    auto knobs = section ("FEEL", 54);
+    const int kw = knobs.getWidth() / 4;
+    energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (3, 0));
+    complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (3, 0));
+    imageKnob->setBounds      (knobs.removeFromLeft (kw).reduced (3, 0));
+    repetitionKnob->setBounds (knobs.reduced (3, 0));
 
-    col.removeFromTop (8);
-    auto exportRow = col.removeFromTop (26);
+    loopTabs.setBounds (section ("LOOP LENGTH", 18));
+
+    // SEED: the two locks, then the two regeneration actions.
+    auto lockRow = section ("SEED", 18, 6);
+    lockRhythm->setBounds (lockRow.removeFromLeft (lockRow.getWidth() / 2 - 4));
+    lockPitch->setBounds  (lockRow.removeFromRight (lockRow.getWidth()));
+    auto actionRow = row (26, 8);
+    regenerateButton.setBounds (actionRow.removeFromLeft (actionRow.getWidth() / 2 - 4));
+    mutateButton.setBounds     (actionRow.removeFromRight (actionRow.getWidth()));
+
+    // EXPORT: drag handle + save.
+    auto exportRow = section ("EXPORT", 26, 0);
     dragMidi.setBounds (exportRow.removeFromLeft (exportRow.getWidth() / 2 - 4));
     saveButton.setBounds (exportRow.removeFromRight (exportRow.getWidth()));
 }
@@ -394,6 +444,12 @@ void MelodyPanel::paint (juce::Graphics& g)
     g.setFont (theme::font (12.0f));
     g.drawText ("Detected: " + (key.isNotEmpty() ? key : juce::String ("\xe2\x80\x94")),
                 18, getHeight() - 26, 300, 18, juce::Justification::centredLeft);
+
+    // Section captions above each control group.
+    g.setFont (theme::semiBold (9.5f));
+    g.setColour (theme::textSecondary.withAlpha (0.85f));
+    for (const auto& [caption, rect] : sectionLabels)
+        g.drawText (caption, rect, juce::Justification::centredLeft);
 }
 
 void MelodyPanel::animate()
@@ -401,20 +457,26 @@ void MelodyPanel::animate()
     grid.animate();
     refreshTransportLabel();
 
+    if (modeTabs.active() != choiceParam (params::melodyMode))
+        modeTabs.setActive (choiceParam (params::melodyMode), false);
     if (keyModeTabs.active() != choiceParam (params::melodyKeyMode))
         keyModeTabs.setActive (choiceParam (params::melodyKeyMode), false);
     if (lengthTabs.active() != choiceParam (params::melodyLength))
         lengthTabs.setActive (choiceParam (params::melodyLength), false);
     if (phraseTabs.active() != choiceParam (params::melodyPhrase))
         phraseTabs.setActive (choiceParam (params::melodyPhrase), false);
+    if (arpPatternTabs.active() != choiceParam (params::melodyArpPattern))
+        arpPatternTabs.setActive (choiceParam (params::melodyArpPattern), false);
+    if (loopTabs.active() != choiceParam (params::melodyLoopLength))
+        loopTabs.setActive (choiceParam (params::melodyLoopLength), false);
 
-    const bool locked = shared.processor.melodyController().locked();
-    if (lockButton.getToggleState() != locked)
-    {
-        lockButton.setToggleState (locked, juce::dontSendNotification);
-        lockButton.setColour (juce::TextButton::textColourOffId,
-                              locked ? theme::neonYellow : theme::textSecondary);
-        rerollButton.setAlpha (locked ? 0.5f : 1.0f);
-        repaint();
-    }
+    // SHAPE row: the phrase toggle belongs to Melody mode, the arp direction to
+    // Arp mode; Chords uses neither. Show whichever applies (they share a rect).
+    const int mode = choiceParam (params::melodyMode); // 0 Melody, 1 Chords, 2 Arp
+    const bool showPhrase = (mode == 0);
+    const bool showArp    = (mode == 2);
+    if (phraseTabs.isVisible() != showPhrase)
+        phraseTabs.setVisible (showPhrase);
+    if (arpPatternTabs.isVisible() != showArp)
+        arpPatternTabs.setVisible (showArp);
 }

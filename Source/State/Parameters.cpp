@@ -277,14 +277,44 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // mirror Lumena's MelodyOptions (bias 0.25, ornaments 0.15, Phrased).
     layout.add (std::make_unique<ChoiceParam> (pid (melodyKeyMode), "Melody Key Mode",
         juce::StringArray { "From Image", "Random" }, 0));
+
+    // Generation mode: a plain melody, a block-chord progression, or an
+    // arpeggio. Melody is the default and keeps the original behaviour.
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyMode), "Melody Mode",
+        juce::StringArray { "Melody", "Chords", "Arp" }, 0));
+
+    // LENGTH: number of notes generated (chords: number of chords).
     layout.add (std::make_unique<ChoiceParam> (pid (melodyLength), "Melody Length",
         juce::StringArray { "8", "16", "32" }, 1)); // default 16
-    layout.add (std::make_unique<FloatParam> (pid (melodyBias), "Melody Brightness Bias",
-        unitRange, 0.25f, unitAttr));
-    layout.add (std::make_unique<ChoiceParam> (pid (melodyPhrase), "Melody Mode",
+
+    // Phrase structure (Melody mode) and arp direction (Arp mode).
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyPhrase), "Melody Phrasing",
         juce::StringArray { "Phrased", "Freeform" }, 0));
-    layout.add (std::make_unique<FloatParam> (pid (melodyOrnaments), "Melody Ornaments",
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyArpPattern), "Melody Arp Pattern",
+        juce::StringArray { "Up", "Down", "Up-Down", "Converge", "Random" }, 2));
+
+    // Loop length in bars (Off = one-shot). Makes the output a seamless loop.
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyLoopLength), "Melody Loop Length",
+        juce::StringArray { "Off", "1 bar", "2 bars", "4 bars", "8 bars" }, 0));
+
+    // Four musical macros, all 0..1:
+    //   Energy          -> velocity + density (drive)
+    //   Complexity      -> ornament/embellishment density
+    //   Image Influence -> how strongly the image steers pitch contour
+    //   Repetition      -> how often the motif recurs vs. varies
+    layout.add (std::make_unique<FloatParam> (pid (melodyEnergy), "Melody Energy",
+        unitRange, 0.5f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyComplexity), "Melody Complexity",
         unitRange, 0.15f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyImageInfluence), "Melody Image Influence",
+        unitRange, 0.25f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyRepetition), "Melody Repetition",
+        unitRange, 0.2f, unitAttr));
+
+    // Regeneration locks: hold a dimension while Mutate/Regenerate change the
+    // other. Both off = fully fresh; both on = unchanged.
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockRhythm), "Melody Lock Rhythm", false));
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockPitch),  "Melody Lock Pitch",  false));
 
     return layout;
 }

@@ -127,10 +127,19 @@ inline constexpr const char* glideTime = "glideTime";
 // The musical controls of the image-driven melody. The RNG seed and lock
 // toggle are NOT parameters (they live in the MELODY state sub-tree).
 inline constexpr const char* melodyKeyMode   = "melodyKeyMode";
+inline constexpr const char* melodyMode       = "melodyMode";      // Melody/Chords/Arp
 inline constexpr const char* melodyLength    = "melodyLength";
-inline constexpr const char* melodyBias      = "melodyBias";
-inline constexpr const char* melodyPhrase    = "melodyPhrase";
-inline constexpr const char* melodyOrnaments = "melodyOrnaments";
+inline constexpr const char* melodyPhrase    = "melodyPhrase";     // Phrased/Freeform (Melody mode)
+inline constexpr const char* melodyArpPattern = "melodyArpPattern"; // Arp mode
+inline constexpr const char* melodyLoopLength = "melodyLoopLength"; // Off/1/2/4/8 bars
+// Four musical macro controls (0..1).
+inline constexpr const char* melodyEnergy         = "melodyEnergy";
+inline constexpr const char* melodyComplexity     = "melodyComplexity";
+inline constexpr const char* melodyImageInfluence = "melodyImageInfluence";
+inline constexpr const char* melodyRepetition     = "melodyRepetition";
+// Regeneration locks (constrain Mutate / Regenerate).
+inline constexpr const char* melodyLockRhythm = "melodyLockRhythm";
+inline constexpr const char* melodyLockPitch  = "melodyLockPitch";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

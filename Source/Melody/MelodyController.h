@@ -37,6 +37,8 @@ public:
     // --- actions (message thread) ----------------------------------------
     void generate();           // sample the current Lens image into a melody
     void reroll();             // new random seed, then generate (no-op if locked)
+    void regenerate();         // fresh melody at a new seed, honouring the locks
+    void mutate();             // small variation of the current melody (honours locks)
     void setLocked (bool shouldLock);
     void play();               // play the current melody through the engine
     void stop();
@@ -67,8 +69,6 @@ public:
     void applyState();
 
 private:
-    int   choiceIndex (const char* paramId) const;
-    float floatParam (const char* paramId) const;
     juce::uint64 makeSeed();
     void installSequence (const melody::Sequence& seq); // copy, persist, hand to player
 
