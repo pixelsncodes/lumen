@@ -80,6 +80,12 @@ Drop a PNG/JPEG anywhere on the window (or click the dashed drop zone).
   Env 3); the **Motion** macro sets how fast.
 - Same image bytes → same sound, always, on any machine. Nothing is uploaded.
 
+### Signal processing / tone math
+
+The exact math for turning an image into a wavetable — Scan and Spectral modes,
+band-limited mip synthesis, and frame morphing — is written up in
+[docs/TONE_MATH.md](docs/TONE_MATH.md).
+
 ## MIDI Learn
 
 Right-click any knob → **MIDI Learn** → move a hardware control: bound. The
