@@ -147,7 +147,7 @@ $$\varphi_i[h] = 2\pi \cdot U\big(\text{FNV1a}_{64}(I_{\downarrow})\big) \in [0,
 
 **3. Frame is the inverse DFT of the constructed complex spectrum, normalized to peak 0.9:**
 
-$$s_i[n] = \frac{0.9}{Z} \cdot \mathrm{Re}\left\{ \sum_{h=1}^{256} A_i[h]\, e^{j\varphi_i[h]}\, e^{j 2\pi h n / M} \right\}, \quad Z = \max_n \left| \mathrm{Re}\{\cdots\} \right|$$
+$$s_i[n] = \frac{0.9}{Z} \cdot \mathrm{Re}\left\{ \sum_{h=1}^{256} A_i[h]\, e^{j\varphi_i[h]}\, e^{j 2\pi h n / M} \right\}, \quad Z = \max_n \left| \mathrm{Re}\left\{ \textstyle\sum_h A_i[h]\, e^{j\varphi_i[h]}\, e^{j 2\pi h n / M} \right\} \right|$$
 
 ![PLAY view with the harmonic waterfall display](docs/images/01.jpg)
 
