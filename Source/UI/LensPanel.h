@@ -79,13 +79,17 @@ class LensIconToggle final : public juce::Component,
                              public juce::SettableTooltipClient
 {
 public:
-    enum class Glyph { colors, melody };
+    enum class Glyph { colors, melody, playStop };
     LensIconToggle (Glyph glyphToDraw, juce::Colour onColour, juce::String tip);
 
     std::function<void()> onClick;
 
     bool getToggleState() const noexcept { return on; }
     void setToggleState (bool shouldBeOn) { if (on != shouldBeOn) { on = shouldBeOn; repaint(); } }
+
+    // Greyed, non-clickable state (used by the play chip before a melody exists).
+    bool chipEnabled() const noexcept { return enabledFlag; }
+    void setChipEnabled (bool e) { if (enabledFlag != e) { enabledFlag = e; repaint(); } }
 
     void paint (juce::Graphics& g) override;
     void mouseEnter (const juce::MouseEvent&) override { hovered = true; repaint(); }
@@ -97,6 +101,7 @@ private:
     juce::Colour accent;
     bool on = false;
     bool hovered = false;
+    bool enabledFlag = true;
 };
 
 // Image view + the three Lens controls. `compact` = the Deep-view card
@@ -116,8 +121,10 @@ private:
     bool compact;
     LensImageView image;
     TabsBar modeTabs, targetTabs;
-    LensIconToggle colorsChip { LensIconToggle::Glyph::colors, lumen::theme::accentMod,
-                               "COLORS: an image drop also sets the patch from the image's colors" };
+    // Colors are now always applied (no toggle); this chip drives melody playback:
+    // play/stop, greyed until a melody has been generated and the panel is closed.
+    LensIconToggle playChip { LensIconToggle::Glyph::playStop, lumen::theme::neonYellow,
+                              "Play / stop the generated melody" };
     LensIconToggle melodyChip { LensIconToggle::Glyph::melody, lumen::theme::neonYellow,
                                "MELODY: turn this image into a playable melody" };
 };

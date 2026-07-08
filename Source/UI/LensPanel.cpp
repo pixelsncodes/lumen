@@ -218,11 +218,11 @@ void LensImageView::paint (juce::Graphics& g)
         g.fillRect (juce::Rectangle<float> (x - beam * 0.5f, dest.getY(), beam, dest.getHeight()));
     }
 
-    // Melody sampling grid: while the Melody panel is active, overlay the grid
-    // (and the sampled path / sounding-cell glow) on the Lens image so the
-    // melody visibly traces its way across the picture.
+    // Melody sampling grid: overlay the grid (and the sampled path /
+    // sounding-cell glow) on the Lens image whenever the Melody panel is open
+    // OR a melody has been generated, so it persists after the panel is closed.
     auto& melody = shared.processor.melodyController();
-    if (melody.isPanelActive())
+    if (melody.isPanelActive() || melody.hasMelody())
     {
         const auto live = shared.processor.melodyPlayer().liveState();
         melodygrid::DrawInfo info;
@@ -249,7 +249,7 @@ void LensImageView::animate()
 
     // Melody overlay glow: track the currently-sounding cell and fade it out.
     auto& melody = shared.processor.melodyController();
-    const bool melodyActive = melody.isPanelActive();
+    const bool melodyActive = melody.isPanelActive() || melody.hasMelody();
     bool melodyRepaint = melodyActive != lastMelodyActive;
     lastMelodyActive = melodyActive;
     if (melodyActive)
@@ -303,7 +303,7 @@ LensIconToggle::LensIconToggle (Glyph glyphToDraw, juce::Colour onColour, juce::
 
 void LensIconToggle::mouseUp (const juce::MouseEvent& e)
 {
-    if (getLocalBounds().contains (e.getPosition()) && onClick != nullptr)
+    if (enabledFlag && getLocalBounds().contains (e.getPosition()) && onClick != nullptr)
         onClick();
 }
 
@@ -311,16 +311,22 @@ void LensIconToggle::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
 
+    // Greyed when disabled (e.g. the play chip before a melody exists).
+    const float dim = enabledFlag ? 1.0f : 0.35f;
+
     // Well: filled with the accent when on, otherwise a neutral chip that
     // brightens slightly on hover — mirrors how the tab strips read.
-    g.setColour (on ? accent.withAlpha (0.22f)
-                    : theme::well.withAlpha (hovered ? 0.95f : 0.75f));
+    g.setColour ((on ? accent.withAlpha (0.22f)
+                     : theme::well.withAlpha (hovered && enabledFlag ? 0.95f : 0.75f))
+                     .withMultipliedAlpha (dim));
     g.fillRoundedRectangle (bounds, 4.0f);
-    g.setColour (on ? accent : theme::hairline);
+    g.setColour ((on ? accent : theme::hairline).withMultipliedAlpha (dim));
     g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
 
     const auto c   = bounds.getCentre();
-    const auto ink = on ? accent : (hovered ? theme::textPrimary : theme::textSecondary);
+    const auto ink = (on ? accent : (hovered && enabledFlag ? theme::textPrimary
+                                                            : theme::textSecondary))
+                         .withMultipliedAlpha (dim);
     g.setColour (ink);
 
     if (glyph == Glyph::colors)
@@ -330,6 +336,23 @@ void LensIconToggle::paint (juce::Graphics& g)
         g.fillEllipse (c.x - r * 1.1f, c.y - r * 0.2f, r * 1.6f, r * 1.6f);
         g.fillEllipse (c.x - r * 0.2f, c.y - r * 1.1f, r * 1.6f, r * 1.6f);
         g.fillEllipse (c.x + r * 0.3f, c.y + r * 0.1f, r * 1.6f, r * 1.6f);
+    }
+    else if (glyph == Glyph::playStop)
+    {
+        // Play triangle when idle; stop square when playing (on == playing).
+        if (on)
+        {
+            const float s = bounds.getHeight() * 0.20f;
+            g.fillRoundedRectangle (c.x - s, c.y - s, s * 2.0f, s * 2.0f, 1.0f);
+        }
+        else
+        {
+            const float w = bounds.getWidth()  * 0.20f;
+            const float h = bounds.getHeight() * 0.24f;
+            juce::Path tri;
+            tri.addTriangle (c.x - w, c.y - h, c.x - w, c.y + h, c.x + w * 1.3f, c.y);
+            g.fillPath (tri);
+        }
     }
     else
     {
@@ -374,12 +397,18 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
     addAndMakeVisible (modeTabs);
     addAndMakeVisible (targetTabs);
 
-    colorsChip.onClick = [this]
+    // Colors are now a hard-selected option: always apply the image's palette
+    // to the patch on drop. No user toggle — force it on and keep it on.
+    shared.processor.lensController().setChroma (true);
+
+    playChip.onClick = [this]
     {
-        auto& lens = shared.processor.lensController();
-        lens.setChroma (! lens.chroma());
+        auto& mc = shared.processor.melodyController();
+        if (mc.isPlaying()) mc.stop();
+        else                mc.play();
     };
-    addAndMakeVisible (colorsChip);
+    playChip.setChipEnabled (false);   // greyed until a melody exists and the panel is closed
+    addAndMakeVisible (playChip);
 
     melodyChip.onClick = [this] { shared.processor.melodyController().togglePanel(); };
     addAndMakeVisible (melodyChip);
@@ -400,7 +429,7 @@ void LensPanel::resized()
         targetTabs.setBounds (column.removeFromTop (17));
         column.removeFromTop (5);
         auto chips = column.removeFromTop (18);
-        colorsChip.setBounds (chips.removeFromLeft (18));
+        playChip.setBounds (chips.removeFromLeft (18));
         chips.removeFromLeft (6);
         melodyChip.setBounds (chips.removeFromLeft (18));
     }
@@ -417,7 +446,7 @@ void LensPanel::resized()
         controls.removeFromRight (6);
         melodyChip.setBounds (controls.removeFromRight (20));
         controls.removeFromRight (5);
-        colorsChip.setBounds (controls.removeFromRight (20));
+        playChip.setBounds (controls.removeFromRight (20));
         controls.removeFromRight (8);
         modeTabs.setBounds (controls);
     }
@@ -462,13 +491,14 @@ void LensPanel::animate()
         modeTabs.setActive (lens.mode(), false);
     if (targetTabs.active() != lens.target())
         targetTabs.setActive (lens.target(), false);
-    if (colorsChip.getToggleState() != lens.chroma())
-    {
-        colorsChip.setToggleState (lens.chroma());
-        repaint();
-    }
 
-    const bool melodyActive = shared.processor.melodyController().isPanelActive();
+    auto& mc = shared.processor.melodyController();
+    const bool melodyActive = mc.isPanelActive();
+    // Play chip: greyed until a melody exists and the panel is closed; shows the
+    // stop glyph (toggle on) while playing.
+    playChip.setChipEnabled (mc.hasMelody() && ! melodyActive);
+    if (playChip.getToggleState() != mc.isPlaying())
+        playChip.setToggleState (mc.isPlaying());
     if (melodyChip.getToggleState() != melodyActive)
         melodyChip.setToggleState (melodyActive);
 }
