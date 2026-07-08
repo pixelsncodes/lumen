@@ -147,7 +147,7 @@ $$\varphi_i[h] = 2\pi \cdot U\big(\text{FNV1a}_{64}(I_{\downarrow})\big) \in [0,
 
 **3. Frame is the inverse DFT of the constructed complex spectrum, normalized to peak 0.9:**
 
-$$X_i[n] = \mathrm{Re}\Big\{ \sum_{h=1}^{256} A_i[h]\, e^{j(\varphi_i[h] + 2\pi h n / M)} \Big\}$$
+$$X_i[n] = \mathrm{Re}\left( \sum_{h=1}^{256} A_i[h]\, e^{j(\varphi_i[h] + 2\pi h n / M)} \right)$$
 
 $$s_i[n] = 0.9 \cdot \frac{X_i[n]}{\max_m |X_i[m]|}$$
 
