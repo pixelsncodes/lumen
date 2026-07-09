@@ -274,6 +274,7 @@ void MelodyController::generate()
         return; // no image loaded: nothing to sample
 
     currentProgression = mel.progression;  // remember harmony for Lock Harmony
+    currentPhraseStarts = mel.phraseStarts; // remember phrases for phrase-aware splice
     installSequence (melodyToSequence (mel, cols, rows, key));
 }
 
@@ -322,12 +323,18 @@ void MelodyController::regenerate()
     // If a dimension is locked, carry it over from the previous melody.
     if ((locks.rhythm || locks.pitch) && ! currentSeq.steps.empty())
     {
-        const lumena::melody::Melody prev = sequenceToMelody (currentSeq);
+        lumena::melody::Melody prev = sequenceToMelody (currentSeq);
+        // The stored Sequence carries no phrase boundaries, so restore the ones
+        // remembered from when this melody was generated (note indices survive the
+        // Sequence round-trip: same count, same order) — this is what lets the
+        // splice be phrase-aware (4b-fix). Empty ones fall back to index-based.
+        prev.phraseStarts = currentPhraseStarts;
         out = lumena::melody::recombineLocked (prev, cand, scale, locks,
                                                optionsFromParams (apvts));
     }
 
     seedValue = newSeed;
+    currentPhraseStarts = out.phraseStarts;  // the new melody's phrases
     installSequence (melodyToSequence (out, cols, rows, key));
 }
 

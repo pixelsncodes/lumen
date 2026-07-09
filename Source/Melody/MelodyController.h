@@ -88,5 +88,9 @@ private:
     // into a regeneration. In-memory for the session (not persisted across reload
     // yet — see SESSION_NOTES Phase 4b). Empty until the first generation.
     std::vector<int> currentProgression;
+    // The current melody's phrase boundaries (note indices), kept so the lock
+    // splice can be phrase-aware — the stored Sequence doesn't carry them. Note
+    // indices survive the Sequence round-trip. In-memory for the session.
+    std::vector<std::size_t> currentPhraseStarts;
 };
 } // namespace lumen
