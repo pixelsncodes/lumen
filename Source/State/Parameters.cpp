@@ -320,8 +320,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // Regeneration locks: hold a dimension while Mutate/Regenerate change the
     // other. Both off = fully fresh; both on = unchanged.
-    layout.add (std::make_unique<BoolParam> (pid (melodyLockRhythm), "Melody Lock Rhythm", false));
-    layout.add (std::make_unique<BoolParam> (pid (melodyLockPitch),  "Melody Lock Pitch",  false));
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockRhythm),  "Melody Lock Rhythm",  false));
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockPitch),   "Melody Lock Pitch",   false));
+    // Lock Harmony: hold the chord progression while pitch/rhythm re-roll. Engine
+    // + param only in Phase 4b (no UI yet — Phase 5). Appended last so no existing
+    // parameter's automation index shifts. Default off (inert for old presets).
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockHarmony), "Melody Lock Harmony", false));
 
     return layout;
 }

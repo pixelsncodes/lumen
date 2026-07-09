@@ -142,8 +142,9 @@ inline constexpr const char* melodyRepetition     = "melodyRepetition";
 // regions subdivide into denser rhythm. Maps to MelodyOptions::imageRhythmAmount.
 inline constexpr const char* melodyDensity        = "melodyDensity";
 // Regeneration locks (constrain Mutate / Regenerate).
-inline constexpr const char* melodyLockRhythm = "melodyLockRhythm";
-inline constexpr const char* melodyLockPitch  = "melodyLockPitch";
+inline constexpr const char* melodyLockRhythm  = "melodyLockRhythm";
+inline constexpr const char* melodyLockPitch   = "melodyLockPitch";
+inline constexpr const char* melodyLockHarmony = "melodyLockHarmony";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

@@ -2021,8 +2021,59 @@ public:
     }
 };
 
+// Phase 4b: the melodyLockHarmony param, read through the controller, holds the
+// chord progression across a regeneration while pitch/rhythm re-roll.
+class MelodyLockHarmonyWiringTest final : public juce::UnitTest
+{
+public:
+    MelodyLockHarmonyWiringTest()
+        : juce::UnitTest ("Melody Lock Harmony holds the progression across regen",
+                          "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyLockHarmony exists and defaults to off");
+        NullProcessor processor;
+        auto* lockH = processor.apvts.getParameter (params::melodyLockHarmony);
+        expect (lockH != nullptr, "melodyLockHarmony parameter exists");
+        if (lockH == nullptr)
+            return;
+        expectWithinAbsoluteError (lockH->getDefaultValue(), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        melody.generate();
+        const std::vector<int> prog0 = melody.progression();
+        expect (! prog0.empty(), "a generated melody records its progression");
+        const auto notes0 = pitchesOf (melody.sequence());
+
+        beginTest ("Lock Harmony ON: regenerate keeps the progression, re-rolls notes");
+        lockH->setValueNotifyingHost (1.0f);
+        melody.regenerate();  // fresh seed, harmony carried
+        expect (melody.progression() == prog0, "progression is unchanged");
+        const auto notes1 = pitchesOf (melody.sequence());
+        expect (notes1 != notes0, "pitch/rhythm actually re-rolled under fixed harmony");
+    }
+
+private:
+    static std::vector<int> pitchesOf (const lumen::melody::Sequence& seq)
+    {
+        std::vector<int> v;
+        v.reserve (seq.steps.size());
+        for (const auto& s : seq.steps) v.push_back (s.note);
+        return v;
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
+MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

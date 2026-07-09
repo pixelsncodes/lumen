@@ -137,8 +137,9 @@ namespace
     lumena::melody::RegenLocks locksFromParams (const juce::AudioProcessorValueTreeState& apvts)
     {
         lumena::melody::RegenLocks locks;
-        locks.rhythm = boolOf (apvts, params::melodyLockRhythm);
-        locks.pitch  = boolOf (apvts, params::melodyLockPitch);
+        locks.rhythm  = boolOf (apvts, params::melodyLockRhythm);
+        locks.pitch   = boolOf (apvts, params::melodyLockPitch);
+        locks.harmony = boolOf (apvts, params::melodyLockHarmony);
         return locks;
     }
 
@@ -219,7 +220,8 @@ namespace
                       const juce::Image& jimg, juce::uint64 seed,
                       lumena::melody::Melody& outMelody,
                       lumena::scales::Scale& outScale,
-                      juce::String& outKey, int& outCols, int& outRows)
+                      juce::String& outKey, int& outCols, int& outRows,
+                      const std::vector<int>& lockedProgression = {})
     {
         if (! jimg.isValid())
             return false;
@@ -247,7 +249,11 @@ namespace
             detection = selector.detect (img);
         }
 
-        const lumena::melody::MelodyOptions opts = optionsFromParams (apvts);
+        lumena::melody::MelodyOptions opts = optionsFromParams (apvts);
+        // Lock Harmony: voice over the carried progression instead of drawing a
+        // fresh one (empty = normal draw, byte-identical to before 4b).
+        if (! lockedProgression.empty())
+            opts.progression = lockedProgression;
         outMelody = lumena::melody::generateMelody (grid, detection.scale, opts, gen);
         outScale  = detection.scale;
         outKey    = juce::String (detection.keyName);
@@ -267,6 +273,7 @@ void MelodyController::generate()
     if (! renderFresh (apvts, jimg, seedValue, mel, scale, key, cols, rows))
         return; // no image loaded: nothing to sample
 
+    currentProgression = mel.progression;  // remember harmony for Lock Harmony
     installSequence (melodyToSequence (mel, cols, rows, key));
 }
 
@@ -302,9 +309,15 @@ void MelodyController::regenerate()
     lumena::scales::Scale scale;
     juce::String key;
     int cols = 0, rows = 0;
-    if (! renderFresh (apvts, jimg, newSeed, cand, scale, key, cols, rows))
+    // Lock Harmony: carry the current progression into the fresh candidate so its
+    // pitch/rhythm re-roll under a fixed harmony (empty otherwise = fresh draw).
+    const std::vector<int> carryProgression =
+        locks.harmony ? currentProgression : std::vector<int> {};
+    if (! renderFresh (apvts, jimg, newSeed, cand, scale, key, cols, rows,
+                       carryProgression))
         return;
 
+    currentProgression = cand.progression;  // keep the latest for future carries
     lumena::melody::Melody out = cand;
     // If a dimension is locked, carry it over from the previous melody.
     if ((locks.rhythm || locks.pitch) && ! currentSeq.steps.empty())

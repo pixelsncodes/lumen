@@ -52,6 +52,9 @@ public:
     int gridCols() const noexcept { return currentSeq.gridCols; }
     int gridRows() const noexcept { return currentSeq.gridRows; }
     const melody::Sequence& sequence() const noexcept { return currentSeq; }
+    // The current melody's chord progression (root degrees) — what "Lock Harmony"
+    // holds fixed across a regeneration. Empty before the first generation.
+    const std::vector<int>& progression() const noexcept { return currentProgression; }
 
     // Panel visibility: toggled from the Lens UI, polled by the editor to show
     // /hide the overlay and by the Lens image view to draw the grid.
@@ -81,5 +84,9 @@ private:
     bool lockedFlag  = false;
     bool panelActive = false;
     melody::Sequence currentSeq; // message-thread copy for the UI + export
+    // The current melody's chord progression, kept so "Lock Harmony" can carry it
+    // into a regeneration. In-memory for the session (not persisted across reload
+    // yet — see SESSION_NOTES Phase 4b). Empty until the first generation.
+    std::vector<int> currentProgression;
 };
 } // namespace lumen
