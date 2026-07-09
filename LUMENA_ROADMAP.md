@@ -99,7 +99,43 @@ Bug 6 (arpeggioAmount, UI 'Complexity', MelodyGenerator.h:104) — NOT a Phase-1
 
 ---
 
-## Phase 3.5 — Motif-based phrasing (the "generated-sounding" fix)
+## Phase 3.5 — Motif-based phrasing (the "generated-sounding" fix) — **CLOSED**
+
+**Close-out status (accepted by ear):**
+- Landed: submodule `feature/motif-phrasing` (5 commits) + fixture-split docs
+  (submodule `42bee86`, parent `b198545`).
+- Inversion gate **passed**: correspondence climbs with Image Influence
+  (−0.04 → +0.54 → +0.70); different images diverge; same image clusters across
+  seeds. Templates do NOT override the image.
+- Pre-code trace **flipped the central fear**: the motif was *already* image-fed
+  (blend + chord snap, motif is a walk not an RNG template). The real gap was
+  `varyMotif` = pure RNG and contour = emergent wander. Phase 3.5 moved **both**
+  onto the image (image-selected contour Rise/Fall/Arch; image-fed variation).
+- Density now composes in-scale passing/neighbour tones, not unison chops.
+- Accepted by ear on a graded image: "musical, there's a rhythm to it." Not
+  perfect; over the bar the phase was chasing.
+
+**KEY FINDING — two fixtures, two jobs (do not forget this):**
+Density is **gradient-dependent**. A uniform image (checkerboard) collapses its
+range — every cell crosses the subdivision threshold at the same amount, so
+`subs = 1 + round(contrast × amount × 3)` produces byte-identical dupes (0.25 and
+0.35 were the same file) and piles all notes into the top register with no low
+contour. This is not an engine fault; it's the fixture.
+- **Checkerboard = determinism/regression** (uniform contrast → exact reproducible
+  counts the tests pin). Test fixtures stay on it. Never swap.
+- **Graded image (Mona Lisa) = taste/audition** (varied contrast → genuinely graded
+  low end, full register, richer harmony). Audition musicality here, never on the
+  checkerboard.
+- Mona Lisa audition set note counts: **37 / 38 / 51 / 56** at 0.15/0.25/0.35/0.50 —
+  monotonic, pairwise byte-distinct, deterministic. Default stays **0 (off)**.
+
+**Anticipation — partial, honestly flagged:** syncopation shipped and reconciles
+cleanly through pass-2. True tied-anticipation *across bar lines* deferred to Phase 4
+two-clock work rather than papered over. This is now the **second** item pointing at
+Phase 4's clock unification (bug-4b is the first) — treat that clock work as
+load-bearing for real anticipation, not optional polish.
+
+---
 
 *Finishes Phase 3's phrasing intent. This is the named next lever: rhythmic variety
 and phrasing. Design catalogue: `LUMENA_POP_DESIGN_REFERENCE.md` (adopted sections
@@ -160,13 +196,29 @@ code wires this, answer that from the code *before* writing anything.
 
 ## Phase 5 — Make it visible (UI)
 
-*Only after the engine is right. Cheapest-first.*
+*Only after the engine is right. Cheapest-first. All UI needs the
+`Lumen.exe --screenshot` inspection that can't run under WSL — these queue until
+that check is available.*
 
-- **Generation summary** first (cheap, high perceived value): `Detected: F Dorian · medium brightness, high saturation · Phrase A A' B A''`. Proves the image mattered.
+- **Loop button — HIGH VALUE, do early.** Plays the generated melody on loop so the
+  user can turn knobs (Image Influence, Density, Style…) and hear changes live. This
+  isn't just a feature — it *closes the audition loop inside the plugin*. Right now
+  every taste check needs an external soundfont render; a loop makes every future
+  phase's tuning faster. Infrastructure for taste, not a nice-to-have.
+- **Transpose (key + octave).** Simple and useful. **Design constraint, settle before
+  building:** transpose is a **playback/output shift, NOT a regeneration input.**
+  Shifting the melody up an octave must not touch the RNG stream or the generated
+  notes — same melody, shifted. If it feeds back into generation it breaks same-seed
+  determinism. Cheap to get right up front, painful to untangle later.
+- **Density knob** (parked from Phase 3 — the `melodyDensity` param already exists and
+  works via automation; this is just the MelodyPanel control). Note: default 0, and
+  the knob only earns its keep on graded images (see Phase 3.5 finding).
+- **Generation summary** (cheap, high perceived value): `Detected: F Dorian · medium brightness, high saturation · Phrase A A' B A''`. Proves the image mattered.
 - **Image playback overlay** using the grid-cell provenance you already store (light up the region that produced the current note). This is your genuinely distinctive UX and it's low-cost because the data exists.
 - Piano-roll preview + region color-coding **last** — real UI work, lowest priority.
 
-**Exit:** the image-to-MIDI relationship is tangible to the user.
+**Exit:** the image-to-MIDI relationship is tangible to the user; user can loop +
+tweak knobs live and transpose output without re-rolling the melody.
 
 ---
 
@@ -183,9 +235,9 @@ If you want the tightest possible scope that still meaningfully improves LUMENA:
 1. Phase 1 correctness fixes (harmony timing, degree metadata, one luma).
 2. Phase 2 blend model + unified Image Influence — **the** feature.
 3. Phase 3: 2-bar templates + image-driven rhythm density.
-4. Phase 3.5: motif-based phrasing (image feeds the motif) — the "generated-sounding" fix.
+4. Phase 3.5: motif-based phrasing (image feeds the motif) — the "generated-sounding" fix. **[DONE]**
 5. Phase 4: scale-aware arps + Lock Rhythm + Regenerate.
-5. Phase 5: generation summary + image playback overlay.
+6. Phase 5: generation summary + image playback overlay + loop/transpose controls.
 
 Everything is verified against the Phase 0 harness, committed as per-phase checkpoints on the branch, and merged to stable only when its exit criteria hold.
 
