@@ -183,14 +183,62 @@ code wires this, answer that from the code *before* writing anything.
 
 ## Phase 4 — Musical polish + production workflow
 
-*What turns it from a toy into something a producer keeps output from.*
+*What turns it from a toy into something a producer keeps output from. Sequenced
+low-risk-first: bank the self-contained wins before touching anything that stresses
+the determinism harness. The clock work is deliberately split out to **Phase 4.5**.*
 
-- **Scale-aware chords & arps:** stop flattening Blues/Harmonic-Minor detections to plain triads. Arps spell chord tones (1-3-5-8 patterns), not scale runs; harmonic minor raises the 7th in V, etc.
-- **Better cadences / phrase endings.**
-- **Locks + regeneration:** Lock Rhythm (new pitches), Lock Pitch (new rhythm), Lock Harmony, Regenerate (new seed, same settings), Mutate (small changes). Producers almost never accept the first take — this is high-value.
-- Finalize the **~6–8 musician-facing controls**: Image Influence, Rhythm Source (Groove/Image/Hybrid), Style, Energy, Complexity, Density, Motion, Repetition. Not 18.
+**Order (decided):** 4a arps → 4b locks → 4c cadences → then Phase 4.5 clock.
+Each sub-phase is its own tested checkpoint; re-baseline only where output is meant
+to change.
 
-**Exit:** usable in a real session; expressive scales survive into chords/arps.
+### 4a — Scale-aware chords & arps *(first: most self-contained)*
+Stop flattening Blues/Harmonic-Minor detections to plain triads. Arps spell chord
+tones (1-3-5-8 patterns), not scale runs; harmonic minor raises the 7th in V, etc.
+Touches chord/arp spelling only, not the melody generation path — cleanest
+re-baseline to verify, good confidence-builder to open on.
+
+### 4b — Locks + regeneration *(highest producer value)*
+Lock Rhythm (new pitches), Lock Pitch (new rhythm), Lock Harmony, Regenerate (new
+seed, same settings), Mutate (small changes). Producers almost never accept the
+first take — this is the high-value item.
+
+**PRE-CODE TRACE REQUIRED (answer from the code before writing any feature):**
+how are pitch and rhythm RNG draws structured? "Lock Rhythm, new pitches" only works
+if one axis can be re-rolled while the other stays pinned. If pitch and rhythm draw
+from the same interleaved stream, you can't move one without perturbing the other —
+so the locking design depends on this answer. Report it first, same discipline as the
+Phase 3.5 pre-code trace. Do not design the lock mechanism until the draw structure
+is known.
+
+### 4c — Better cadences / phrase endings *(small)*
+
+### Controls finalization (spans 4a–4c)
+Finalize the **~6–8 musician-facing controls**: Image Influence, Rhythm Source
+(Groove/Image/Hybrid), Style, Energy, Complexity, Density, Motion, Repetition. Not 18.
+
+**Exit (Phase 4):** usable in a real session; expressive scales survive into
+chords/arps; producer can lock/regenerate/mutate; determinism intact across all of it.
+
+---
+
+## Phase 4.5 — Clock unification *(isolated on purpose — the risky foundation)*
+
+*Split from Phase 4 because it's the one change that stresses the two-clock
+reconciliation the whole determinism harness rests on. Its own checkpoint, its own
+deliberate re-baseline event, its own rollback story.*
+
+- Merge the generation-time clock and the real emitted timeline (the two-clock split
+  Phase 3 kept, reconciled in pass 2). Clears **bug-4b**.
+- **Unblocks true tied-anticipation across bar lines** — deferred from Phase 3.5,
+  the second item that was waiting on this. Once the timeline is unified, anticipated
+  notes that tie across bars can be emitted honestly instead of approximated.
+- Expect this to perturb baselines established in Phases 3.5/4 — that's the cost of
+  doing it last. Re-verify determinism (same-seed) across the earlier work after the
+  merge; byte-identity vs pre-merge will intentionally break where anticipation now
+  emits differently.
+
+**Exit:** single authoritative timeline; bug-4b closed; tied-anticipation emits
+correctly; same-seed determinism re-verified across all prior phases.
 
 ---
 
