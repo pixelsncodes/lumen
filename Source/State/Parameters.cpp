@@ -311,6 +311,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (std::make_unique<FloatParam> (pid (melodyRepetition), "Melody Repetition",
         unitRange, 0.2f, unitAttr));
 
+    // Density (Phase 3): how strongly per-region image detail/contrast subdivides
+    // the rhythm — 0 keeps the plain session groove (default, so existing patches
+    // are unchanged), up drives busier notes in busy image regions. 0..1 like the
+    // other macros; consumed at generation time, so no audio-rate smoothing.
+    layout.add (std::make_unique<FloatParam> (pid (melodyDensity), "Melody Density",
+        unitRange, 0.0f, unitAttr));
+
     // Regeneration locks: hold a dimension while Mutate/Regenerate change the
     // other. Both off = fully fresh; both on = unchanged.
     layout.add (std::make_unique<BoolParam> (pid (melodyLockRhythm), "Melody Lock Rhythm", false));

@@ -123,10 +123,11 @@ namespace
         o.loopBars = loopBars[juce::jlimit (0, 4, choiceOf (apvts, params::melodyLoopLength))];
         o.beatsPerBar = 4.0;
 
-        o.energy         = floatOf (apvts, params::melodyEnergy);
-        o.arpeggioAmount = floatOf (apvts, params::melodyComplexity);      // Complexity
-        o.brightnessBias = floatOf (apvts, params::melodyImageInfluence);  // Image Influence
-        o.repetition     = floatOf (apvts, params::melodyRepetition);
+        o.energy            = floatOf (apvts, params::melodyEnergy);
+        o.arpeggioAmount    = floatOf (apvts, params::melodyComplexity);      // Complexity
+        o.brightnessBias    = floatOf (apvts, params::melodyImageInfluence);  // Image Influence
+        o.repetition        = floatOf (apvts, params::melodyRepetition);
+        o.imageRhythmAmount = floatOf (apvts, params::melodyDensity);         // Density (Phase 3)
 
         o.chordSize = 3;   // triads
         o.chordRate = 2.0; // half-note chords

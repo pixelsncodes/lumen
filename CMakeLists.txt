@@ -207,9 +207,14 @@ set(LUMEN_TESTS_SOURCES
     Tools/Tests/TestsMain.cpp
     Source/Lens/LensController.cpp # drop/clear reversibility test drives it directly
     Source/State/MidiLearn.cpp     # MIDI map save/load round-trip test
+    Source/State/MelodyState.cpp   # Melody Density wiring test drives generate()
+    Source/Melody/MelodyPlayer.cpp # ditto (MelodyController hands it the sequence)
     ${LUMEN_ENGINE_SOURCES}
 )
-target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})
+# MelodyController.cpp is the Lumena bridge (includes the third-party headers), so
+# it is added outside lumen_strict_sources — exactly as the plugin target keeps it
+# out of its /W4 /WX pass.
+target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES} ${LUMEN_MELODY_BRIDGE})
 lumen_strict_sources(Tools/Tests/TestsMain.cpp)
 
 target_include_directories(lumen_tests PRIVATE Source)
@@ -220,4 +225,5 @@ target_link_libraries(lumen_tests PRIVATE
     juce::juce_dsp
     juce::juce_graphics
     juce::juce_recommended_config_flags
+    Lumena::Lumena
 )

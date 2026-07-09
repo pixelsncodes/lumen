@@ -18,6 +18,8 @@
 #include "Lens/LensController.h"
 #include "Lens/LensEngine.h"
 #include "Lens/TestImages.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
 #include "State/EngineBindings.h"
 #include "State/FactoryPresets.h"
 #include "State/LensState.h"
@@ -1963,7 +1965,64 @@ public:
     }
 };
 
+// End-to-end wiring for the Phase-3 Density param: it must plumb through
+// optionsFromParams -> MelodyOptions::imageRhythmAmount and actually change the
+// generated rhythm, while its default (0) leaves output at the plain groove.
+class MelodyDensityWiringTest final : public juce::UnitTest
+{
+public:
+    MelodyDensityWiringTest()
+        : juce::UnitTest ("Melody Density param drives image rhythm density", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyDensity exists and defaults to 0 (off)");
+        NullProcessor processor;
+        auto* density = processor.apvts.getParameter (params::melodyDensity);
+        expect (density != nullptr, "melodyDensity parameter exists");
+        if (density == nullptr)
+            return;
+        expectWithinAbsoluteError (
+            density->convertFrom0to1 (density->getDefaultValue()), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+
+        // A busy, high-contrast image so the density hook has detail to react to.
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        // generate() reuses the (unchanged) seed, so re-running at the same
+        // Density is deterministic and only the Density value varies between runs.
+        auto noteCountAt = [&] (float amount)
+        {
+            density->setValueNotifyingHost (density->convertTo0to1 (amount));
+            melody.generate();
+            return static_cast<int> (melody.sequence().steps.size());
+        };
+
+        beginTest ("Density 0 is a deterministic no-op (re-runs identically)");
+        const int off1 = noteCountAt (0.0f);
+        const int off2 = noteCountAt (0.0f);
+        expect (off1 > 0, "the busy image generates a melody");
+        expectEquals (off1, off2);
+
+        beginTest ("raising Density subdivides into more notes on a busy image");
+        const int high = noteCountAt (1.0f);
+        expect (high > off1,
+                "Density=1 emits more notes than Density=0 (" + juce::String (high)
+                    + " vs " + juce::String (off1) + ")");
+
+        beginTest ("returning Density to 0 restores the baseline note count");
+        expectEquals (noteCountAt (0.0f), off1);
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
+MelodyDensityWiringTest melodyDensityWiringTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

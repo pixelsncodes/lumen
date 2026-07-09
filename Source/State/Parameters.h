@@ -5,7 +5,8 @@
 namespace lumen::params
 {
 // v2: adds the Melody generator's musical parameters (Lumena integration).
-inline constexpr int kStateVersion = 2;
+// v3: adds Melody Density (image-driven rhythmic density, Phase 3).
+inline constexpr int kStateVersion = 3;
 
 // Frozen first 8 (SPEC section 12, Maschine knob page 1).
 // NEVER reorder, remove, or insert before these.
@@ -137,6 +138,9 @@ inline constexpr const char* melodyEnergy         = "melodyEnergy";
 inline constexpr const char* melodyComplexity     = "melodyComplexity";
 inline constexpr const char* melodyImageInfluence = "melodyImageInfluence";
 inline constexpr const char* melodyRepetition     = "melodyRepetition";
+// Image-driven rhythmic density (Phase 3): 0 = groove only, up = busy image
+// regions subdivide into denser rhythm. Maps to MelodyOptions::imageRhythmAmount.
+inline constexpr const char* melodyDensity        = "melodyDensity";
 // Regeneration locks (constrain Mutate / Regenerate).
 inline constexpr const char* melodyLockRhythm = "melodyLockRhythm";
 inline constexpr const char* melodyLockPitch  = "melodyLockPitch";
