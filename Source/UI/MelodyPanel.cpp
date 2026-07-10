@@ -308,15 +308,17 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     addAndMakeVisible (arpPatternTabs);
     addAndMakeVisible (loopTabs);
 
-    // Four macro knobs.
+    // Five macro knobs.
     energyKnob     = std::make_unique<ModKnob> (shared, params::melodyEnergy,         "ENERGY",   theme::neonYellow);
     complexityKnob = std::make_unique<ModKnob> (shared, params::melodyComplexity,     "COMPLEX",  theme::neonYellow);
     imageKnob      = std::make_unique<ModKnob> (shared, params::melodyImageInfluence, "IMAGE",    theme::neonYellow);
     repetitionKnob = std::make_unique<ModKnob> (shared, params::melodyRepetition,     "REPEAT",   theme::neonYellow);
+    densityKnob    = std::make_unique<ModKnob> (shared, params::melodyDensity,        "DENSITY",  theme::neonYellow);
     addAndMakeVisible (*energyKnob);
     addAndMakeVisible (*complexityKnob);
     addAndMakeVisible (*imageKnob);
     addAndMakeVisible (*repetitionKnob);
+    addAndMakeVisible (*densityKnob);
 
     // Regeneration: fresh material, or a small mutation of the current one; the
     // two locks constrain what either is allowed to change.
@@ -331,12 +333,15 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     mutateButton.onClick = [this] { shared.processor.melodyController().mutate(); };
     addAndMakeVisible (mutateButton);
 
-    lockRhythm = std::make_unique<ParamToggle> (shared, params::melodyLockRhythm, "LOCK RHYTHM", theme::neonYellow);
-    lockPitch  = std::make_unique<ParamToggle> (shared, params::melodyLockPitch,  "LOCK PITCH",  theme::neonYellow);
+    lockRhythm  = std::make_unique<ParamToggle> (shared, params::melodyLockRhythm,  "RHYTHM",  theme::neonYellow);
+    lockPitch   = std::make_unique<ParamToggle> (shared, params::melodyLockPitch,   "PITCH",   theme::neonYellow);
+    lockHarmony = std::make_unique<ParamToggle> (shared, params::melodyLockHarmony, "HARMONY", theme::neonYellow);
     lockRhythm->button.setTooltip ("Keep the timing; Regenerate/Mutate change only pitch");
     lockPitch->button.setTooltip ("Keep the pitches; Regenerate/Mutate change only rhythm");
+    lockHarmony->button.setTooltip ("Keep the chord progression while pitch/rhythm re-roll");
     addAndMakeVisible (*lockRhythm);
     addAndMakeVisible (*lockPitch);
+    addAndMakeVisible (*lockHarmony);
 
     styleChip (saveButton, theme::accentMod);
     saveButton.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
@@ -441,20 +446,23 @@ void MelodyPanel::resized()
     phraseTabs.setBounds (shapeRow);
     arpPatternTabs.setBounds (shapeRow);
 
-    // FEEL: four macro knobs across the column.
+    // FEEL: five macro knobs across the column.
     auto knobs = section ("FEEL", 54);
-    const int kw = knobs.getWidth() / 4;
-    energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (3, 0));
-    complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (3, 0));
-    imageKnob->setBounds      (knobs.removeFromLeft (kw).reduced (3, 0));
-    repetitionKnob->setBounds (knobs.reduced (3, 0));
+    const int kw = knobs.getWidth() / 5;
+    energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (2, 0));
+    complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
+    imageKnob->setBounds      (knobs.removeFromLeft (kw).reduced (2, 0));
+    repetitionKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
+    densityKnob->setBounds    (knobs.reduced (2, 0));
 
     loopTabs.setBounds (section ("LOOP LENGTH", 18));
 
-    // SEED: the two locks, then the two regeneration actions.
+    // SEED: the three locks, then the two regeneration actions.
     auto lockRow = section ("SEED", 18, 6);
-    lockRhythm->setBounds (lockRow.removeFromLeft (lockRow.getWidth() / 2 - 4));
-    lockPitch->setBounds  (lockRow.removeFromRight (lockRow.getWidth()));
+    const int lw = lockRow.getWidth() / 3;
+    lockRhythm->setBounds  (lockRow.removeFromLeft (lw).withTrimmedRight (4));
+    lockPitch->setBounds   (lockRow.removeFromLeft (lw).withTrimmedRight (4));
+    lockHarmony->setBounds (lockRow);
     auto actionRow = row (26, 8);
     regenerateButton.setBounds (actionRow.removeFromLeft (actionRow.getWidth() / 2 - 4));
     mutateButton.setBounds     (actionRow.removeFromRight (actionRow.getWidth()));

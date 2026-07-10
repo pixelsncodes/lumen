@@ -2183,6 +2183,68 @@ public:
     }
 };
 
+// RC pass: every melody parameter — including the Phase 5 additions — must
+// survive a full APVTS state round-trip with a non-default value. This is the
+// save/load contract for the whole melody surface in one pin.
+class MelodyParamRoundtripTest final : public juce::UnitTest
+{
+public:
+    MelodyParamRoundtripTest()
+        : juce::UnitTest ("Melody parameters all survive a state round-trip", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        // id -> distinct non-default value (denormalized).
+        const std::pair<const char*, float> targets[] = {
+            { params::melodyKeyMode,        1.0f },   // Random
+            { params::melodyMode,           2.0f },   // Arp
+            { params::melodyLength,         2.0f },   // 32
+            { params::melodyPhrase,         1.0f },   // Freeform
+            { params::melodyArpPattern,     4.0f },   // Random
+            { params::melodyLoopLength,     3.0f },   // 4 bars
+            { params::melodyEnergy,         0.9f },
+            { params::melodyComplexity,     0.6f },
+            { params::melodyImageInfluence, 0.8f },
+            { params::melodyRepetition,     0.7f },
+            { params::melodyDensity,        0.4f },
+            { params::melodyLockRhythm,     1.0f },
+            { params::melodyLockPitch,      1.0f },
+            { params::melodyLockHarmony,    1.0f },
+            { params::melodyLoopPlayback,   1.0f },
+            { params::melodyTranspose,      -7.0f },
+        };
+
+        beginTest ("set non-default values and serialize");
+        NullProcessor source;
+        for (const auto& [id, value] : targets)
+        {
+            auto* p = source.apvts.getParameter (id);
+            expect (p != nullptr, juce::String (id) + " exists");
+            if (p != nullptr)
+                p->setValueNotifyingHost (p->convertTo0to1 (value));
+        }
+        const auto xml = source.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes to XML");
+        if (xml == nullptr)
+            return;
+
+        beginTest ("a fresh processor restores every melody param");
+        NullProcessor restored;
+        restored.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        for (const auto& [id, value] : targets)
+        {
+            auto* p = restored.apvts.getParameter (id);
+            expect (p != nullptr, juce::String (id) + " exists after restore");
+            if (p == nullptr)
+                continue;
+            expectWithinAbsoluteError (p->convertFrom0to1 (p->getValue()), value,
+                                       0.001f, juce::String (id));
+        }
+    }
+};
+
 // Phase 5: Transpose is post-generation only — the stored sequence never
 // changes, and the exported MIDI shifts every note by exactly the param value.
 class MelodyTransposeTest final : public juce::UnitTest
@@ -2263,6 +2325,7 @@ MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
 MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MelodySummaryTest melodySummaryTest;
 MelodyTransposeTest melodyTransposeTest;
+MelodyParamRoundtripTest melodyParamRoundtripTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

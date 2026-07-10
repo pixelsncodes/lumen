@@ -95,13 +95,15 @@ private:
     TabsBar arpPatternTabs;    // UP / DOWN / UP-DN / CONV / RAND (Arp mode)
     TabsBar loopTabs;          // OFF / 1 / 2 / 4 / 8  (LOOP LENGTH)
 
-    // Four musical macro knobs.
-    std::unique_ptr<ModKnob> energyKnob, complexityKnob, imageKnob, repetitionKnob;
+    // Five musical macro knobs (Density joined in the RC pass — the Phase 3
+    // param finally reachable in the UI).
+    std::unique_ptr<ModKnob> energyKnob, complexityKnob, imageKnob, repetitionKnob,
+                             densityKnob;
 
     // Regeneration.
     juce::TextButton regenerateButton { "REGENERATE" };
     juce::TextButton mutateButton { "MUTATE" };
-    std::unique_ptr<ParamToggle> lockRhythm, lockPitch;
+    std::unique_ptr<ParamToggle> lockRhythm, lockPitch, lockHarmony;
 
     // Export.
     juce::TextButton saveButton { "SAVE .MID" };
