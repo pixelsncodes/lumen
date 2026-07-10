@@ -9,6 +9,11 @@
 //              [--lens-image <png>]    (load an image through the Lens engine
 //                                       first, so the screenshot shows the Lens
 //                                       panel with image + scanline — Phase 6)
+//              [--melody]              (generate + open the MELODY panel)
+//              [--melody-seed <hex>]   (pin the melody RNG seed first, so
+//                                       showcase assets reproduce exactly)
+//              [--melody-export <base>](write base.mid + base.txt generation
+//                                       summary — RC showcase gallery)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
 //   Lumen.exe --stress <seconds> [--view play|deep]
 //       Real audio device + 8-voice chord + random parameter wiggling at
@@ -26,6 +31,7 @@
 #include "Lens/LensController.h"
 #include "Melody/MelodyController.h"
 #include "PluginProcessor.h"
+#include "State/MelodyState.h"
 #include "State/PresetManager.h"
 #include "UI/LumenLookAndFeel.h"
 #include "UI/PluginEditor.h"
@@ -178,15 +184,46 @@ public:
             // --melody: generate a melody from the loaded Lens image and open
             // the MELODY panel, so the screenshot shows the generator + the
             // sampling-grid overlay (and prints the result for verification).
+            // --melody-seed <hex> pins the RNG seed first (reproducible
+            // showcase assets); --melody-export <base> writes base.mid +
+            // base.txt (the generation summary) next to the screenshot.
             if (args.contains ("--melody"))
                 if (auto* lumenProcessor = dynamic_cast<LumenAudioProcessor*> (harnessProcessor.get()))
                 {
                     auto& mc = lumenProcessor->melodyController();
+                    if (const auto seedIndex = args.indexOf ("--melody-seed");
+                        seedIndex >= 0 && seedIndex + 1 < args.size())
+                    {
+                        lumen::melodystate::setSeed (
+                            lumenProcessor->apvts.state,
+                            static_cast<juce::uint64> (args[seedIndex + 1].getHexValue64()));
+                        mc.applyState();
+                    }
                     mc.generate();
                     mc.setPanelActive (true);
                     printToStdout ("Melody: key='" + mc.detectedKey()
                                    + "' notes=" + juce::String ((int) mc.sequence().steps.size())
                                    + " hasMelody=" + juce::String (mc.hasMelody() ? 1 : 0) + "\n");
+                    if (const auto exportIndex = args.indexOf ("--melody-export");
+                        exportIndex >= 0 && exportIndex + 1 < args.size())
+                    {
+                        const auto base = juce::File::getCurrentWorkingDirectory()
+                                              .getChildFile (args[exportIndex + 1]);
+                        base.getParentDirectory().createDirectory();
+                        const bool midiOk = mc.saveMidiFile (base.withFileExtension ("mid"));
+                        juce::String txt;
+                        txt << "key:   " << mc.detectedKey() << "\n"
+                            << "mood:  " << mc.moodText() << "\n"
+                            << "form:  " << mc.formText() << "\n"
+                            << "seed:  " << juce::String::toHexString (
+                                                static_cast<juce::int64> (mc.seed())) << "\n"
+                            << "notes: " << (int) mc.sequence().steps.size() << "\n";
+                        const bool txtOk =
+                            base.withFileExtension ("txt").replaceWithText (txt);
+                        printToStdout (juce::String ("Melody export ")
+                                       + (midiOk && txtOk ? "written: " : "FAILED: ")
+                                       + base.getFullPathName() + ".{mid,txt}\n");
+                    }
                 }
 
             harnessEditor.reset (harnessProcessor->createEditorAndMakeActive());
