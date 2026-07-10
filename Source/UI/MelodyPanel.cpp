@@ -255,6 +255,37 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     };
     addAndMakeVisible (playButton);
 
+    // Loop toggle: the player wraps at the sequence end instead of stopping.
+    loopToggle = std::make_unique<ParamToggle> (shared, params::melodyLoopPlayback,
+                                                "LOOP", theme::neonYellow);
+    loopToggle->button.setTooltip ("Repeat playback from the top when the melody ends");
+    addAndMakeVisible (*loopToggle);
+
+    // Transpose stepper: +/- semitone chips driving the int param directly
+    // (registered for --check-params like the tab strips). Applied by the
+    // player and the MIDI export only — never regenerates, never re-seeds.
+    auto nudgeTranspose = [this] (int delta)
+    {
+        if (auto* p = shared.apvts().getParameter (params::melodyTranspose))
+        {
+            const int current = juce::roundToInt (
+                p->convertFrom0to1 (p->getValue()));
+            const int next = juce::jlimit (-12, 12, current + delta);
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (next)));
+            p->endChangeGesture();
+        }
+    };
+    styleChip (transposeDown, theme::neonYellow);
+    styleChip (transposeUp, theme::neonYellow);
+    transposeDown.setTooltip ("Shift playback and export down a semitone (never regenerates)");
+    transposeUp.setTooltip ("Shift playback and export up a semitone (never regenerates)");
+    transposeDown.onClick = [nudgeTranspose] { nudgeTranspose (-1); };
+    transposeUp.onClick   = [nudgeTranspose] { nudgeTranspose (+1); };
+    shared.registerAttachment (params::melodyTranspose);
+    addAndMakeVisible (transposeDown);
+    addAndMakeVisible (transposeUp);
+
     // Tab strips drive their choice params directly (no JUCE attachment), so
     // register them for the --check-params UI-coverage audit.
     shared.registerAttachment (params::melodyMode);
@@ -277,15 +308,17 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     addAndMakeVisible (arpPatternTabs);
     addAndMakeVisible (loopTabs);
 
-    // Four macro knobs.
+    // Five macro knobs.
     energyKnob     = std::make_unique<ModKnob> (shared, params::melodyEnergy,         "ENERGY",   theme::neonYellow);
     complexityKnob = std::make_unique<ModKnob> (shared, params::melodyComplexity,     "COMPLEX",  theme::neonYellow);
     imageKnob      = std::make_unique<ModKnob> (shared, params::melodyImageInfluence, "IMAGE",    theme::neonYellow);
     repetitionKnob = std::make_unique<ModKnob> (shared, params::melodyRepetition,     "REPEAT",   theme::neonYellow);
+    densityKnob    = std::make_unique<ModKnob> (shared, params::melodyDensity,        "DENSITY",  theme::neonYellow);
     addAndMakeVisible (*energyKnob);
     addAndMakeVisible (*complexityKnob);
     addAndMakeVisible (*imageKnob);
     addAndMakeVisible (*repetitionKnob);
+    addAndMakeVisible (*densityKnob);
 
     // Regeneration: fresh material, or a small mutation of the current one; the
     // two locks constrain what either is allowed to change.
@@ -300,12 +333,15 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     mutateButton.onClick = [this] { shared.processor.melodyController().mutate(); };
     addAndMakeVisible (mutateButton);
 
-    lockRhythm = std::make_unique<ParamToggle> (shared, params::melodyLockRhythm, "LOCK RHYTHM", theme::neonYellow);
-    lockPitch  = std::make_unique<ParamToggle> (shared, params::melodyLockPitch,  "LOCK PITCH",  theme::neonYellow);
+    lockRhythm  = std::make_unique<ParamToggle> (shared, params::melodyLockRhythm,  "RHYTHM",  theme::neonYellow);
+    lockPitch   = std::make_unique<ParamToggle> (shared, params::melodyLockPitch,   "PITCH",   theme::neonYellow);
+    lockHarmony = std::make_unique<ParamToggle> (shared, params::melodyLockHarmony, "HARMONY", theme::neonYellow);
     lockRhythm->button.setTooltip ("Keep the timing; Regenerate/Mutate change only pitch");
     lockPitch->button.setTooltip ("Keep the pitches; Regenerate/Mutate change only rhythm");
+    lockHarmony->button.setTooltip ("Keep the chord progression while pitch/rhythm re-roll");
     addAndMakeVisible (*lockRhythm);
     addAndMakeVisible (*lockPitch);
+    addAndMakeVisible (*lockHarmony);
 
     styleChip (saveButton, theme::accentMod);
     saveButton.setColour (juce::TextButton::textColourOffId, theme::textPrimary);
@@ -363,9 +399,17 @@ void MelodyPanel::resized()
 
     closeButton.setBounds (getWidth() - 30, 8, 20, 20);
 
-    // Left: the image + grid visualization (square-ish).
+    // Left: the image + grid visualization (square-ish), with the generation
+    // summary readout and the transpose stepper beneath it.
     auto left = area.removeFromLeft (280);
     grid.setBounds (left.removeFromTop (280));
+    left.removeFromTop (10);
+    summaryArea = left.removeFromTop (80);
+    left.removeFromTop (8);
+    auto transposeRow = left.removeFromTop (22);
+    transposeDown.setBounds (transposeRow.removeFromLeft (30));
+    transposeUp.setBounds (transposeRow.removeFromRight (30));
+    transposeLabelArea = transposeRow.reduced (4, 0);
 
     area.removeFromLeft (16);
     auto col = area; // right control column
@@ -386,8 +430,11 @@ void MelodyPanel::resized()
         return row (h, gap);
     };
 
-    // Transport (no caption).
-    playButton.setBounds (row (26, 10));
+    // Transport (no caption): PLAY with the LOOP chip beside it.
+    auto transportRow = row (26, 10);
+    loopToggle->setBounds (transportRow.removeFromRight (64));
+    transportRow.removeFromRight (8);
+    playButton.setBounds (transportRow);
 
     modeTabs.setBounds    (section ("MODE",   18));
     keyModeTabs.setBounds (section ("KEY",    18));
@@ -399,20 +446,23 @@ void MelodyPanel::resized()
     phraseTabs.setBounds (shapeRow);
     arpPatternTabs.setBounds (shapeRow);
 
-    // FEEL: four macro knobs across the column.
+    // FEEL: five macro knobs across the column.
     auto knobs = section ("FEEL", 54);
-    const int kw = knobs.getWidth() / 4;
-    energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (3, 0));
-    complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (3, 0));
-    imageKnob->setBounds      (knobs.removeFromLeft (kw).reduced (3, 0));
-    repetitionKnob->setBounds (knobs.reduced (3, 0));
+    const int kw = knobs.getWidth() / 5;
+    energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (2, 0));
+    complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
+    imageKnob->setBounds      (knobs.removeFromLeft (kw).reduced (2, 0));
+    repetitionKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
+    densityKnob->setBounds    (knobs.reduced (2, 0));
 
     loopTabs.setBounds (section ("LOOP LENGTH", 18));
 
-    // SEED: the two locks, then the two regeneration actions.
+    // SEED: the three locks, then the two regeneration actions.
     auto lockRow = section ("SEED", 18, 6);
-    lockRhythm->setBounds (lockRow.removeFromLeft (lockRow.getWidth() / 2 - 4));
-    lockPitch->setBounds  (lockRow.removeFromRight (lockRow.getWidth()));
+    const int lw = lockRow.getWidth() / 3;
+    lockRhythm->setBounds  (lockRow.removeFromLeft (lw).withTrimmedRight (4));
+    lockPitch->setBounds   (lockRow.removeFromLeft (lw).withTrimmedRight (4));
+    lockHarmony->setBounds (lockRow);
     auto actionRow = row (26, 8);
     regenerateButton.setBounds (actionRow.removeFromLeft (actionRow.getWidth() / 2 - 4));
     mutateButton.setBounds     (actionRow.removeFromRight (actionRow.getWidth()));
@@ -438,12 +488,49 @@ void MelodyPanel::paint (juce::Graphics& g)
     g.setFont (theme::semiBold (14.0f));
     g.drawText ("MELODY", 24, 11, 160, 18, juce::Justification::centredLeft);
 
-    // Detected key readout under the image.
-    const auto key = shared.processor.melodyController().detectedKey();
-    g.setColour (theme::textSecondary);
-    g.setFont (theme::font (12.0f));
-    g.drawText ("Detected: " + (key.isNotEmpty() ? key : juce::String ("\xe2\x80\x94")),
-                18, getHeight() - 26, 300, 18, juce::Justification::centredLeft);
+    // Generation summary under the image: what the engine detected and chose.
+    {
+        auto& m = shared.processor.melodyController();
+        const juce::String dash = juce::String::fromUTF8 ("\xe2\x80\x94");
+        const auto value = [&dash] (const juce::String& v) { return v.isNotEmpty() ? v : dash; };
+
+        auto block = summaryArea;
+        g.setColour (theme::textSecondary.withAlpha (0.85f));
+        g.setFont (theme::semiBold (9.5f));
+        g.drawText ("GENERATED", block.removeFromTop (12), juce::Justification::centredLeft);
+        block.removeFromTop (2);
+
+        const std::pair<const char*, juce::String> rows[] = {
+            { "KEY",  value (m.detectedKey()) },
+            { "MOOD", value (m.moodText()) },
+            { "FORM", value (m.formText()) },
+            { "SEED", m.hasMelody()
+                          ? juce::String::toHexString (static_cast<juce::int64> (m.seed()))
+                          : dash },
+        };
+        for (const auto& [label, text] : rows)
+        {
+            auto line = block.removeFromTop (16);
+            g.setColour (theme::textMuted);
+            g.setFont (theme::semiBold (9.5f));
+            g.drawText (label, line.removeFromLeft (38), juce::Justification::centredLeft);
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::font (11.0f));
+            g.drawText (text, line, juce::Justification::centredLeft);
+        }
+    }
+
+    // Transpose readout between the +/- chips.
+    {
+        const int t = choiceParam (params::melodyTranspose);
+        g.setColour (theme::textMuted);
+        g.setFont (theme::semiBold (9.5f));
+        g.drawText ("TRANSPOSE", transposeLabelArea, juce::Justification::centredLeft);
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::medium (11.0f));
+        g.drawText ((t > 0 ? "+" : "") + juce::String (t) + " st",
+                    transposeLabelArea, juce::Justification::centredRight);
+    }
 
     // Section captions above each control group.
     g.setFont (theme::semiBold (9.5f));
@@ -456,6 +543,30 @@ void MelodyPanel::animate()
 {
     grid.animate();
     refreshTransportLabel();
+
+    // Repaint the summary block when generation changes what it says.
+    {
+        auto& m = shared.processor.melodyController();
+        juce::String composed;
+        composed << m.detectedKey() << '|' << m.moodText() << '|' << m.formText()
+                 << '|' << juce::String::toHexString (static_cast<juce::int64> (m.seed()))
+                 << '|' << (m.hasMelody() ? 1 : 0);
+        if (composed != summaryCache)
+        {
+            summaryCache = composed;
+            repaint (summaryArea);
+        }
+    }
+
+    // Repaint the transpose readout when the param moves (UI or automation).
+    {
+        const int t = choiceParam (params::melodyTranspose);
+        if (t != transposeCache)
+        {
+            transposeCache = t;
+            repaint (transposeLabelArea);
+        }
+    }
 
     if (modeTabs.active() != choiceParam (params::melodyMode))
         modeTabs.setActive (choiceParam (params::melodyMode), false);

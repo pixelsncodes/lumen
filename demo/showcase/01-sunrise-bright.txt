@@ -1,0 +1,5 @@
+key:   D Major
+mood:  bright (major) — hue 46°, sat 0.73, lum 0.68
+form:  A A′ B C
+seed:  5eed0001
+notes: 22

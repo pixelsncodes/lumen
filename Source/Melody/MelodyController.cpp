@@ -213,14 +213,74 @@ juce::uint64 MelodyController::makeSeed()
 
 namespace
 {
+    // Generation-summary text (Phase 5). Surfaces the key detector's own
+    // classification — the scale family it CHOSE plus the hue/sat/lum inputs
+    // that chose it (KeySelector::chooseScaleType's documented axes) — without
+    // re-running any of it. randomKey marks a Random-mode draw, where the
+    // "image" was a synthetic solid colour.
+    juce::String moodTextFor (const lumena::scales::KeyDetection& d, bool randomKey)
+    {
+        using lumena::scales::ScaleType;
+        const char* bucket = "";
+        switch (d.type)
+        {
+            case ScaleType::MajorPentatonic:
+            case ScaleType::MinorPentatonic: bucket = "washed-out";   break;
+            case ScaleType::BluesMinor:
+            case ScaleType::HarmonicMinor:   bucket = "vivid & dark"; break;
+            case ScaleType::Phrygian:        bucket = "darkest";      break;
+            case ScaleType::Aeolian:         bucket = "dark";         break;
+            case ScaleType::Dorian:          bucket = "dusky";        break;
+            case ScaleType::Mixolydian:      bucket = "warm";         break;
+            case ScaleType::Ionian:          bucket = "bright";       break;
+            case ScaleType::Lydian:          bucket = "brightest";    break;
+        }
+        juce::String s (bucket);
+        s << (d.major ? " (major)" : " (minor)")
+          << " \xe2\x80\x94 hue " << juce::roundToInt (d.hue) << "\xc2\xb0"
+          << ", sat " << juce::String (d.saturation, 2)
+          << ", lum " << juce::String (d.value, 2);
+        if (randomKey)
+            s << " (random draw)";
+        return s;
+    }
+
+    // Phrase-form letters by generatePhrased's construction convention:
+    // phrase 0 = the motif (A), the last = the closing cadence phrase (C),
+    // interior odd = A-family variations (A', A'', ...), interior even = the
+    // contrasting B phrases. Non-phrased shapes name themselves.
+    juce::String formTextFor (int modeChoice, int phraseChoice,
+                              const std::vector<std::size_t>& phraseStarts)
+    {
+        if (modeChoice == 1) return "chord progression";
+        if (modeChoice == 2) return "arpeggio";
+        if (phraseChoice == 1) return "freeform walk";
+
+        const std::size_t n = phraseStarts.size();
+        if (n < 2)
+            return "phrased";
+        juce::String s;
+        int variation = 0;
+        for (std::size_t p = 0; p < n; ++p)
+        {
+            if (p > 0) s << " ";
+            if (p == 0)              s << "A";
+            else if (p + 1 == n)     s << "C";
+            else if (p % 2 == 1)     s << "A" << juce::String::repeatedString ("\xe2\x80\xb2", ++variation);
+            else                     s << "B";
+        }
+        return s;
+    }
+
     // Runs the full image -> key -> Lumena melody pipeline at a given seed,
-    // returning the Lumena melody plus the detected scale/key and grid size.
+    // returning the Lumena melody plus the full key detection (scale, key
+    // name, and the provenance the summary readout shows) and grid size.
     // Shared by generate() and regenerate(). Returns false if no image.
     bool renderFresh (const juce::AudioProcessorValueTreeState& apvts,
                       const juce::Image& jimg, juce::uint64 seed,
                       lumena::melody::Melody& outMelody,
-                      lumena::scales::Scale& outScale,
-                      juce::String& outKey, int& outCols, int& outRows,
+                      lumena::scales::KeyDetection& outDetection,
+                      int& outCols, int& outRows,
                       const std::vector<int>& lockedProgression = {})
     {
         if (! jimg.isValid())
@@ -254,11 +314,10 @@ namespace
         // fresh one (empty = normal draw, byte-identical to before 4b).
         if (! lockedProgression.empty())
             opts.progression = lockedProgression;
-        outMelody = lumena::melody::generateMelody (grid, detection.scale, opts, gen);
-        outScale  = detection.scale;
-        outKey    = juce::String (detection.keyName);
-        outCols   = grid.columns();
-        outRows   = grid.rows();
+        outMelody    = lumena::melody::generateMelody (grid, detection.scale, opts, gen);
+        outDetection = detection;
+        outCols      = grid.columns();
+        outRows      = grid.rows();
         return true;
     }
 } // namespace
@@ -267,15 +326,18 @@ void MelodyController::generate()
 {
     const juce::Image jimg = lens.displayImage (lens.target());
     lumena::melody::Melody mel;
-    lumena::scales::Scale scale;
-    juce::String key;
+    lumena::scales::KeyDetection detection;
     int cols = 0, rows = 0;
-    if (! renderFresh (apvts, jimg, seedValue, mel, scale, key, cols, rows))
+    if (! renderFresh (apvts, jimg, seedValue, mel, detection, cols, rows))
         return; // no image loaded: nothing to sample
 
     currentProgression = mel.progression;  // remember harmony for Lock Harmony
     currentPhraseStarts = mel.phraseStarts; // remember phrases for phrase-aware splice
-    installSequence (melodyToSequence (mel, cols, rows, key));
+    moodValue = moodTextFor (detection, choiceOf (apvts, params::melodyKeyMode) == 1);
+    formValue = formTextFor (choiceOf (apvts, params::melodyMode),
+                             choiceOf (apvts, params::melodyPhrase), mel.phraseStarts);
+    installSequence (melodyToSequence (mel, cols, rows,
+                                       juce::String (detection.keyName)));
 }
 
 void MelodyController::installSequence (const melody::Sequence& seq)
@@ -283,9 +345,10 @@ void MelodyController::installSequence (const melody::Sequence& seq)
     currentSeq = seq; // message-thread copy for the UI overlay + export
 
     // Persist: seed + the note sequence itself (see MelodyState for why the
-    // notes are stored rather than regenerated).
+    // notes are stored rather than regenerated) + the generation summary.
     melodystate::setSeed (apvts.state, seedValue);
     melodystate::setLocked (apvts.state, lockedFlag);
+    melodystate::setSummary (apvts.state, moodValue, formValue);
     melodystate::storeSequence (apvts.state, currentSeq);
 
     // Hand a fresh copy to the audio-thread player.
@@ -307,16 +370,16 @@ void MelodyController::regenerate()
 
     const juce::Image jimg = lens.displayImage (lens.target());
     lumena::melody::Melody cand;
-    lumena::scales::Scale scale;
-    juce::String key;
+    lumena::scales::KeyDetection detection;
     int cols = 0, rows = 0;
     // Lock Harmony: carry the current progression into the fresh candidate so its
     // pitch/rhythm re-roll under a fixed harmony (empty otherwise = fresh draw).
     const std::vector<int> carryProgression =
         locks.harmony ? currentProgression : std::vector<int> {};
-    if (! renderFresh (apvts, jimg, newSeed, cand, scale, key, cols, rows,
+    if (! renderFresh (apvts, jimg, newSeed, cand, detection, cols, rows,
                        carryProgression))
         return;
+    const lumena::scales::Scale& scale = detection.scale;
 
     currentProgression = cand.progression;  // keep the latest for future carries
     lumena::melody::Melody out = cand;
@@ -335,7 +398,11 @@ void MelodyController::regenerate()
 
     seedValue = newSeed;
     currentPhraseStarts = out.phraseStarts;  // the new melody's phrases
-    installSequence (melodyToSequence (out, cols, rows, key));
+    moodValue = moodTextFor (detection, choiceOf (apvts, params::melodyKeyMode) == 1);
+    formValue = formTextFor (choiceOf (apvts, params::melodyMode),
+                             choiceOf (apvts, params::melodyPhrase), out.phraseStarts);
+    installSequence (melodyToSequence (out, cols, rows,
+                                       juce::String (detection.keyName)));
 }
 
 void MelodyController::mutate()
@@ -350,11 +417,11 @@ void MelodyController::mutate()
     // render is discarded; only the scale is needed for diatonic nudging).
     const juce::Image jimg = lens.displayImage (lens.target());
     lumena::melody::Melody discard;
-    lumena::scales::Scale scale;
-    juce::String key;
+    lumena::scales::KeyDetection detection;
     int cols = 0, rows = 0;
-    if (! renderFresh (apvts, jimg, seedValue, discard, scale, key, cols, rows))
+    if (! renderFresh (apvts, jimg, seedValue, discard, detection, cols, rows))
         return;
+    const lumena::scales::Scale& scale = detection.scale;
 
     const lumena::melody::Melody base = sequenceToMelody (currentSeq);
     const lumena::melody::RegenLocks locks = locksFromParams (apvts);
@@ -397,12 +464,16 @@ std::vector<unsigned char> MelodyController::toMidiBytes() const
     if (currentSeq.steps.empty())
         return {};
 
+    // Export what you hear: apply the live Transpose param the same way the
+    // player does (per note, clamped). The stored sequence stays untouched.
+    const int transpose = juce::roundToInt (floatOf (apvts, params::melodyTranspose));
+
     std::vector<lumena::midi::Note> notes;
     notes.reserve (currentSeq.steps.size());
     for (const auto& s : currentSeq.steps)
     {
         lumena::midi::Note n;
-        n.noteNumber  = s.note;
+        n.noteNumber  = juce::jlimit (0, 127, s.note + transpose);
         n.velocity    = clampVelocity127 (juce::roundToInt (s.velocity * 127.0f));
         n.startBeats  = s.startBeats;
         n.lengthBeats = s.lengthBeats;
@@ -442,6 +513,8 @@ void MelodyController::applyState()
 {
     seedValue  = melodystate::seed (apvts.state);
     lockedFlag = melodystate::locked (apvts.state);
+    moodValue  = melodystate::summaryMood (apvts.state);
+    formValue  = melodystate::summaryForm (apvts.state);
     if (seedValue == 0)
         seedValue = makeSeed();
 

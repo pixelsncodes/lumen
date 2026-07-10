@@ -1,0 +1,5 @@
+key:   C Harmonic Minor
+mood:  vivid & dark (minor) — hue 5°, sat 0.96, lum 0.13
+form:  A A′ B C
+seed:  5eed0007
+notes: 22

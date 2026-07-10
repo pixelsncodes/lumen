@@ -145,6 +145,11 @@ inline constexpr const char* melodyDensity        = "melodyDensity";
 inline constexpr const char* melodyLockRhythm  = "melodyLockRhythm";
 inline constexpr const char* melodyLockPitch   = "melodyLockPitch";
 inline constexpr const char* melodyLockHarmony = "melodyLockHarmony";
+// Phase 5 (showcase UI): loop the melody transport at the sequence end, and a
+// post-generation semitone shift applied at playback/export time only (the
+// stored sequence, the seed and the generator are never touched).
+inline constexpr const char* melodyLoopPlayback = "melodyLoopPlayback";
+inline constexpr const char* melodyTranspose    = "melodyTranspose";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

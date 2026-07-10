@@ -49,6 +49,13 @@ public:
     bool isPlaying() const;
     bool hasMelody() const noexcept { return ! currentSeq.steps.empty(); }
     juce::String detectedKey() const { return currentSeq.keyName; }
+    // Generation summary (Phase 5): what the engine detected and chose, built
+    // from the KeyDetection/phrase provenance at generate() time (never
+    // recomputed) and persisted with the sequence. Empty before the first
+    // generation. mood = classification bucket + its hue/sat/lum inputs;
+    // form = phrase letters ("A A\xe2\x80\xb2 B A\xe2\x80\xb3 C") or the mode's shape name.
+    juce::String moodText() const { return moodValue; }
+    juce::String formText() const { return formValue; }
     int gridCols() const noexcept { return currentSeq.gridCols; }
     int gridRows() const noexcept { return currentSeq.gridRows; }
     const melody::Sequence& sequence() const noexcept { return currentSeq; }
@@ -83,6 +90,7 @@ private:
     juce::uint64 seedValue = 0;
     bool lockedFlag  = false;
     bool panelActive = false;
+    juce::String moodValue, formValue; // generation summary (see moodText())
     melody::Sequence currentSeq; // message-thread copy for the UI + export
     // The current melody's chord progression, kept so "Lock Harmony" can carry it
     // into a regeneration. In-memory for the session (not persisted across reload

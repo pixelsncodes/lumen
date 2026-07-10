@@ -1,0 +1,149 @@
+Started validating: C:\Users\pixel\Projects\lumen\build\Lumen_artefacts\Release\VST3\Lumen.vst3
+Random seed: 0x160d9c4
+Validation started
+Strictness level: 10
+-----------------------------------------------------------------
+Starting tests in: pluginval / Scan for plugins located in: C:\Users\pixel\Projects\lumen\build\Lumen_artefacts\Release\VST3\Lumen.vst3...
+Num plugins found: 1
+
+Testing plugin: VST3-Lumen-c4a0992f-dd0dc02c
+Lumen Audio: Lumen v1.0.0
+Completed tests in pluginval / Scan for plugins located in: C:\Users\pixel\Projects\lumen\build\Lumen_artefacts\Release\VST3\Lumen.vst3
+-----------------------------------------------------------------
+Starting tests in: pluginval / Open plugin (cold)...
+Completed tests in pluginval / Open plugin (cold)
+-----------------------------------------------------------------
+Starting tests in: pluginval / Open plugin (warm)...
+Running tests 1 times
+Completed tests in pluginval / Open plugin (warm)
+-----------------------------------------------------------------
+Starting tests in: pluginval / Plugin info...
+
+Plugin name: Lumen
+Alternative names: Lumen
+SupportsDoublePrecision: no
+Reported latency: 0
+Reported taillength: 15
+Completed tests in pluginval / Plugin info
+-----------------------------------------------------------------
+Starting tests in: pluginval / Plugin programs...
+Num programs: 0
+All program names checked
+Completed tests in pluginval / Plugin programs
+-----------------------------------------------------------------
+Starting tests in: pluginval / Editor...
+Completed tests in pluginval / Editor
+-----------------------------------------------------------------
+Starting tests in: pluginval / Open editor whilst processing...
+Completed tests in pluginval / Open editor whilst processing
+-----------------------------------------------------------------
+Starting tests in: pluginval / Audio processing...
+Testing with sample rate [44100] and block size [64]
+Testing with sample rate [44100] and block size [128]
+Testing with sample rate [44100] and block size [256]
+Testing with sample rate [44100] and block size [512]
+Testing with sample rate [44100] and block size [1024]
+Testing with sample rate [48000] and block size [64]
+Testing with sample rate [48000] and block size [128]
+Testing with sample rate [48000] and block size [256]
+Testing with sample rate [48000] and block size [512]
+Testing with sample rate [48000] and block size [1024]
+Testing with sample rate [96000] and block size [64]
+Testing with sample rate [96000] and block size [128]
+Testing with sample rate [96000] and block size [256]
+Testing with sample rate [96000] and block size [512]
+Testing with sample rate [96000] and block size [1024]
+Completed tests in pluginval / Audio processing
+-----------------------------------------------------------------
+Starting tests in: pluginval / Non-releasing audio processing...
+Testing with sample rate [44100] and block size [64]
+Testing with sample rate [44100] and block size [128]
+Testing with sample rate [44100] and block size [256]
+Testing with sample rate [44100] and block size [512]
+Testing with sample rate [44100] and block size [1024]
+Testing with sample rate [48000] and block size [64]
+Testing with sample rate [48000] and block size [128]
+Testing with sample rate [48000] and block size [256]
+Testing with sample rate [48000] and block size [512]
+Testing with sample rate [48000] and block size [1024]
+Testing with sample rate [96000] and block size [64]
+Testing with sample rate [96000] and block size [128]
+Testing with sample rate [96000] and block size [256]
+Testing with sample rate [96000] and block size [512]
+Testing with sample rate [96000] and block size [1024]
+Completed tests in pluginval / Non-releasing audio processing
+-----------------------------------------------------------------
+Starting tests in: pluginval / Plugin state...
+Completed tests in pluginval / Plugin state
+-----------------------------------------------------------------
+Starting tests in: pluginval / Plugin state restoration...
+Completed tests in pluginval / Plugin state restoration
+-----------------------------------------------------------------
+Starting tests in: pluginval / Automation...
+Testing with sample rate [44100] and block size [64] and sub-block size [32]
+Testing with sample rate [44100] and block size [128] and sub-block size [32]
+Testing with sample rate [44100] and block size [256] and sub-block size [32]
+Testing with sample rate [44100] and block size [512] and sub-block size [32]
+Testing with sample rate [44100] and block size [1024] and sub-block size [32]
+Testing with sample rate [48000] and block size [64] and sub-block size [32]
+Testing with sample rate [48000] and block size [128] and sub-block size [32]
+Testing with sample rate [48000] and block size [256] and sub-block size [32]
+Testing with sample rate [48000] and block size [512] and sub-block size [32]
+Testing with sample rate [48000] and block size [1024] and sub-block size [32]
+Testing with sample rate [96000] and block size [64] and sub-block size [32]
+Testing with sample rate [96000] and block size [128] and sub-block size [32]
+Testing with sample rate [96000] and block size [256] and sub-block size [32]
+Testing with sample rate [96000] and block size [512] and sub-block size [32]
+Testing with sample rate [96000] and block size [1024] and sub-block size [32]
+Completed tests in pluginval / Automation
+-----------------------------------------------------------------
+Starting tests in: pluginval / Editor Automation...
+Completed tests in pluginval / Editor Automation
+-----------------------------------------------------------------
+Starting tests in: pluginval / Automatable Parameters...
+Completed tests in pluginval / Automatable Parameters
+-----------------------------------------------------------------
+Starting tests in: pluginval / Parameters...
+Completed tests in pluginval / Parameters
+-----------------------------------------------------------------
+Starting tests in: pluginval / Background thread state...
+Completed tests in pluginval / Background thread state
+-----------------------------------------------------------------
+Starting tests in: pluginval / Parameter thread safety...
+Completed tests in pluginval / Parameter thread safety
+-----------------------------------------------------------------
+Starting tests in: pluginval / auval...
+Completed tests in pluginval / auval
+-----------------------------------------------------------------
+Starting tests in: pluginval / vst3 validator...
+INFO: Skipping vst3 validator as validator path hasn't been set
+Completed tests in pluginval / vst3 validator
+-----------------------------------------------------------------
+Starting tests in: pluginval / Basic bus...
+Completed tests in pluginval / Basic bus
+-----------------------------------------------------------------
+Starting tests in: pluginval / Listing available buses...
+Inputs:
+	Named layouts: None
+	Discrete layouts: None
+Outputs:
+	Named layouts: Stereo
+	Discrete layouts: None
+Main bus num input channels: 0
+Main bus num output channels: 2
+Completed tests in pluginval / Listing available buses
+-----------------------------------------------------------------
+Starting tests in: pluginval / Enabling all buses...
+Completed tests in pluginval / Enabling all buses
+-----------------------------------------------------------------
+Starting tests in: pluginval / Disabling non-main busses...
+Completed tests in pluginval / Disabling non-main busses
+-----------------------------------------------------------------
+Starting tests in: pluginval / Restoring default layout...
+Main bus num input channels: 0
+Main bus num output channels: 2
+Completed tests in pluginval / Restoring default layout
+-----------------------------------------------------------------
+Starting tests in: pluginval / Fuzz parameters...
+Completed tests in pluginval / Fuzz parameters
+SUCCESS

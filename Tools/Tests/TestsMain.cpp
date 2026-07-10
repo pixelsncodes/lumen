@@ -23,6 +23,7 @@
 #include "State/EngineBindings.h"
 #include "State/FactoryPresets.h"
 #include "State/LensState.h"
+#include "State/MelodyState.h"
 #include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
@@ -2071,9 +2072,408 @@ private:
     }
 };
 
+// Phase 5: the generation summary (key / mood / form / seed) is captured at
+// generate() time and persisted with the state, so a reloaded project can
+// still say what generation chose (the full image is gone by then).
+class MelodySummaryTest final : public juce::UnitTest
+{
+public:
+    MelodySummaryTest()
+        : juce::UnitTest ("Melody generation summary is captured and persisted", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        beginTest ("summary is empty before the first generation");
+        expect (melody.moodText().isEmpty() && melody.formText().isEmpty());
+
+        beginTest ("generate() fills key, mood and phrase form from provenance");
+        melody.generate();
+        expect (melody.detectedKey().isNotEmpty(), "key detected");
+        expect (melody.moodText().contains ("hue"), "mood carries the detection inputs");
+        expect (melody.formText().startsWith ("A"), "phrased form starts at the motif");
+
+        beginTest ("summary persists in the MELODY state tree");
+        expectEquals (melodystate::summaryMood (processor.apvts.state), melody.moodText());
+        expectEquals (melodystate::summaryForm (processor.apvts.state), melody.formText());
+
+        beginTest ("a fresh controller recalls the summary via applyState()");
+        MelodyPlayer player2 (engine);
+        MelodyController melody2 (processor.apvts, lens, player2);
+        melody2.applyState();
+        expectEquals (melody2.moodText(), melody.moodText());
+        expectEquals (melody2.formText(), melody.formText());
+        expectEquals (melody2.detectedKey(), melody.detectedKey());
+    }
+};
+
+// Phase 5: the melody player's loop toggle wraps the transport at the sequence
+// end instead of stopping, and turning it off mid-flight lets the current pass
+// finish as a one-shot.
+class MelodyLoopPlaybackTest final : public juce::UnitTest
+{
+public:
+    MelodyLoopPlaybackTest()
+        : juce::UnitTest ("Melody loop playback wraps at the sequence end", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyLoopPlayback exists and defaults to off");
+        NullProcessor processor;
+        auto* loop = processor.apvts.getParameter (params::melodyLoopPlayback);
+        expect (loop != nullptr, "melodyLoopPlayback parameter exists");
+        if (loop == nullptr)
+            return;
+        expectWithinAbsoluteError (loop->getDefaultValue(), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+
+        // A 4-beat, 2-note sequence. At 120 BPM / 48 kHz / 480-sample blocks,
+        // one block advances 0.02 beats, so one pass is 200 blocks.
+        auto makeSeq = []
+        {
+            melody::Sequence s;
+            s.totalBeats = 4.0;
+            melody::Step a; a.note = 60; a.startBeats = 0.0; a.lengthBeats = 1.0;
+            melody::Step b; b.note = 64; b.startBeats = 2.0; b.lengthBeats = 2.0;
+            s.steps = { a, b };
+            return s;
+        };
+        auto passBlocks = [] (MelodyPlayer& p, int blocks)
+        {
+            for (int i = 0; i < blocks; ++i)
+                p.process (120.0, 48000.0, 480);
+        };
+
+        beginTest ("one-shot: playback stops after the last beat");
+        {
+            MelodyPlayer player (engine);
+            player.setSequence (std::make_unique<melody::Sequence> (makeSeq()));
+            player.play();
+            passBlocks (player, 250); // 5 beats: past the 4-beat end
+            expect (! player.isPlaying(), "player stopped at the end");
+        }
+
+        beginTest ("looping: playback survives the end and keeps retriggering");
+        {
+            MelodyPlayer player (engine);
+            player.setSequence (std::make_unique<melody::Sequence> (makeSeq()));
+            player.setLooping (true);
+            player.play();
+            passBlocks (player, 450); // 9 beats: 2.25 passes
+            expect (player.isPlaying(), "player still playing after 2+ passes");
+            const auto trig = player.liveState().triggerSeq;
+            expect (trig >= 5, "notes retriggered every pass (got "
+                                   + juce::String ((int) trig) + ")");
+
+            player.setLooping (false); // mid-flight: current pass ends one-shot
+            passBlocks (player, 200);
+            expect (! player.isPlaying(), "unlooped player stops at the next end");
+        }
+    }
+};
+
+// RC torture pass: the melody transport survives every message-thread action
+// a user can throw at it mid-playback, with the audio thread advancing (and
+// rendering, so voices actually release) between actions. No ears needed —
+// each scenario has a mechanical pass condition.
+class MelodyTortureTest final : public juce::UnitTest
+{
+public:
+    MelodyTortureTest()
+        : juce::UnitTest ("Melody transport survives mid-playback torture", "Melody") {}
+
+    static constexpr double kSr = 48000.0;
+    static constexpr int kBlock = 480;
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        engine.prepare (kSr, kBlock);
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        std::vector<float> l (kBlock, 0.0f), r (kBlock, 0.0f);
+        auto runBlocks = [&] (int blocks)
+        {
+            for (int i = 0; i < blocks; ++i)
+            {
+                player.process (120.0, kSr, kBlock);
+                engine.render (l.data(), r.data(), kBlock); // envelopes advance
+            }
+        };
+        auto stopAndDrain = [&]
+        {
+            player.stop();
+            runBlocks (1);
+            for (int i = 0; i < 200 && engine.activeVoiceCount() > 0; ++i)
+                runBlocks (1); // up to ~2 s for release tails
+        };
+
+        beginTest ("regenerate during playback keeps the transport alive");
+        melody.generate();
+        melody.play();
+        runBlocks (50);
+        expect (melody.isPlaying(), "playing before the regens");
+        auto trig = player.liveState().triggerSeq;
+        for (int round = 0; round < 3; ++round)
+        {
+            melody.regenerate(); // swaps the sequence under the audio thread
+            runBlocks (60);
+        }
+        expect (melody.isPlaying(), "still playing after 3 mid-flight regens");
+        expect (player.liveState().triggerSeq > trig, "new material actually triggers");
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after regens");
+
+        beginTest ("loop toggled every 10 blocks for 600 blocks");
+        player.setLooping (true);
+        melody.play();
+        bool loopOn = true;
+        for (int i = 0; i < 60; ++i)
+        {
+            runBlocks (10);
+            loopOn = ! loopOn;
+            player.setLooping (loopOn);
+        }
+        player.setLooping (true);
+        runBlocks (250);
+        expect (melody.isPlaying(), "looped playback survives rapid toggling");
+        player.setLooping (false);
+        runBlocks (600); // longest possible remainder of a pass, then stop
+        expect (! melody.isPlaying(), "one-shot ending honoured after the storm");
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after toggling");
+
+        beginTest ("transpose swept -12..+12 every block during a loop");
+        player.setLooping (true);
+        melody.play();
+        int t = -12, dir = +1;
+        for (int i = 0; i < 400; ++i)
+        {
+            player.setTranspose (t);
+            t += dir;
+            if (t == 12 || t == -12) dir = -dir;
+            player.process (120.0, kSr, kBlock);
+            engine.render (l.data(), r.data(), kBlock);
+            const int sounding = engine.newestActiveNote();
+            expect (sounding == -1 || (sounding >= 0 && sounding <= 127),
+                    "sounding note stays in MIDI range");
+        }
+        expect (melody.isPlaying(), "loop survives the sweep");
+        player.setTranspose (0);
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0,
+                      "every swept note-on found its note-off");
+
+        beginTest ("state save/load mid-loop keeps melody, summary and playback sane");
+        player.setLooping (true);
+        melody.generate();
+        melody.play();
+        runBlocks (30);
+        const auto stepsBefore = melody.sequence().steps.size();
+        const auto keyBefore   = melody.detectedKey();
+        const auto moodBefore  = melody.moodText();
+        const auto xml = processor.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes mid-loop");
+        if (xml != nullptr)
+        {
+            processor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            melody.applyState(); // the processor's setStateInformation path
+            runBlocks (30);
+        }
+        expect (melody.hasMelody(), "melody survives the reload");
+        expectEquals ((int) melody.sequence().steps.size(), (int) stepsBefore);
+        expectEquals (melody.detectedKey(), keyBefore);
+        expectEquals (melody.moodText(), moodBefore);
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after reload");
+
+        beginTest ("rapid regenerate x20: every seed's melody replays identically");
+        struct Take { juce::uint64 seed; std::vector<melody::Step> steps; };
+        std::vector<Take> takes;
+        for (int i = 0; i < 20; ++i)
+        {
+            melody.regenerate();
+            takes.push_back ({ melody.seed(), melody.sequence().steps });
+        }
+        bool allMatch = true;
+        for (const auto& take : takes)
+        {
+            melodystate::setSeed (processor.apvts.state, take.seed);
+            melody.applyState();
+            melody.generate(); // same image + params + seed => same melody
+            const auto& now = melody.sequence().steps;
+            bool same = now.size() == take.steps.size();
+            for (std::size_t k = 0; same && k < now.size(); ++k)
+                same = now[k].note == take.steps[k].note
+                       && now[k].startBeats == take.steps[k].startBeats
+                       && now[k].lengthBeats == take.steps[k].lengthBeats
+                       && now[k].velocity == take.steps[k].velocity;
+            allMatch = allMatch && same;
+        }
+        expect (allMatch, "all 20 rapid-regen takes reproduce exactly from their seeds");
+    }
+};
+
+// RC pass: every melody parameter — including the Phase 5 additions — must
+// survive a full APVTS state round-trip with a non-default value. This is the
+// save/load contract for the whole melody surface in one pin.
+class MelodyParamRoundtripTest final : public juce::UnitTest
+{
+public:
+    MelodyParamRoundtripTest()
+        : juce::UnitTest ("Melody parameters all survive a state round-trip", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        // id -> distinct non-default value (denormalized).
+        const std::pair<const char*, float> targets[] = {
+            { params::melodyKeyMode,        1.0f },   // Random
+            { params::melodyMode,           2.0f },   // Arp
+            { params::melodyLength,         2.0f },   // 32
+            { params::melodyPhrase,         1.0f },   // Freeform
+            { params::melodyArpPattern,     4.0f },   // Random
+            { params::melodyLoopLength,     3.0f },   // 4 bars
+            { params::melodyEnergy,         0.9f },
+            { params::melodyComplexity,     0.6f },
+            { params::melodyImageInfluence, 0.8f },
+            { params::melodyRepetition,     0.7f },
+            { params::melodyDensity,        0.4f },
+            { params::melodyLockRhythm,     1.0f },
+            { params::melodyLockPitch,      1.0f },
+            { params::melodyLockHarmony,    1.0f },
+            { params::melodyLoopPlayback,   1.0f },
+            { params::melodyTranspose,      -7.0f },
+        };
+
+        beginTest ("set non-default values and serialize");
+        NullProcessor source;
+        for (const auto& [id, value] : targets)
+        {
+            auto* p = source.apvts.getParameter (id);
+            expect (p != nullptr, juce::String (id) + " exists");
+            if (p != nullptr)
+                p->setValueNotifyingHost (p->convertTo0to1 (value));
+        }
+        const auto xml = source.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes to XML");
+        if (xml == nullptr)
+            return;
+
+        beginTest ("a fresh processor restores every melody param");
+        NullProcessor restored;
+        restored.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        for (const auto& [id, value] : targets)
+        {
+            auto* p = restored.apvts.getParameter (id);
+            expect (p != nullptr, juce::String (id) + " exists after restore");
+            if (p == nullptr)
+                continue;
+            expectWithinAbsoluteError (p->convertFrom0to1 (p->getValue()), value,
+                                       0.001f, juce::String (id));
+        }
+    }
+};
+
+// Phase 5: Transpose is post-generation only — the stored sequence never
+// changes, and the exported MIDI shifts every note by exactly the param value.
+class MelodyTransposeTest final : public juce::UnitTest
+{
+public:
+    MelodyTransposeTest()
+        : juce::UnitTest ("Melody transpose shifts export, never the sequence", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyTranspose exists and defaults to 0");
+        NullProcessor processor;
+        auto* transpose = processor.apvts.getParameter (params::melodyTranspose);
+        expect (transpose != nullptr, "melodyTranspose parameter exists");
+        if (transpose == nullptr)
+            return;
+        expectWithinAbsoluteError (
+            transpose->convertFrom0to1 (transpose->getDefaultValue()), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+        melody.generate();
+        expect (melody.hasMelody(), "a melody generated");
+
+        auto storedPitches = [&melody]
+        {
+            std::vector<int> v;
+            for (const auto& s : melody.sequence().steps) v.push_back (s.note);
+            return v;
+        };
+        auto exportedNoteOns = [&melody]
+        {
+            const auto bytes = melody.toMidiBytes();
+            juce::MemoryInputStream in (bytes.data(), bytes.size(), false);
+            juce::MidiFile file;
+            std::vector<int> v;
+            if (! file.readFrom (in))
+                return v;
+            for (int t = 0; t < file.getNumTracks(); ++t)
+                for (const auto* ev : *file.getTrack (t))
+                    if (ev->message.isNoteOn())
+                        v.push_back (ev->message.getNoteNumber());
+            return v;
+        };
+
+        const auto seedBefore = melody.seed();
+        const auto pitches0   = storedPitches();
+        const auto export0    = exportedNoteOns();
+        expect (! export0.empty(), "export produces note-ons");
+
+        beginTest ("setting +5 semitones never regenerates or re-seeds");
+        transpose->setValueNotifyingHost (transpose->convertTo0to1 (5.0f));
+        expect (melody.seed() == seedBefore, "seed untouched");
+        expect (storedPitches() == pitches0, "stored sequence untouched");
+
+        beginTest ("exported MIDI shifts every note by exactly +5");
+        const auto export5 = exportedNoteOns();
+        expectEquals ((int) export5.size(), (int) export0.size());
+        bool allShifted = export5.size() == export0.size();
+        for (std::size_t i = 0; i < export0.size() && allShifted; ++i)
+            allShifted = export5[i] == juce::jlimit (0, 127, export0[i] + 5);
+        expect (allShifted, "every exported note-on is +5 (clamped)");
+
+        beginTest ("back to 0 restores the original export");
+        transpose->setValueNotifyingHost (transpose->convertTo0to1 (0.0f));
+        expect (exportedNoteOns() == export0, "export is reversible");
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
+MelodyLoopPlaybackTest melodyLoopPlaybackTest;
+MelodySummaryTest melodySummaryTest;
+MelodyTransposeTest melodyTransposeTest;
+MelodyParamRoundtripTest melodyParamRoundtripTest;
+MelodyTortureTest melodyTortureTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

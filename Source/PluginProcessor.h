@@ -133,6 +133,11 @@ private:
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;
 
+    // Raw APVTS values the melody player snapshots once per block (not engine
+    // bindings — they steer the sequencer, not the voices).
+    std::atomic<float>* melodyLoopPlaybackValue = nullptr;
+    std::atomic<float>* melodyTransposeValue    = nullptr;
+
     // Lock-free matrix publish: message thread writes the next pool entry and
     // swaps the pointer; the audio thread copies from the published entry at
     // block start. Pool depth 8 makes write-while-read effectively impossible

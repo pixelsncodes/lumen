@@ -1,0 +1,5 @@
+key:   E Minor
+mood:  dark (minor) — hue 125°, sat 0.55, lum 0.24
+form:  A A′ B C
+seed:  5eed0004
+notes: 16

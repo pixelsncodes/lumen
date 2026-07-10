@@ -31,6 +31,15 @@ bool         locked (const juce::ValueTree& state);
 void         setSeed (juce::ValueTree& state, juce::uint64 seed);
 void         setLocked (juce::ValueTree& state, bool locked);
 
+// Generation-summary text (Phase 5): the mood classification and phrase form
+// captured at generate() time. Stored with the sequence for the same reason
+// the notes are — they cannot be recomputed from a reloaded state (the full
+// image is gone), so the readout must recall what generation actually said.
+void         setSummary (juce::ValueTree& state, const juce::String& mood,
+                         const juce::String& form);
+juce::String summaryMood (const juce::ValueTree& state);
+juce::String summaryForm (const juce::ValueTree& state);
+
 // Store / load the generated note sequence. hasSequence() is false until a
 // melody has been generated (or one was restored from a saved state).
 void storeSequence (juce::ValueTree& state, const melody::Sequence& seq);

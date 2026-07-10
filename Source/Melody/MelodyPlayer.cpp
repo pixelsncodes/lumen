@@ -2,8 +2,20 @@
 
 #include "Engine/SynthEngine.h"
 
+#include <cmath>
+
 namespace lumen
 {
+namespace
+{
+    // Transposed note number, clamped to the MIDI range (audio thread; no juce).
+    int transposedNote (int note, int semitones) noexcept
+    {
+        const int n = note + semitones;
+        return n < 0 ? 0 : (n > 127 ? 127 : n);
+    }
+} // namespace
+
 MelodyPlayer::MelodyPlayer (SynthEngine& engineToUse) : engine (engineToUse) {}
 
 MelodyPlayer::~MelodyPlayer()
@@ -115,14 +127,18 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
         }
     }
 
-    // Trigger notes whose onset falls in [positionBeats, blockEnd).
+    // Trigger notes whose onset falls in [positionBeats, blockEnd), shifted by
+    // the transpose snapshot (sounding[] keeps the note as played, so a later
+    // transpose change never orphans a note-off).
+    const int transposeNow = transpose.load (std::memory_order_relaxed);
     const auto& steps = active->steps;
     while (nextStep < steps.size() && steps[nextStep].startBeats < blockEnd)
     {
         const melody::Step& s = steps[nextStep];
-        engine.noteOn (s.note, s.velocity);
+        const int note = transposedNote (s.note, transposeNow);
+        engine.noteOn (note, s.velocity);
         if (numSounding < kMaxSounding)
-            sounding[numSounding++] = { s.note, s.startBeats + s.lengthBeats };
+            sounding[numSounding++] = { note, s.startBeats + s.lengthBeats };
         pubCol.store (s.col, std::memory_order_relaxed);
         pubRow.store (s.row, std::memory_order_relaxed);
         pubTrigger.fetch_add (1, std::memory_order_relaxed);
@@ -131,9 +147,43 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
 
     positionBeats = blockEnd;
 
-    // End of the melody: all notes emitted and released, past the last beat.
-    if (nextStep >= steps.size() && numSounding == 0
-        && positionBeats >= active->totalBeats)
-        stopInternal();
+    // End of the melody. Looping: wrap the transport back to beat 0 the moment
+    // the block crosses totalBeats — release whatever still sounds (generated
+    // sequences end on the loop boundary, so this is their natural note-off),
+    // keep the overshoot so the loop length stays exact over many repeats, and
+    // trigger any step whose onset falls inside the overshoot so the loop's
+    // first note is not pushed a block late. One-shot: stop as before.
+    if (nextStep >= steps.size() && positionBeats >= active->totalBeats)
+    {
+        if (looping.load (std::memory_order_relaxed) && active->totalBeats > 0.0)
+        {
+            for (int i = 0; i < numSounding; ++i)
+                engine.noteOff (sounding[i].note);
+            numSounding = 0;
+
+            positionBeats -= active->totalBeats;
+            if (positionBeats >= active->totalBeats) // pathological short loop
+                positionBeats = std::fmod (positionBeats, active->totalBeats);
+            nextStep = 0;
+
+            while (nextStep < steps.size()
+                   && steps[nextStep].startBeats < positionBeats)
+            {
+                const melody::Step& s = steps[nextStep];
+                const int note = transposedNote (s.note, transposeNow);
+                engine.noteOn (note, s.velocity);
+                if (numSounding < kMaxSounding)
+                    sounding[numSounding++] = { note, s.startBeats + s.lengthBeats };
+                pubCol.store (s.col, std::memory_order_relaxed);
+                pubRow.store (s.row, std::memory_order_relaxed);
+                pubTrigger.fetch_add (1, std::memory_order_relaxed);
+                ++nextStep;
+            }
+        }
+        else if (numSounding == 0)
+        {
+            stopInternal();
+        }
+    }
 }
 } // namespace lumen

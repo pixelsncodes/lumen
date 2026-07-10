@@ -39,6 +39,23 @@ public:
     bool isPlaying() const noexcept { return playing.load (std::memory_order_acquire); }
     bool hasSequence() const noexcept { return hasSeq.load (std::memory_order_acquire); }
 
+    // Loop toggle (message thread OR the per-block param snapshot): when on,
+    // reaching the end of the sequence wraps the transport back to beat 0
+    // instead of stopping. Takes effect immediately, even mid-playback.
+    void setLooping (bool shouldLoop) noexcept
+    {
+        looping.store (shouldLoop, std::memory_order_relaxed);
+    }
+
+    // Post-generation semitone shift, applied per note-on (clamped to MIDI
+    // range). Already-sounding notes keep their pitch — the note-off
+    // bookkeeping stores the note as played — so changing it mid-playback is
+    // click-free and takes effect from the next note.
+    void setTranspose (int semitones) noexcept
+    {
+        transpose.store (semitones, std::memory_order_relaxed);
+    }
+
     // Delete any sequence retired by the audio thread. Safe to call anytime on
     // the message thread; also called implicitly by setSequence().
     void collectGarbage();
@@ -78,6 +95,8 @@ private:
     std::atomic<bool> requestStop { false };
     std::atomic<bool> playing { false };
     std::atomic<bool> hasSeq  { false };
+    std::atomic<bool> looping { false };
+    std::atomic<int>  transpose { 0 };
 
     double  positionBeats = 0.0;
     std::size_t nextStep  = 0;

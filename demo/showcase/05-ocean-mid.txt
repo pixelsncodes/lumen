@@ -1,0 +1,5 @@
+key:   F# Dorian
+mood:  dusky (minor) — hue 180°, sat 0.55, lum 0.38
+form:  A A′ B C
+seed:  5eed0005
+notes: 20

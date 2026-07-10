@@ -85,6 +85,7 @@ private:
     GridView grid;
 
     juce::TextButton playButton { "PLAY" };
+    std::unique_ptr<ParamToggle> loopToggle; // wraps playback at the loop end
 
     // Mode selector + grouped controls.
     TabsBar modeTabs;          // MELODY / CHORDS / ARP
@@ -94,13 +95,15 @@ private:
     TabsBar arpPatternTabs;    // UP / DOWN / UP-DN / CONV / RAND (Arp mode)
     TabsBar loopTabs;          // OFF / 1 / 2 / 4 / 8  (LOOP LENGTH)
 
-    // Four musical macro knobs.
-    std::unique_ptr<ModKnob> energyKnob, complexityKnob, imageKnob, repetitionKnob;
+    // Five musical macro knobs (Density joined in the RC pass — the Phase 3
+    // param finally reachable in the UI).
+    std::unique_ptr<ModKnob> energyKnob, complexityKnob, imageKnob, repetitionKnob,
+                             densityKnob;
 
     // Regeneration.
     juce::TextButton regenerateButton { "REGENERATE" };
     juce::TextButton mutateButton { "MUTATE" };
-    std::unique_ptr<ParamToggle> lockRhythm, lockPitch;
+    std::unique_ptr<ParamToggle> lockRhythm, lockPitch, lockHarmony;
 
     // Export.
     juce::TextButton saveButton { "SAVE .MID" };
@@ -108,6 +111,17 @@ private:
 
     // Section captions, computed in resized() and drawn in paint().
     std::vector<std::pair<juce::String, juce::Rectangle<int>>> sectionLabels;
+
+    // Generation summary block (Phase 5): drawn in paint() under the grid;
+    // animate() repaints it when the composed text changes.
+    juce::Rectangle<int> summaryArea;
+    juce::String summaryCache;
+
+    // Transpose stepper (Phase 5): +/- chips around a painted value readout,
+    // driving the melodyTranspose int param directly (TabsBar-style).
+    juce::TextButton transposeDown { "-" }, transposeUp { "+" };
+    juce::Rectangle<int> transposeLabelArea;
+    int transposeCache = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPanel)
 };
