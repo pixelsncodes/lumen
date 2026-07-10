@@ -136,6 +136,7 @@ private:
     // Raw APVTS values the melody player snapshots once per block (not engine
     // bindings — they steer the sequencer, not the voices).
     std::atomic<float>* melodyLoopPlaybackValue = nullptr;
+    std::atomic<float>* melodyTransposeValue    = nullptr;
 
     // Lock-free matrix publish: message thread writes the next pool entry and
     // swaps the pointer; the audio thread copies from the published entry at

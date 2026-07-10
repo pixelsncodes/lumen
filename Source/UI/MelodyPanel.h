@@ -115,5 +115,11 @@ private:
     juce::Rectangle<int> summaryArea;
     juce::String summaryCache;
 
+    // Transpose stepper (Phase 5): +/- chips around a painted value readout,
+    // driving the melodyTranspose int param directly (TabsBar-style).
+    juce::TextButton transposeDown { "-" }, transposeUp { "+" };
+    juce::Rectangle<int> transposeLabelArea;
+    int transposeCache = 0;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPanel)
 };

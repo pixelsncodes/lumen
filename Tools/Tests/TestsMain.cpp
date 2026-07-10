@@ -2183,11 +2183,86 @@ public:
     }
 };
 
+// Phase 5: Transpose is post-generation only — the stored sequence never
+// changes, and the exported MIDI shifts every note by exactly the param value.
+class MelodyTransposeTest final : public juce::UnitTest
+{
+public:
+    MelodyTransposeTest()
+        : juce::UnitTest ("Melody transpose shifts export, never the sequence", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyTranspose exists and defaults to 0");
+        NullProcessor processor;
+        auto* transpose = processor.apvts.getParameter (params::melodyTranspose);
+        expect (transpose != nullptr, "melodyTranspose parameter exists");
+        if (transpose == nullptr)
+            return;
+        expectWithinAbsoluteError (
+            transpose->convertFrom0to1 (transpose->getDefaultValue()), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+        melody.generate();
+        expect (melody.hasMelody(), "a melody generated");
+
+        auto storedPitches = [&melody]
+        {
+            std::vector<int> v;
+            for (const auto& s : melody.sequence().steps) v.push_back (s.note);
+            return v;
+        };
+        auto exportedNoteOns = [&melody]
+        {
+            const auto bytes = melody.toMidiBytes();
+            juce::MemoryInputStream in (bytes.data(), bytes.size(), false);
+            juce::MidiFile file;
+            std::vector<int> v;
+            if (! file.readFrom (in))
+                return v;
+            for (int t = 0; t < file.getNumTracks(); ++t)
+                for (const auto* ev : *file.getTrack (t))
+                    if (ev->message.isNoteOn())
+                        v.push_back (ev->message.getNoteNumber());
+            return v;
+        };
+
+        const auto seedBefore = melody.seed();
+        const auto pitches0   = storedPitches();
+        const auto export0    = exportedNoteOns();
+        expect (! export0.empty(), "export produces note-ons");
+
+        beginTest ("setting +5 semitones never regenerates or re-seeds");
+        transpose->setValueNotifyingHost (transpose->convertTo0to1 (5.0f));
+        expect (melody.seed() == seedBefore, "seed untouched");
+        expect (storedPitches() == pitches0, "stored sequence untouched");
+
+        beginTest ("exported MIDI shifts every note by exactly +5");
+        const auto export5 = exportedNoteOns();
+        expectEquals ((int) export5.size(), (int) export0.size());
+        bool allShifted = export5.size() == export0.size();
+        for (std::size_t i = 0; i < export0.size() && allShifted; ++i)
+            allShifted = export5[i] == juce::jlimit (0, 127, export0[i] + 5);
+        expect (allShifted, "every exported note-on is +5 (clamped)");
+
+        beginTest ("back to 0 restores the original export");
+        transpose->setValueNotifyingHost (transpose->convertTo0to1 (0.0f));
+        expect (exportedNoteOns() == export0, "export is reversible");
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
 MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MelodySummaryTest melodySummaryTest;
+MelodyTransposeTest melodyTransposeTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

@@ -329,8 +329,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // Phase 5 showcase controls, appended last (no automation index shifts).
     // Loop Playback wraps the melody transport at the sequence end instead of
-    // stopping — audition the loop without re-pressing PLAY.
+    // stopping — audition the loop without re-pressing PLAY. Transpose shifts
+    // pitches at playback/export time only; the stored sequence and the seed
+    // are never touched, so it is freely reversible.
     layout.add (std::make_unique<BoolParam> (pid (melodyLoopPlayback), "Melody Loop Playback", false));
+    layout.add (std::make_unique<IntParam> (pid (melodyTranspose), "Melody Transpose",
+        -12, 12, 0, juce::AudioParameterIntAttributes{}.withLabel ("st")));
 
     return layout;
 }

@@ -261,6 +261,31 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     loopToggle->button.setTooltip ("Repeat playback from the top when the melody ends");
     addAndMakeVisible (*loopToggle);
 
+    // Transpose stepper: +/- semitone chips driving the int param directly
+    // (registered for --check-params like the tab strips). Applied by the
+    // player and the MIDI export only — never regenerates, never re-seeds.
+    auto nudgeTranspose = [this] (int delta)
+    {
+        if (auto* p = shared.apvts().getParameter (params::melodyTranspose))
+        {
+            const int current = juce::roundToInt (
+                p->convertFrom0to1 (p->getValue()));
+            const int next = juce::jlimit (-12, 12, current + delta);
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (next)));
+            p->endChangeGesture();
+        }
+    };
+    styleChip (transposeDown, theme::neonYellow);
+    styleChip (transposeUp, theme::neonYellow);
+    transposeDown.setTooltip ("Shift playback and export down a semitone (never regenerates)");
+    transposeUp.setTooltip ("Shift playback and export up a semitone (never regenerates)");
+    transposeDown.onClick = [nudgeTranspose] { nudgeTranspose (-1); };
+    transposeUp.onClick   = [nudgeTranspose] { nudgeTranspose (+1); };
+    shared.registerAttachment (params::melodyTranspose);
+    addAndMakeVisible (transposeDown);
+    addAndMakeVisible (transposeUp);
+
     // Tab strips drive their choice params directly (no JUCE attachment), so
     // register them for the --check-params UI-coverage audit.
     shared.registerAttachment (params::melodyMode);
@@ -370,11 +395,16 @@ void MelodyPanel::resized()
     closeButton.setBounds (getWidth() - 30, 8, 20, 20);
 
     // Left: the image + grid visualization (square-ish), with the generation
-    // summary readout beneath it.
+    // summary readout and the transpose stepper beneath it.
     auto left = area.removeFromLeft (280);
     grid.setBounds (left.removeFromTop (280));
     left.removeFromTop (10);
-    summaryArea = left;
+    summaryArea = left.removeFromTop (80);
+    left.removeFromTop (8);
+    auto transposeRow = left.removeFromTop (22);
+    transposeDown.setBounds (transposeRow.removeFromLeft (30));
+    transposeUp.setBounds (transposeRow.removeFromRight (30));
+    transposeLabelArea = transposeRow.reduced (4, 0);
 
     area.removeFromLeft (16);
     auto col = area; // right control column
@@ -482,6 +512,18 @@ void MelodyPanel::paint (juce::Graphics& g)
         }
     }
 
+    // Transpose readout between the +/- chips.
+    {
+        const int t = choiceParam (params::melodyTranspose);
+        g.setColour (theme::textMuted);
+        g.setFont (theme::semiBold (9.5f));
+        g.drawText ("TRANSPOSE", transposeLabelArea, juce::Justification::centredLeft);
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::medium (11.0f));
+        g.drawText ((t > 0 ? "+" : "") + juce::String (t) + " st",
+                    transposeLabelArea, juce::Justification::centredRight);
+    }
+
     // Section captions above each control group.
     g.setFont (theme::semiBold (9.5f));
     g.setColour (theme::textSecondary.withAlpha (0.85f));
@@ -505,6 +547,16 @@ void MelodyPanel::animate()
         {
             summaryCache = composed;
             repaint (summaryArea);
+        }
+    }
+
+    // Repaint the transpose readout when the param moves (UI or automation).
+    {
+        const int t = choiceParam (params::melodyTranspose);
+        if (t != transposeCache)
+        {
+            transposeCache = t;
+            repaint (transposeLabelArea);
         }
     }
 

@@ -6,6 +6,16 @@
 
 namespace lumen
 {
+namespace
+{
+    // Transposed note number, clamped to the MIDI range (audio thread; no juce).
+    int transposedNote (int note, int semitones) noexcept
+    {
+        const int n = note + semitones;
+        return n < 0 ? 0 : (n > 127 ? 127 : n);
+    }
+} // namespace
+
 MelodyPlayer::MelodyPlayer (SynthEngine& engineToUse) : engine (engineToUse) {}
 
 MelodyPlayer::~MelodyPlayer()
@@ -117,14 +127,18 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
         }
     }
 
-    // Trigger notes whose onset falls in [positionBeats, blockEnd).
+    // Trigger notes whose onset falls in [positionBeats, blockEnd), shifted by
+    // the transpose snapshot (sounding[] keeps the note as played, so a later
+    // transpose change never orphans a note-off).
+    const int transposeNow = transpose.load (std::memory_order_relaxed);
     const auto& steps = active->steps;
     while (nextStep < steps.size() && steps[nextStep].startBeats < blockEnd)
     {
         const melody::Step& s = steps[nextStep];
-        engine.noteOn (s.note, s.velocity);
+        const int note = transposedNote (s.note, transposeNow);
+        engine.noteOn (note, s.velocity);
         if (numSounding < kMaxSounding)
-            sounding[numSounding++] = { s.note, s.startBeats + s.lengthBeats };
+            sounding[numSounding++] = { note, s.startBeats + s.lengthBeats };
         pubCol.store (s.col, std::memory_order_relaxed);
         pubRow.store (s.row, std::memory_order_relaxed);
         pubTrigger.fetch_add (1, std::memory_order_relaxed);
@@ -156,9 +170,10 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
                    && steps[nextStep].startBeats < positionBeats)
             {
                 const melody::Step& s = steps[nextStep];
-                engine.noteOn (s.note, s.velocity);
+                const int note = transposedNote (s.note, transposeNow);
+                engine.noteOn (note, s.velocity);
                 if (numSounding < kMaxSounding)
-                    sounding[numSounding++] = { s.note, s.startBeats + s.lengthBeats };
+                    sounding[numSounding++] = { note, s.startBeats + s.lengthBeats };
                 pubCol.store (s.col, std::memory_order_relaxed);
                 pubRow.store (s.row, std::memory_order_relaxed);
                 pubTrigger.fetch_add (1, std::memory_order_relaxed);

@@ -464,12 +464,16 @@ std::vector<unsigned char> MelodyController::toMidiBytes() const
     if (currentSeq.steps.empty())
         return {};
 
+    // Export what you hear: apply the live Transpose param the same way the
+    // player does (per note, clamped). The stored sequence stays untouched.
+    const int transpose = juce::roundToInt (floatOf (apvts, params::melodyTranspose));
+
     std::vector<lumena::midi::Note> notes;
     notes.reserve (currentSeq.steps.size());
     for (const auto& s : currentSeq.steps)
     {
         lumena::midi::Note n;
-        n.noteNumber  = s.note;
+        n.noteNumber  = juce::jlimit (0, 127, s.note + transpose);
         n.velocity    = clampVelocity127 (juce::roundToInt (s.velocity * 127.0f));
         n.startBeats  = s.startBeats;
         n.lengthBeats = s.lengthBeats;
