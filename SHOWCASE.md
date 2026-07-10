@@ -1,9 +1,10 @@
 # SHOWCASE.md — demoing Lumen's image-to-melody engine today
 
-The showcase combo: parent **`feature/phase5-minimal-ui`** + submodule
-**`feature/clock-unification`** tip (the working tree as checked out).
-Neither is merged yet — see *Known caveats* and the two merge-readiness
-checklists at the bottom.
+The showcase state: parent **`feature/lumena-melody`** (merge `bf7d052`)
+with the accepted Phase 4.5 engine at submodule pointer `e023c47`. Both
+tracks are merged — released state. The two merge-readiness checklists at
+the bottom are kept as the historical record; the merge record lives in
+*Known caveats*.
 
 ## Build & install (Windows)
 
@@ -64,20 +65,33 @@ Prep: standalone open (or VST3 in a DAW), `demo/showcase/` images at hand.
 
 ## Known caveats (be honest in the room)
 
-- **Two unmerged branches.** Engine Phase 4.5 (`feature/clock-unification`)
-  awaits its human **ear test**; UI Phase 5 (`feature/phase5-minimal-ui`)
-  awaits its human **visual pass**. Neither is on a mainline.
-- The engine submodule pointer still records the pre-4.5 engine; the
-  showcase runs the working-tree combo above. Merging is the engine
-  track's call, gated on the ear test.
-- pluginval has passed at strictness 10 on this exact build; re-run it
-  after any merge.
-- Ableton Live / Maschine host behavior is a standing human-only check
-  (CLAUDE.md) — not yet performed for this combo.
-- WSL/Linux builds show one known suite failure (Windows-pinned wavetable
-  SHA-256 golden); it passes on Windows, the ship toolchain.
+None — released state.
+
+**Merge record (2026-07-10, Phase 5 acceptance):**
+
+- `feature/phase5-minimal-ui` merged into `feature/lumena-melody` as
+  `bf7d052` (true merge, both parents preserved; human visual checklist
+  PASS). The merge keeps the accepted Phase 4.5 engine at submodule
+  pointer `e023c47` (moved in `6b83347` after the ear-verdict PASS) —
+  both tracks are now on one line.
+- Post-merge gates on the merged tree: full Windows suite green over 8
+  consecutive runs; Windows Release build clean at /W4-as-errors; the
+  three Phase 5 wiring groups (loop playback, generation summary,
+  transpose), the melody-parameter state round-trip and the five-scenario
+  transport torture group all green. The standing Linux-only wavetable
+  golden exception (Windows-pinned hash) is unchanged and Windows-green.
+- pluginval strictness 10 **SUCCESS** on the VST3 rebuilt from the merged
+  tip — fresh log at `demo/rc/pluginval-strictness10.log`.
+- One re-baseline, zero behavior changes (`c9ba498`): the torture test's
+  fixed 600-block one-shot wait predated the engine's form-bar pad rule
+  (lumena `4186417`), so ~1 in 4 random seeds outran it. Instrumentation
+  over 15 fresh seeds showed every pass ends on its own (max 801 blocks)
+  and every voice drains within its release tail — no transport bug; the
+  wait is now a bounded wait-until-ended plus an explicit release drain.
 
 ## Merge-readiness checklist 1 — Phase 4.5 engine (ear test, human)
+
+> **Done.** Ear verdict PASS; pointer moved to `e023c47` in `6b83347`.
 
 From `external/lumena/PHASE45_REPORT.md` §7 + §11, on
 `external/lumena/auditions/phase45/` (old vs new-fixed pairs, 4 seeds):
@@ -98,6 +112,8 @@ From `external/lumena/PHASE45_REPORT.md` §7 + §11, on
       pointer move (engine track owns both).
 
 ## Merge-readiness checklist 2 — Phase 5 UI (visual pass, human)
+
+> **Done.** Visual checklist PASS; merged as `bf7d052` (see merge record).
 
 The full list lives in `UI_SESSION_REPORT.md`; condensed:
 

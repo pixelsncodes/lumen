@@ -115,3 +115,22 @@ rapid-regen determinism ×20) all green with no product fixes needed;
 root. Windows suite ALL TESTS PASSED throughout. No merges, no pointer
 moves. Remaining human gates: Phase 4.5 ear test, Phase 5 visual pass,
 DAW host checks — checklists in SHOWCASE.md. STOPPED as commissioned.
+
+## Merge session 2026-07-10 (Phase 5 acceptance — final merge)
+
+Commissioned merge after the human visual-checklist PASS.
+`feature/phase5-minimal-ui` → `feature/lumena-melody` as true merge
+`bf7d052`, submodule pointer verified `e023c47` (the accepted 4.5 engine;
+no gitlink conflict — only the melody side had moved it). Post-merge, one
+intermittent failure surfaced: the torture test's fixed 600-block one-shot
+wait was calibrated 19 minutes before lumena `4186417` (form-bar pad rule)
+landed, so ~1 in 4 random seeds pad the pass past the wait — a phantom
+"stuck voice". Instrumented 15 fresh seeds: every pass ends on its own
+(max 801 blocks ≈ 4 bars), every voice drains in ~19 blocks of release
+tail — no transport bug. Re-baselined as `c9ba498` (bounded
+wait-until-ended, cap 1500 blocks, + explicit release drain; assertions
+keep their teeth). Suite then green 8/8 consecutive runs; full Windows
+Release rebuild clean; pluginval strictness 10 SUCCESS on the rebuilt
+VST3, fresh log committed to `demo/rc/`. SHOWCASE.md caveats reduced to
+none — released state, merge record appended there. Both branches pushed.
+No new features. STOPPED as commissioned.
