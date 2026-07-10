@@ -327,6 +327,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // parameter's automation index shifts. Default off (inert for old presets).
     layout.add (std::make_unique<BoolParam> (pid (melodyLockHarmony), "Melody Lock Harmony", false));
 
+    // Phase 5 showcase controls, appended last (no automation index shifts).
+    // Loop Playback wraps the melody transport at the sequence end instead of
+    // stopping — audition the loop without re-pressing PLAY.
+    layout.add (std::make_unique<BoolParam> (pid (melodyLoopPlayback), "Melody Loop Playback", false));
+
     return layout;
 }
 } // namespace lumen::params

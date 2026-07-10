@@ -2071,9 +2071,78 @@ private:
     }
 };
 
+// Phase 5: the melody player's loop toggle wraps the transport at the sequence
+// end instead of stopping, and turning it off mid-flight lets the current pass
+// finish as a one-shot.
+class MelodyLoopPlaybackTest final : public juce::UnitTest
+{
+public:
+    MelodyLoopPlaybackTest()
+        : juce::UnitTest ("Melody loop playback wraps at the sequence end", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("melodyLoopPlayback exists and defaults to off");
+        NullProcessor processor;
+        auto* loop = processor.apvts.getParameter (params::melodyLoopPlayback);
+        expect (loop != nullptr, "melodyLoopPlayback parameter exists");
+        if (loop == nullptr)
+            return;
+        expectWithinAbsoluteError (loop->getDefaultValue(), 0.0f, 1.0e-6f);
+
+        SynthEngine engine;
+
+        // A 4-beat, 2-note sequence. At 120 BPM / 48 kHz / 480-sample blocks,
+        // one block advances 0.02 beats, so one pass is 200 blocks.
+        auto makeSeq = []
+        {
+            melody::Sequence s;
+            s.totalBeats = 4.0;
+            melody::Step a; a.note = 60; a.startBeats = 0.0; a.lengthBeats = 1.0;
+            melody::Step b; b.note = 64; b.startBeats = 2.0; b.lengthBeats = 2.0;
+            s.steps = { a, b };
+            return s;
+        };
+        auto passBlocks = [] (MelodyPlayer& p, int blocks)
+        {
+            for (int i = 0; i < blocks; ++i)
+                p.process (120.0, 48000.0, 480);
+        };
+
+        beginTest ("one-shot: playback stops after the last beat");
+        {
+            MelodyPlayer player (engine);
+            player.setSequence (std::make_unique<melody::Sequence> (makeSeq()));
+            player.play();
+            passBlocks (player, 250); // 5 beats: past the 4-beat end
+            expect (! player.isPlaying(), "player stopped at the end");
+        }
+
+        beginTest ("looping: playback survives the end and keeps retriggering");
+        {
+            MelodyPlayer player (engine);
+            player.setSequence (std::make_unique<melody::Sequence> (makeSeq()));
+            player.setLooping (true);
+            player.play();
+            passBlocks (player, 450); // 9 beats: 2.25 passes
+            expect (player.isPlaying(), "player still playing after 2+ passes");
+            const auto trig = player.liveState().triggerSeq;
+            expect (trig >= 5, "notes retriggered every pass (got "
+                                   + juce::String ((int) trig) + ")");
+
+            player.setLooping (false); // mid-flight: current pass ends one-shot
+            passBlocks (player, 200);
+            expect (! player.isPlaying(), "unlooped player stops at the next end");
+        }
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
+MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

@@ -2,6 +2,8 @@
 
 #include "Engine/SynthEngine.h"
 
+#include <cmath>
+
 namespace lumen
 {
 MelodyPlayer::MelodyPlayer (SynthEngine& engineToUse) : engine (engineToUse) {}
@@ -131,9 +133,42 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
 
     positionBeats = blockEnd;
 
-    // End of the melody: all notes emitted and released, past the last beat.
-    if (nextStep >= steps.size() && numSounding == 0
-        && positionBeats >= active->totalBeats)
-        stopInternal();
+    // End of the melody. Looping: wrap the transport back to beat 0 the moment
+    // the block crosses totalBeats — release whatever still sounds (generated
+    // sequences end on the loop boundary, so this is their natural note-off),
+    // keep the overshoot so the loop length stays exact over many repeats, and
+    // trigger any step whose onset falls inside the overshoot so the loop's
+    // first note is not pushed a block late. One-shot: stop as before.
+    if (nextStep >= steps.size() && positionBeats >= active->totalBeats)
+    {
+        if (looping.load (std::memory_order_relaxed) && active->totalBeats > 0.0)
+        {
+            for (int i = 0; i < numSounding; ++i)
+                engine.noteOff (sounding[i].note);
+            numSounding = 0;
+
+            positionBeats -= active->totalBeats;
+            if (positionBeats >= active->totalBeats) // pathological short loop
+                positionBeats = std::fmod (positionBeats, active->totalBeats);
+            nextStep = 0;
+
+            while (nextStep < steps.size()
+                   && steps[nextStep].startBeats < positionBeats)
+            {
+                const melody::Step& s = steps[nextStep];
+                engine.noteOn (s.note, s.velocity);
+                if (numSounding < kMaxSounding)
+                    sounding[numSounding++] = { s.note, s.startBeats + s.lengthBeats };
+                pubCol.store (s.col, std::memory_order_relaxed);
+                pubRow.store (s.row, std::memory_order_relaxed);
+                pubTrigger.fetch_add (1, std::memory_order_relaxed);
+                ++nextStep;
+            }
+        }
+        else if (numSounding == 0)
+        {
+            stopInternal();
+        }
+    }
 }
 } // namespace lumen

@@ -255,6 +255,12 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     };
     addAndMakeVisible (playButton);
 
+    // Loop toggle: the player wraps at the sequence end instead of stopping.
+    loopToggle = std::make_unique<ParamToggle> (shared, params::melodyLoopPlayback,
+                                                "LOOP", theme::neonYellow);
+    loopToggle->button.setTooltip ("Repeat playback from the top when the melody ends");
+    addAndMakeVisible (*loopToggle);
+
     // Tab strips drive their choice params directly (no JUCE attachment), so
     // register them for the --check-params UI-coverage audit.
     shared.registerAttachment (params::melodyMode);
@@ -386,8 +392,11 @@ void MelodyPanel::resized()
         return row (h, gap);
     };
 
-    // Transport (no caption).
-    playButton.setBounds (row (26, 10));
+    // Transport (no caption): PLAY with the LOOP chip beside it.
+    auto transportRow = row (26, 10);
+    loopToggle->setBounds (transportRow.removeFromRight (64));
+    transportRow.removeFromRight (8);
+    playButton.setBounds (transportRow);
 
     modeTabs.setBounds    (section ("MODE",   18));
     keyModeTabs.setBounds (section ("KEY",    18));

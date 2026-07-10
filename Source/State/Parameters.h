@@ -145,6 +145,8 @@ inline constexpr const char* melodyDensity        = "melodyDensity";
 inline constexpr const char* melodyLockRhythm  = "melodyLockRhythm";
 inline constexpr const char* melodyLockPitch   = "melodyLockPitch";
 inline constexpr const char* melodyLockHarmony = "melodyLockHarmony";
+// Phase 5 (showcase UI): loop the melody transport at the sequence end.
+inline constexpr const char* melodyLoopPlayback = "melodyLoopPlayback";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

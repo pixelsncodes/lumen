@@ -85,6 +85,7 @@ private:
     GridView grid;
 
     juce::TextButton playButton { "PLAY" };
+    std::unique_ptr<ParamToggle> loopToggle; // wraps playback at the loop end
 
     // Mode selector + grouped controls.
     TabsBar modeTabs;          // MELODY / CHORDS / ARP
