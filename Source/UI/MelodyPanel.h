@@ -110,5 +110,10 @@ private:
     // Section captions, computed in resized() and drawn in paint().
     std::vector<std::pair<juce::String, juce::Rectangle<int>>> sectionLabels;
 
+    // Generation summary block (Phase 5): drawn in paint() under the grid;
+    // animate() repaints it when the composed text changes.
+    juce::Rectangle<int> summaryArea;
+    juce::String summaryCache;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPanel)
 };

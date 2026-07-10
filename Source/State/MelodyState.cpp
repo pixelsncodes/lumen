@@ -13,6 +13,8 @@ const juce::Identifier kRows     { "rows" };
 const juce::Identifier kBeats    { "beats" };
 const juce::Identifier kKey      { "key" };
 const juce::Identifier kSteps    { "steps" };
+const juce::Identifier kMood     { "mood" };
+const juce::Identifier kForm     { "form" };
 } // namespace
 
 juce::ValueTree ensureTree (juce::ValueTree& state)
@@ -57,6 +59,26 @@ void setLocked (juce::ValueTree& state, bool lockedValue)
 {
     auto tree = ensureTree (state);
     tree.setProperty (kLocked, lockedValue, nullptr);
+}
+
+void setSummary (juce::ValueTree& state, const juce::String& mood,
+                 const juce::String& form)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kMood, mood, nullptr);
+    tree.setProperty (kForm, form, nullptr);
+}
+
+juce::String summaryMood (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() ? tree.getProperty (kMood).toString() : juce::String();
+}
+
+juce::String summaryForm (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() ? tree.getProperty (kForm).toString() : juce::String();
 }
 
 void storeSequence (juce::ValueTree& state, const melody::Sequence& seq)

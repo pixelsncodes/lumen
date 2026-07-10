@@ -23,6 +23,7 @@
 #include "State/EngineBindings.h"
 #include "State/FactoryPresets.h"
 #include "State/LensState.h"
+#include "State/MelodyState.h"
 #include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/Parameters.h"
@@ -2071,6 +2072,49 @@ private:
     }
 };
 
+// Phase 5: the generation summary (key / mood / form / seed) is captured at
+// generate() time and persisted with the state, so a reloaded project can
+// still say what generation chose (the full image is gone by then).
+class MelodySummaryTest final : public juce::UnitTest
+{
+public:
+    MelodySummaryTest()
+        : juce::UnitTest ("Melody generation summary is captured and persisted", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        beginTest ("summary is empty before the first generation");
+        expect (melody.moodText().isEmpty() && melody.formText().isEmpty());
+
+        beginTest ("generate() fills key, mood and phrase form from provenance");
+        melody.generate();
+        expect (melody.detectedKey().isNotEmpty(), "key detected");
+        expect (melody.moodText().contains ("hue"), "mood carries the detection inputs");
+        expect (melody.formText().startsWith ("A"), "phrased form starts at the motif");
+
+        beginTest ("summary persists in the MELODY state tree");
+        expectEquals (melodystate::summaryMood (processor.apvts.state), melody.moodText());
+        expectEquals (melodystate::summaryForm (processor.apvts.state), melody.formText());
+
+        beginTest ("a fresh controller recalls the summary via applyState()");
+        MelodyPlayer player2 (engine);
+        MelodyController melody2 (processor.apvts, lens, player2);
+        melody2.applyState();
+        expectEquals (melody2.moodText(), melody.moodText());
+        expectEquals (melody2.formText(), melody.formText());
+        expectEquals (melody2.detectedKey(), melody.detectedKey());
+    }
+};
+
 // Phase 5: the melody player's loop toggle wraps the transport at the sequence
 // end instead of stopping, and turning it off mid-flight lets the current pass
 // finish as a one-shot.
@@ -2143,6 +2187,7 @@ FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
 MelodyLoopPlaybackTest melodyLoopPlaybackTest;
+MelodySummaryTest melodySummaryTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

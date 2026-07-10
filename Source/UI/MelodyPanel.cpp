@@ -369,9 +369,12 @@ void MelodyPanel::resized()
 
     closeButton.setBounds (getWidth() - 30, 8, 20, 20);
 
-    // Left: the image + grid visualization (square-ish).
+    // Left: the image + grid visualization (square-ish), with the generation
+    // summary readout beneath it.
     auto left = area.removeFromLeft (280);
     grid.setBounds (left.removeFromTop (280));
+    left.removeFromTop (10);
+    summaryArea = left;
 
     area.removeFromLeft (16);
     auto col = area; // right control column
@@ -447,12 +450,37 @@ void MelodyPanel::paint (juce::Graphics& g)
     g.setFont (theme::semiBold (14.0f));
     g.drawText ("MELODY", 24, 11, 160, 18, juce::Justification::centredLeft);
 
-    // Detected key readout under the image.
-    const auto key = shared.processor.melodyController().detectedKey();
-    g.setColour (theme::textSecondary);
-    g.setFont (theme::font (12.0f));
-    g.drawText ("Detected: " + (key.isNotEmpty() ? key : juce::String ("\xe2\x80\x94")),
-                18, getHeight() - 26, 300, 18, juce::Justification::centredLeft);
+    // Generation summary under the image: what the engine detected and chose.
+    {
+        auto& m = shared.processor.melodyController();
+        const juce::String dash = juce::String::fromUTF8 ("\xe2\x80\x94");
+        const auto value = [&dash] (const juce::String& v) { return v.isNotEmpty() ? v : dash; };
+
+        auto block = summaryArea;
+        g.setColour (theme::textSecondary.withAlpha (0.85f));
+        g.setFont (theme::semiBold (9.5f));
+        g.drawText ("GENERATED", block.removeFromTop (12), juce::Justification::centredLeft);
+        block.removeFromTop (2);
+
+        const std::pair<const char*, juce::String> rows[] = {
+            { "KEY",  value (m.detectedKey()) },
+            { "MOOD", value (m.moodText()) },
+            { "FORM", value (m.formText()) },
+            { "SEED", m.hasMelody()
+                          ? juce::String::toHexString (static_cast<juce::int64> (m.seed()))
+                          : dash },
+        };
+        for (const auto& [label, text] : rows)
+        {
+            auto line = block.removeFromTop (16);
+            g.setColour (theme::textMuted);
+            g.setFont (theme::semiBold (9.5f));
+            g.drawText (label, line.removeFromLeft (38), juce::Justification::centredLeft);
+            g.setColour (theme::textSecondary);
+            g.setFont (theme::font (11.0f));
+            g.drawText (text, line, juce::Justification::centredLeft);
+        }
+    }
 
     // Section captions above each control group.
     g.setFont (theme::semiBold (9.5f));
@@ -465,6 +493,20 @@ void MelodyPanel::animate()
 {
     grid.animate();
     refreshTransportLabel();
+
+    // Repaint the summary block when generation changes what it says.
+    {
+        auto& m = shared.processor.melodyController();
+        juce::String composed;
+        composed << m.detectedKey() << '|' << m.moodText() << '|' << m.formText()
+                 << '|' << juce::String::toHexString (static_cast<juce::int64> (m.seed()))
+                 << '|' << (m.hasMelody() ? 1 : 0);
+        if (composed != summaryCache)
+        {
+            summaryCache = composed;
+            repaint (summaryArea);
+        }
+    }
 
     if (modeTabs.active() != choiceParam (params::melodyMode))
         modeTabs.setActive (choiceParam (params::melodyMode), false);
