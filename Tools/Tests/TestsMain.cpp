@@ -2255,8 +2255,18 @@ public:
         runBlocks (250);
         expect (melody.isPlaying(), "looped playback survives rapid toggling");
         player.setLooping (false);
-        runBlocks (600); // longest possible remainder of a pass, then stop
+        // The pass must end on its own. Its length is seed-dependent: the 4.5
+        // engine pads the take to the musical form's final bar, so the one-shot
+        // remainder can reach ~4 bars (800 blocks); 1500 is well past any form.
+        int blocksToEnd = 0;
+        while (melody.isPlaying() && blocksToEnd < 1500)
+        {
+            runBlocks (1);
+            ++blocksToEnd;
+        }
         expect (! melody.isPlaying(), "one-shot ending honoured after the storm");
+        for (int i = 0; i < 200 && engine.activeVoiceCount() > 0; ++i)
+            runBlocks (1); // release tails
         expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after toggling");
 
         beginTest ("transpose swept -12..+12 every block during a loop");
