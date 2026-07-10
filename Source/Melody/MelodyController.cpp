@@ -237,7 +237,7 @@ namespace
         }
         juce::String s (bucket);
         s << (d.major ? " (major)" : " (minor)")
-          << " \xe2\x80\x94 hue " << juce::String (d.hue, 0) << "\xc2\xb0"
+          << " \xe2\x80\x94 hue " << juce::roundToInt (d.hue) << "\xc2\xb0"
           << ", sat " << juce::String (d.saturation, 2)
           << ", lum " << juce::String (d.value, 2);
         if (randomKey)
