@@ -2183,6 +2183,153 @@ public:
     }
 };
 
+// RC torture pass: the melody transport survives every message-thread action
+// a user can throw at it mid-playback, with the audio thread advancing (and
+// rendering, so voices actually release) between actions. No ears needed —
+// each scenario has a mechanical pass condition.
+class MelodyTortureTest final : public juce::UnitTest
+{
+public:
+    MelodyTortureTest()
+        : juce::UnitTest ("Melody transport survives mid-playback torture", "Melody") {}
+
+    static constexpr double kSr = 48000.0;
+    static constexpr int kBlock = 480;
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        engine.prepare (kSr, kBlock);
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        std::vector<float> l (kBlock, 0.0f), r (kBlock, 0.0f);
+        auto runBlocks = [&] (int blocks)
+        {
+            for (int i = 0; i < blocks; ++i)
+            {
+                player.process (120.0, kSr, kBlock);
+                engine.render (l.data(), r.data(), kBlock); // envelopes advance
+            }
+        };
+        auto stopAndDrain = [&]
+        {
+            player.stop();
+            runBlocks (1);
+            for (int i = 0; i < 200 && engine.activeVoiceCount() > 0; ++i)
+                runBlocks (1); // up to ~2 s for release tails
+        };
+
+        beginTest ("regenerate during playback keeps the transport alive");
+        melody.generate();
+        melody.play();
+        runBlocks (50);
+        expect (melody.isPlaying(), "playing before the regens");
+        auto trig = player.liveState().triggerSeq;
+        for (int round = 0; round < 3; ++round)
+        {
+            melody.regenerate(); // swaps the sequence under the audio thread
+            runBlocks (60);
+        }
+        expect (melody.isPlaying(), "still playing after 3 mid-flight regens");
+        expect (player.liveState().triggerSeq > trig, "new material actually triggers");
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after regens");
+
+        beginTest ("loop toggled every 10 blocks for 600 blocks");
+        player.setLooping (true);
+        melody.play();
+        bool loopOn = true;
+        for (int i = 0; i < 60; ++i)
+        {
+            runBlocks (10);
+            loopOn = ! loopOn;
+            player.setLooping (loopOn);
+        }
+        player.setLooping (true);
+        runBlocks (250);
+        expect (melody.isPlaying(), "looped playback survives rapid toggling");
+        player.setLooping (false);
+        runBlocks (600); // longest possible remainder of a pass, then stop
+        expect (! melody.isPlaying(), "one-shot ending honoured after the storm");
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after toggling");
+
+        beginTest ("transpose swept -12..+12 every block during a loop");
+        player.setLooping (true);
+        melody.play();
+        int t = -12, dir = +1;
+        for (int i = 0; i < 400; ++i)
+        {
+            player.setTranspose (t);
+            t += dir;
+            if (t == 12 || t == -12) dir = -dir;
+            player.process (120.0, kSr, kBlock);
+            engine.render (l.data(), r.data(), kBlock);
+            const int sounding = engine.newestActiveNote();
+            expect (sounding == -1 || (sounding >= 0 && sounding <= 127),
+                    "sounding note stays in MIDI range");
+        }
+        expect (melody.isPlaying(), "loop survives the sweep");
+        player.setTranspose (0);
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0,
+                      "every swept note-on found its note-off");
+
+        beginTest ("state save/load mid-loop keeps melody, summary and playback sane");
+        player.setLooping (true);
+        melody.generate();
+        melody.play();
+        runBlocks (30);
+        const auto stepsBefore = melody.sequence().steps.size();
+        const auto keyBefore   = melody.detectedKey();
+        const auto moodBefore  = melody.moodText();
+        const auto xml = processor.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes mid-loop");
+        if (xml != nullptr)
+        {
+            processor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            melody.applyState(); // the processor's setStateInformation path
+            runBlocks (30);
+        }
+        expect (melody.hasMelody(), "melody survives the reload");
+        expectEquals ((int) melody.sequence().steps.size(), (int) stepsBefore);
+        expectEquals (melody.detectedKey(), keyBefore);
+        expectEquals (melody.moodText(), moodBefore);
+        stopAndDrain();
+        expectEquals (engine.activeVoiceCount(), 0, "no stuck voices after reload");
+
+        beginTest ("rapid regenerate x20: every seed's melody replays identically");
+        struct Take { juce::uint64 seed; std::vector<melody::Step> steps; };
+        std::vector<Take> takes;
+        for (int i = 0; i < 20; ++i)
+        {
+            melody.regenerate();
+            takes.push_back ({ melody.seed(), melody.sequence().steps });
+        }
+        bool allMatch = true;
+        for (const auto& take : takes)
+        {
+            melodystate::setSeed (processor.apvts.state, take.seed);
+            melody.applyState();
+            melody.generate(); // same image + params + seed => same melody
+            const auto& now = melody.sequence().steps;
+            bool same = now.size() == take.steps.size();
+            for (std::size_t k = 0; same && k < now.size(); ++k)
+                same = now[k].note == take.steps[k].note
+                       && now[k].startBeats == take.steps[k].startBeats
+                       && now[k].lengthBeats == take.steps[k].lengthBeats
+                       && now[k].velocity == take.steps[k].velocity;
+            allMatch = allMatch && same;
+        }
+        expect (allMatch, "all 20 rapid-regen takes reproduce exactly from their seeds");
+    }
+};
+
 // RC pass: every melody parameter — including the Phase 5 additions — must
 // survive a full APVTS state round-trip with a non-default value. This is the
 // save/load contract for the whole melody surface in one pin.
@@ -2326,6 +2473,7 @@ MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MelodySummaryTest melodySummaryTest;
 MelodyTransposeTest melodyTransposeTest;
 MelodyParamRoundtripTest melodyParamRoundtripTest;
+MelodyTortureTest melodyTortureTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
