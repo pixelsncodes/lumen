@@ -41,6 +41,18 @@ public:
     void paint (juce::Graphics& g) override;
     void animate();
 
+    // Floating-window behaviour: the panel's layout stays at its logical base
+    // size (the minimum, at which every control is usable) and scales
+    // uniformly, the way the main editor window scales its content. Placement
+    // is in editor-content coordinates and persists in the plugin state.
+    static constexpr int kBaseWidth = 580, kBaseHeight = 476;
+    void setWindowPlacement (juce::Rectangle<int> boundsInContent);
+
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
+
 private:
     // The image + live sampling-grid visualization.
     class GridView final : public juce::Component
@@ -122,6 +134,25 @@ private:
     juce::TextButton transposeDown { "-" }, transposeUp { "+" };
     juce::Rectangle<int> transposeLabelArea;
     int transposeCache = 0;
+
+    // Octave stepper: same style and post-generation contract as Transpose,
+    // driving the melodyOctave int param (effective shift = st + 12 * oct).
+    juce::TextButton octaveDown { "-" }, octaveUp { "+" };
+    juce::Rectangle<int> octaveLabelArea;
+    int octaveCache = 0;
+
+    // Window move/resize state. The placement rectangle is the on-screen
+    // bounds within the editor content; the component's own bounds stay at
+    // the logical base size and a transform maps between the two.
+    enum class WindowGesture { none, move, resize };
+    juce::Rectangle<int> placement { 0, 0, kBaseWidth, kBaseHeight };
+    WindowGesture gesture = WindowGesture::none;
+    juce::Point<int> moveGrabOffset;      // pointer offset from the top-left
+    juce::Rectangle<int> gestureStart;    // placement when the gesture began
+    void applyPlacement();
+    void persistPlacement();
+    bool inTitleStrip (juce::Point<int> p) const;
+    bool inResizeCorner (juce::Point<int> p) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPanel)
 };

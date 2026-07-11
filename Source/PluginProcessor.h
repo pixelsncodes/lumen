@@ -137,6 +137,7 @@ private:
     // bindings — they steer the sequencer, not the voices).
     std::atomic<float>* melodyLoopPlaybackValue = nullptr;
     std::atomic<float>* melodyTransposeValue    = nullptr;
+    std::atomic<float>* melodyOctaveValue       = nullptr;
 
     // Lock-free matrix publish: message thread writes the next pool entry and
     // swaps the pointer; the audio thread copies from the published entry at

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_data_structures/juce_data_structures.h>
+#include <juce_graphics/juce_graphics.h>
 
 #include "Melody/MelodySequence.h"
 
@@ -45,4 +46,17 @@ juce::String summaryForm (const juce::ValueTree& state);
 void storeSequence (juce::ValueTree& state, const melody::Sequence& seq);
 bool hasSequence (const juce::ValueTree& state);
 bool loadSequence (const juce::ValueTree& state, melody::Sequence& out);
+
+// Melody window placement (editor-content coordinates). Persisted with the
+// patch so the window reopens where the user left it; empty until the user
+// first moves or resizes it (the editor then uses its built-in default).
+void             setWindowBounds (juce::ValueTree& state, juce::Rectangle<int> bounds);
+juce::Rectangle<int> windowBounds (const juce::ValueTree& state); // empty if unset
+
+// Off-screen safety for restore: force at least minW x minH (aspect kept),
+// never larger than fits in `area`, and position fully inside `area` so the
+// window is always reachable. Pure — unit-testable without a UI.
+juce::Rectangle<int> clampWindowBounds (juce::Rectangle<int> bounds,
+                                        juce::Rectangle<int> area,
+                                        int minW, int minH);
 } // namespace lumen::melodystate

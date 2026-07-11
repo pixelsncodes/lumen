@@ -33,6 +33,7 @@ LumenAudioProcessor::LumenAudioProcessor()
     melodyPlayerObj = std::make_unique<lumen::MelodyPlayer> (engine);
     melodyLoopPlaybackValue = apvts.getRawParameterValue (lumen::params::melodyLoopPlayback);
     melodyTransposeValue    = apvts.getRawParameterValue (lumen::params::melodyTranspose);
+    melodyOctaveValue       = apvts.getRawParameterValue (lumen::params::melodyOctave);
     melody = std::make_unique<lumen::MelodyController> (apvts, *lens, *melodyPlayerObj);
     midiLearnController = std::make_unique<lumen::MidiLearnController> (apvts);
 
@@ -232,8 +233,9 @@ void LumenAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     // at the host tempo (block-accurate), independent of the host transport.
     if (melodyLoopPlaybackValue != nullptr)
         melodyPlayerObj->setLooping (melodyLoopPlaybackValue->load() > 0.5f);
-    if (melodyTransposeValue != nullptr)
-        melodyPlayerObj->setTranspose (juce::roundToInt (melodyTransposeValue->load()));
+    if (melodyTransposeValue != nullptr && melodyOctaveValue != nullptr)
+        melodyPlayerObj->setTranspose (juce::roundToInt (melodyTransposeValue->load())
+                                       + 12 * juce::roundToInt (melodyOctaveValue->load()));
     melodyPlayerObj->process (params.bpm, getSampleRate(), buffer.getNumSamples());
 
     // Sample-accurate note events: render up to each event, then apply it.

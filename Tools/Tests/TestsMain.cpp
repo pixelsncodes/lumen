@@ -2371,10 +2371,15 @@ public:
             { params::melodyLockHarmony,    1.0f },
             { params::melodyLoopPlayback,   1.0f },
             { params::melodyTranspose,      -7.0f },
+            { params::melodyOctave,         2.0f },
         };
 
-        beginTest ("set non-default values and serialize");
+        beginTest ("full parameter surface is 115 params");
         NullProcessor source;
+        expectEquals (source.getParameters().size(), 115,
+                      "param count (114 + melodyOctave)");
+
+        beginTest ("set non-default values and serialize");
         for (const auto& [id, value] : targets)
         {
             auto* p = source.apvts.getParameter (id);
@@ -2476,12 +2481,190 @@ public:
     }
 };
 
+// Octave-window regeneration guard: Octave shares Transpose's contract —
+// pitch-only and post-generation (effective shift = st + 12 * oct). Sweeping
+// both must never touch the stored sequence or the seed, the export may
+// differ from the default render only by a constant (clamped) pitch offset
+// with identical timing/durations/count, clamping must preserve monophony,
+// and 0/0 must restore the byte-identical default export.
+class MelodyOctaveGuardTest final : public juce::UnitTest
+{
+public:
+    MelodyOctaveGuardTest()
+        : juce::UnitTest ("Melody octave+transpose shift export only, never regenerate",
+                          "Melody") {}
+
+    struct Event
+    {
+        bool on = false;
+        int note = 0;
+        double tick = 0.0;
+    };
+
+    static std::vector<Event> readEvents (const std::vector<unsigned char>& bytes)
+    {
+        std::vector<Event> v;
+        juce::MemoryInputStream in (bytes.data(), bytes.size(), false);
+        juce::MidiFile file;
+        if (! file.readFrom (in))
+            return v;
+        for (int t = 0; t < file.getNumTracks(); ++t)
+            for (const auto* ev : *file.getTrack (t))
+                if (ev->message.isNoteOnOrOff())
+                    v.push_back ({ ev->message.isNoteOn(),
+                                   ev->message.getNoteNumber(),
+                                   ev->message.getTimeStamp() });
+        return v;
+    }
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("seed 2024: generate once and capture the default render");
+        NullProcessor processor;
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+        melodystate::setSeed (processor.apvts.state, 2024);
+        melody.applyState();
+        melody.generate();
+        expect (melody.hasMelody(), "melody generated");
+
+        auto* transpose = processor.apvts.getParameter (params::melodyTranspose);
+        auto* octave    = processor.apvts.getParameter (params::melodyOctave);
+        expect (transpose != nullptr, "melodyTranspose parameter exists");
+        expect (octave != nullptr, "melodyOctave parameter exists");
+        if (transpose == nullptr || octave == nullptr)
+            return;
+        expectWithinAbsoluteError (
+            octave->convertFrom0to1 (octave->getDefaultValue()), 0.0f, 1.0e-6f);
+
+        const auto seedBefore  = melody.seed();
+        const auto stepsBefore = melody.sequence().steps;
+        const auto bytes0      = melody.toMidiBytes();
+        const auto events0     = readEvents (bytes0);
+        expect (! bytes0.empty() && ! events0.empty(), "default export has events");
+        logMessage ("seed-2024 default export SHA-256: "
+                    + juce::SHA256 (bytes0.data(), bytes0.size()).toHexString());
+
+        auto setShift = [&] (int oct, int st)
+        {
+            octave->setValueNotifyingHost (octave->convertTo0to1 (static_cast<float> (oct)));
+            transpose->setValueNotifyingHost (transpose->convertTo0to1 (static_cast<float> (st)));
+        };
+
+        beginTest ("25 octave x transpose combos: sequence untouched, export = constant offset");
+        bool seqIntact = true, exportsMatch = true, monophonic = true;
+        for (const int oct : { -2, -1, 0, 1, 2 })
+            for (const int st : { -12, -7, 0, 5, 12 })
+            {
+                setShift (oct, st);
+
+                // Regeneration guard: same seed, same stored notes and timing.
+                seqIntact = seqIntact && melody.seed() == seedBefore;
+                const auto& now = melody.sequence().steps;
+                bool same = now.size() == stepsBefore.size();
+                for (std::size_t k = 0; same && k < now.size(); ++k)
+                    same = now[k].note == stepsBefore[k].note
+                           && now[k].startBeats == stepsBefore[k].startBeats
+                           && now[k].lengthBeats == stepsBefore[k].lengthBeats
+                           && now[k].velocity == stepsBefore[k].velocity;
+                seqIntact = seqIntact && same;
+
+                // Export guard: identical event count, types and ticks; every
+                // pitch shifted by exactly st + 12*oct (clamped to 0..127).
+                const int shift = st + 12 * oct;
+                const auto events = readEvents (melody.toMidiBytes());
+                bool ok = events.size() == events0.size();
+                for (std::size_t k = 0; ok && k < events.size(); ++k)
+                    ok = events[k].on == events0[k].on
+                         && events[k].tick == events0[k].tick
+                         && events[k].note == juce::jlimit (0, 127, events0[k].note + shift);
+                exportsMatch = exportsMatch && ok;
+
+                // Monophony survives clamping: never two notes sounding at once.
+                int soundingNow = 0;
+                bool mono = true;
+                for (const auto& ev : events)
+                {
+                    soundingNow += ev.on ? 1 : -1;
+                    mono = mono && soundingNow >= 0 && soundingNow <= 1;
+                }
+                monophonic = monophonic && mono && soundingNow == 0;
+            }
+        expect (seqIntact, "stored sequence and seed untouched by all 25 combos");
+        expect (exportsMatch, "exports differ only by the constant (clamped) pitch offset");
+        expect (monophonic, "clamping preserves monophony in every export");
+
+        beginTest ("octave 0 + transpose 0 restores the byte-identical default export");
+        setShift (0, 0);
+        expect (melody.toMidiBytes() == bytes0, "export byte-identical after reset");
+    }
+};
+
+// Melody window placement: persisted with the patch, restored exactly, and
+// clamped on restore so a stale or off-screen position can never leave the
+// window unreachable (same helpers the editor uses).
+class MelodyWindowBoundsTest final : public juce::UnitTest
+{
+public:
+    MelodyWindowBoundsTest()
+        : juce::UnitTest ("Melody window bounds round-trip and off-screen clamp", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("bounds unset until the user first moves the window");
+        NullProcessor source;
+        expect (melodystate::windowBounds (source.apvts.state).isEmpty(), "empty by default");
+
+        beginTest ("set position + size, serialize, restore into a fresh processor");
+        const juce::Rectangle<int> saved (123, 45, 725, 595);
+        melodystate::setWindowBounds (source.apvts.state, saved);
+        expect (melodystate::windowBounds (source.apvts.state) == saved, "readback matches");
+        const auto xml = source.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes to XML");
+        if (xml == nullptr)
+            return;
+        NullProcessor restored;
+        restored.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        expect (melodystate::windowBounds (restored.apvts.state) == saved,
+                "bounds survive the state round-trip exactly");
+
+        beginTest ("off-screen and out-of-range bounds are clamped on restore");
+        const juce::Rectangle<int> area (0, 0, 1040, 660);
+        const int minW = 580, minH = 476;
+        expect (melodystate::clampWindowBounds ({ 2000, 3000, 580, 476 }, area, minW, minH)
+                    == juce::Rectangle<int> (460, 184, 580, 476),
+                "fully off-screen comes back inside the editor");
+        expect (melodystate::clampWindowBounds ({ -900, -900, 580, 476 }, area, minW, minH)
+                    == juce::Rectangle<int> (0, 0, 580, 476),
+                "negative position clamps to the origin");
+        expect (melodystate::clampWindowBounds ({ 10, 10, 100, 80 }, area, minW, minH)
+                    == juce::Rectangle<int> (10, 10, 580, 476),
+                "below-minimum size grows to the usable minimum");
+        const auto big = melodystate::clampWindowBounds ({ 0, 0, 5000, 5000 }, area, minW, minH);
+        expect (big == juce::Rectangle<int> (0, 0,
+                    juce::roundToInt (minW * (660.0 / 476.0)), 660),
+                "oversize scales down to fit, aspect kept");
+        const juce::Rectangle<int> fine (100, 60, 725, 595);
+        expect (melodystate::clampWindowBounds (fine, area, minW, minH) == fine,
+                "valid bounds pass through untouched");
+    }
+};
+
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
 MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MelodySummaryTest melodySummaryTest;
 MelodyTransposeTest melodyTransposeTest;
+MelodyOctaveGuardTest melodyOctaveGuardTest;
+MelodyWindowBoundsTest melodyWindowBoundsTest;
 MelodyParamRoundtripTest melodyParamRoundtripTest;
 MelodyTortureTest melodyTortureTest;
 MipLevelTest mipLevelTest;

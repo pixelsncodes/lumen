@@ -3,6 +3,7 @@
 #include "Lens/LensController.h"
 #include "Melody/MelodyController.h"
 #include "Melody/MelodyPlayer.h"
+#include "State/MelodyState.h"
 #include "State/MidiLearn.h"
 #include "UI/Theme.h"
 #include "UI/Tooltips.h"
@@ -49,7 +50,15 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
-    melodyPanel->setBounds ((kBaseWidth - 580) / 2, 140, 580, 476);
+    // Restore the persisted melody-window placement (default: centered under
+    // the header). setWindowPlacement clamps, so a stale or off-screen saved
+    // position can never leave the window unreachable.
+    {
+        const auto stored = lumen::melodystate::windowBounds (processor.apvts.state);
+        const juce::Rectangle<int> fallback ((kBaseWidth - MelodyPanel::kBaseWidth) / 2, 140,
+                                             MelodyPanel::kBaseWidth, MelodyPanel::kBaseHeight);
+        melodyPanel->setWindowPlacement (stored.isEmpty() ? fallback : stored);
+    }
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);
