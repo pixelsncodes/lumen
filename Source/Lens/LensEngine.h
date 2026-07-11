@@ -70,6 +70,29 @@ inline constexpr float kMacroGain = 0.7f;  // ~default +-0.35 travel
 inline constexpr float kEdgeFull = 0.25f;  // E at which the texture axis saturates
 inline constexpr float kMacroDefaults[4] = { 0.5f, 0.5f, 0.3f, 0.2f }; // frozen Init values
 
+// Tone audibility floor (design decision, DECISIONS.md): a dark image must
+// produce a DARK-sounding patch, not a QUIET one — darkness maps to timbre
+// character within an audibility floor. The raw Tone position above
+// (default + kMacroGain travel, clamped 0..1) is remapped through
+//     T = kToneFloor + (1 - kToneFloor) * pow(T_raw, kToneGamma)
+// Monotone increasing, so image ordering by tone is preserved; T(0) is the
+// floor, T(1) = 1, and bright inputs move very little. Calibration that set
+// the floor: 02-neon-dusk raw 0.36 -> inaudible at init, intentional at
+// ~0.52; 04-forest-dark raw 0.34 -> clear at ~0.41. Applies to Tone only —
+// the other three macros keep the plain SPEC 13.5 mapping.
+//
+// Gamma is tuned against the showcase gallery (design brief started at 1.2):
+// the brightest gallery image has raw Tone 0.726, and the bright-end
+// requirement (inputs above ~0.7 change by < 0.03) needs gamma >= 1.84 at
+// this floor; 2.0 adds margin (brightest delta +0.014) and lands
+// 02-neon-dusk at 0.52 — the human calibration point. Max negative
+// excursion near raw 0.9 is -0.005 (imperceptible), T(1) = 1 exactly.
+inline constexpr float kToneFloor = 0.45f; // candidate B: 0.50
+inline constexpr float kToneGamma = 2.0f;  // brief start 1.2; tuned, see above
+float toneAudibilityRemap (float rawTone01,
+                           float toneFloor = kToneFloor,
+                           float gamma = kToneGamma) noexcept;
+
 // Morph journey (DECISIONS.md, Phase 7 polish): whenever a user image is
 // applied, the plugin routes Env 3 to the target osc's morph so every note
 // travels through the image by default — the per-note counterpart of the

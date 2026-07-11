@@ -1148,8 +1148,10 @@ public:
             expectWithinAbsoluteError (t.lfoRateHz, 0.15f, 1.0e-4f);
             expectWithinAbsoluteError (t.reverbMix, 0.45f, 1.0e-4f);    // 0.10 + 0.35
             // Macros (SPEC 13.5 extension): default + 0.7 * (stat - 0.5),
-            // clamped; Vm 1, sigV 0, E' 0.
-            expectWithinAbsoluteError (t.macros[0], 0.85f, 1.0e-4f);  // Tone
+            // clamped; Vm 1, sigV 0, E' 0. Tone additionally passes through
+            // the audibility floor (raw 0.85 -> floored).
+            expectWithinAbsoluteError (t.macros[0],
+                                       lens::toneAudibilityRemap (0.85f), 1.0e-4f); // Tone
             expectWithinAbsoluteError (t.macros[1], 0.15f, 1.0e-4f);  // Motion
             expectWithinAbsoluteError (t.macros[2], 0.65f, 1.0e-4f);  // Space
             expectWithinAbsoluteError (t.macros[3], 0.0f, 1.0e-5f);   // Texture (clamped)
@@ -1238,6 +1240,36 @@ public:
             expectGreaterThan (busy.macros[1] - warm.macros[1], 0.15f, "Motion separates");
             expectGreaterThan (warm.macros[2] - busy.macros[2], 0.15f, "Space separates");
             expectGreaterThan (busy.macros[3] - warm.macros[3], 0.15f, "Texture separates");
+        }
+
+        // Tone audibility floor: dark images stay dark-sounding, never quiet.
+        beginTest ("tone audibility floor: endpoints, floor, monotone");
+        {
+            expectWithinAbsoluteError (lens::toneAudibilityRemap (0.0f),
+                                       lens::kToneFloor, 1.0e-6f);
+            expectWithinAbsoluteError (lens::toneAudibilityRemap (1.0f), 1.0f, 1.0e-6f);
+
+            // Strictly increasing across the axis => image ordering by tone
+            // is preserved.
+            float previous = -1.0f;
+            bool monotone = true, floored = true;
+            for (int i = 0; i <= 100; ++i)
+            {
+                const float t = lens::toneAudibilityRemap (i / 100.0f);
+                monotone = monotone && t > previous;
+                floored  = floored && t >= lens::kToneFloor - 1.0e-6f && t <= 1.0f + 1.0e-6f;
+                previous = t;
+            }
+            expect (monotone, "remap is strictly increasing");
+            expect (floored, "remap stays within [floor, 1]");
+
+            // Darkest possible input: solid black's raw Tone is 0.15
+            // (kMacroDefaults[0] - 0.7 * 0.5), so its patch Tone must be the
+            // remap of that — just above the floor, never near-silent.
+            const auto black = lens::patchTargetsFor (lens::chromaStats (
+                lens::analyzeImage (lenstest::solidColour (juce::Colours::black))));
+            expectWithinAbsoluteError (black.macros[0],
+                                       lens::toneAudibilityRemap (0.15f), 1.0e-4f);
         }
     }
 };

@@ -15,6 +15,9 @@
 //              [--melody-export <base>](write base.mid + base.txt generation
 //                                       summary — RC showcase gallery)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
+//   Lumen.exe --tone-table <img.png> [...] (dev printout: raw brightness-derived
+//                                       Tone vs the audibility-floor remap at
+//                                       floors 0.45 and 0.50 — not shipped UI)
 //   Lumen.exe --stress <seconds> [--view play|deep]
 //       Real audio device + 8-voice chord + random parameter wiggling at
 //       60 Hz with the frame HUD on; prints JSON frame/dropout stats and
@@ -29,6 +32,7 @@
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
 #include "Lens/LensController.h"
+#include "Lens/LensEngine.h"
 #include "Melody/MelodyController.h"
 #include "PluginProcessor.h"
 #include "State/MelodyState.h"
@@ -97,6 +101,12 @@ public:
         if (args.contains ("--check-params"))
         {
             runParameterCheck();
+            return;
+        }
+
+        if (const auto toneIndex = args.indexOf ("--tone-table"); toneIndex >= 0)
+        {
+            runToneTable (args, toneIndex);
             return;
         }
 
@@ -319,6 +329,39 @@ public:
 
 private:
     // --- --check-params ---------------------------------------------------
+    // --tone-table <image.png> [...]: offline dev printout for the tone
+    // audibility floor (verification only, never shipped UI). Per image:
+    // the raw brightness-derived Tone (pre-remap) and the remapped value at
+    // the shipped floor 0.45 and the candidate-B floor 0.50 (both at the
+    // shipped kToneGamma).
+    void runToneTable (const juce::StringArray& args, int flagIndex)
+    {
+        int exitCode = 0;
+        printToStdout ("image, tone_raw, tone_floor045, tone_floor050\n");
+        for (int i = flagIndex + 1; i < args.size() && ! args[i].startsWith ("--"); ++i)
+        {
+            const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (args[i]);
+            const auto analysis = lumen::lens::analyzeImageFile (file);
+            if (! analysis.valid)
+            {
+                printToStdout (file.getFileName() + ", ERROR: could not decode\n");
+                exitCode = 1;
+                continue;
+            }
+            const auto stats = lumen::lens::chromaStats (analysis);
+            const float raw = juce::jlimit (0.0f, 1.0f,
+                lumen::lens::kMacroDefaults[0]
+                    + lumen::lens::kMacroGain * (stats.valMean - 0.5f));
+            printToStdout (file.getFileName()
+                           + ", " + juce::String (raw, 4)
+                           + ", " + juce::String (lumen::lens::toneAudibilityRemap (raw, 0.45f), 4)
+                           + ", " + juce::String (lumen::lens::toneAudibilityRemap (raw, 0.50f), 4)
+                           + "\n");
+        }
+        setApplicationReturnValue (exitCode);
+        quit();
+    }
+
     void runParameterCheck()
     {
         LumenAudioProcessorEditor::disableOpenGL = true;
