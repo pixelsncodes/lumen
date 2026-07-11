@@ -464,9 +464,11 @@ std::vector<unsigned char> MelodyController::toMidiBytes() const
     if (currentSeq.steps.empty())
         return {};
 
-    // Export what you hear: apply the live Transpose param the same way the
-    // player does (per note, clamped). The stored sequence stays untouched.
-    const int transpose = juce::roundToInt (floatOf (apvts, params::melodyTranspose));
+    // Export what you hear: apply the live Transpose + Octave params the same
+    // way the player does (per note, clamped). The stored sequence stays
+    // untouched.
+    const int transpose = juce::roundToInt (floatOf (apvts, params::melodyTranspose))
+                          + 12 * juce::roundToInt (floatOf (apvts, params::melodyOctave));
 
     std::vector<lumena::midi::Note> notes;
     notes.reserve (currentSeq.steps.size());

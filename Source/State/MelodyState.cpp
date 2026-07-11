@@ -15,6 +15,10 @@ const juce::Identifier kKey      { "key" };
 const juce::Identifier kSteps    { "steps" };
 const juce::Identifier kMood     { "mood" };
 const juce::Identifier kForm     { "form" };
+const juce::Identifier kWinX     { "winX" };
+const juce::Identifier kWinY     { "winY" };
+const juce::Identifier kWinW     { "winW" };
+const juce::Identifier kWinH     { "winH" };
 } // namespace
 
 juce::ValueTree ensureTree (juce::ValueTree& state)
@@ -147,5 +151,48 @@ bool loadSequence (const juce::ValueTree& state, melody::Sequence& out)
         out.steps.push_back (s);
     }
     return true;
+}
+
+void setWindowBounds (juce::ValueTree& state, juce::Rectangle<int> bounds)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kWinX, bounds.getX(), nullptr);
+    tree.setProperty (kWinY, bounds.getY(), nullptr);
+    tree.setProperty (kWinW, bounds.getWidth(), nullptr);
+    tree.setProperty (kWinH, bounds.getHeight(), nullptr);
+}
+
+juce::Rectangle<int> windowBounds (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    if (! tree.isValid() || ! tree.hasProperty (kWinW))
+        return {};
+    return { static_cast<int> (tree.getProperty (kWinX, 0)),
+             static_cast<int> (tree.getProperty (kWinY, 0)),
+             static_cast<int> (tree.getProperty (kWinW, 0)),
+             static_cast<int> (tree.getProperty (kWinH, 0)) };
+}
+
+juce::Rectangle<int> clampWindowBounds (juce::Rectangle<int> bounds,
+                                        juce::Rectangle<int> area,
+                                        int minW, int minH)
+{
+    // Uniform scale off the minimum size (the window keeps its aspect ratio),
+    // clamped between "controls stay usable" and "fits inside the area".
+    const double maxScale = juce::jmax (1.0,
+        juce::jmin (area.getWidth() / static_cast<double> (juce::jmax (1, minW)),
+                    area.getHeight() / static_cast<double> (juce::jmax (1, minH))));
+    const double scale = juce::jlimit (1.0, maxScale,
+        bounds.getWidth() / static_cast<double> (juce::jmax (1, minW)));
+    const int w = juce::roundToInt (minW * scale);
+    const int h = juce::roundToInt (minH * scale);
+
+    const int x = juce::jlimit (area.getX(),
+                                juce::jmax (area.getX(), area.getRight() - w),
+                                bounds.getX());
+    const int y = juce::jlimit (area.getY(),
+                                juce::jmax (area.getY(), area.getBottom() - h),
+                                bounds.getY());
+    return { x, y, w, h };
 }
 } // namespace lumen::melodystate

@@ -150,6 +150,11 @@ inline constexpr const char* melodyLockHarmony = "melodyLockHarmony";
 // stored sequence, the seed and the generator are never touched).
 inline constexpr const char* melodyLoopPlayback = "melodyLoopPlayback";
 inline constexpr const char* melodyTranspose    = "melodyTranspose";
+// Octave shift (-2..+2), same post-generation contract as Transpose: the
+// effective pitch shift is melodyTranspose + 12 * melodyOctave, applied per
+// note at playback/export time only (clamped to MIDI 0..127) — never
+// regenerates, never re-seeds.
+inline constexpr const char* melodyOctave       = "melodyOctave";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

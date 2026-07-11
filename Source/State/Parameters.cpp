@@ -335,6 +335,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (std::make_unique<BoolParam> (pid (melodyLoopPlayback), "Melody Loop Playback", false));
     layout.add (std::make_unique<IntParam> (pid (melodyTranspose), "Melody Transpose",
         -12, 12, 0, juce::AudioParameterIntAttributes{}.withLabel ("st")));
+    layout.add (std::make_unique<IntParam> (pid (melodyOctave), "Melody Octave",
+        -2, 2, 0, juce::AudioParameterIntAttributes{}.withLabel ("oct")));
 
     return layout;
 }

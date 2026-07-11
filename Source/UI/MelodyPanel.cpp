@@ -3,6 +3,7 @@
 #include "Lens/LensController.h"
 #include "Melody/MelodyController.h"
 #include "Melody/MelodyPlayer.h"
+#include "State/MelodyState.h"
 #include "State/Parameters.h"
 #include "UI/Theme.h"
 
@@ -286,6 +287,30 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
     addAndMakeVisible (transposeDown);
     addAndMakeVisible (transposeUp);
 
+    // Octave stepper: same chip style and the same post-generation contract as
+    // Transpose (effective shift = transpose + 12 * octave; never regenerates).
+    auto nudgeOctave = [this] (int delta)
+    {
+        if (auto* p = shared.apvts().getParameter (params::melodyOctave))
+        {
+            const int current = juce::roundToInt (
+                p->convertFrom0to1 (p->getValue()));
+            const int next = juce::jlimit (-2, 2, current + delta);
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (next)));
+            p->endChangeGesture();
+        }
+    };
+    styleChip (octaveDown, theme::neonYellow);
+    styleChip (octaveUp, theme::neonYellow);
+    octaveDown.setTooltip ("Shift playback and export down an octave (never regenerates)");
+    octaveUp.setTooltip ("Shift playback and export up an octave (never regenerates)");
+    octaveDown.onClick = [nudgeOctave] { nudgeOctave (-1); };
+    octaveUp.onClick   = [nudgeOctave] { nudgeOctave (+1); };
+    shared.registerAttachment (params::melodyOctave);
+    addAndMakeVisible (octaveDown);
+    addAndMakeVisible (octaveUp);
+
     // Tab strips drive their choice params directly (no JUCE attachment), so
     // register them for the --check-params UI-coverage audit.
     shared.registerAttachment (params::melodyMode);
@@ -368,6 +393,108 @@ MelodyPanel::MelodyPanel (const UiShared& sharedContext)
 
 MelodyPanel::~MelodyPanel() = default;
 
+// ---------------------------------------------------------------------------
+// Floating-window behaviour (move by title strip, resize by the corner)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    constexpr int kTitleStripHeight = 34; // drag handle: the strip above the content
+    constexpr int kResizeCornerSize = 18; // hotspot inside the bottom-right margin
+} // namespace
+
+void MelodyPanel::setWindowPlacement (juce::Rectangle<int> boundsInContent)
+{
+    placement = boundsInContent;
+    if (auto* parent = getParentComponent())
+        placement = melodystate::clampWindowBounds (placement, parent->getLocalBounds(),
+                                                    kBaseWidth, kBaseHeight);
+    applyPlacement();
+}
+
+void MelodyPanel::applyPlacement()
+{
+    setBounds (0, 0, kBaseWidth, kBaseHeight);
+    const float scale = placement.getWidth() / (float) kBaseWidth;
+    setTransform (juce::AffineTransform::scale (scale)
+                      .translated ((float) placement.getX(), (float) placement.getY()));
+}
+
+void MelodyPanel::persistPlacement()
+{
+    melodystate::setWindowBounds (shared.apvts().state, placement);
+}
+
+bool MelodyPanel::inTitleStrip (juce::Point<int> p) const
+{
+    return p.y < kTitleStripHeight;
+}
+
+bool MelodyPanel::inResizeCorner (juce::Point<int> p) const
+{
+    return p.x >= getWidth() - kResizeCornerSize && p.y >= getHeight() - kResizeCornerSize;
+}
+
+void MelodyPanel::mouseDown (const juce::MouseEvent& e)
+{
+    gesture = WindowGesture::none;
+    if (getParentComponent() == nullptr)
+        return;
+
+    const auto parentPos = e.getEventRelativeTo (getParentComponent()).getPosition();
+    if (inResizeCorner (e.getPosition()))
+    {
+        gesture = WindowGesture::resize;
+        gestureStart = placement;
+    }
+    else if (inTitleStrip (e.getPosition()))
+    {
+        gesture = WindowGesture::move;
+        moveGrabOffset = parentPos - placement.getTopLeft();
+    }
+}
+
+void MelodyPanel::mouseDrag (const juce::MouseEvent& e)
+{
+    auto* parent = getParentComponent();
+    if (parent == nullptr || gesture == WindowGesture::none)
+        return;
+
+    const auto area = parent->getLocalBounds();
+    const auto parentPos = e.getEventRelativeTo (parent).getPosition();
+
+    if (gesture == WindowGesture::move)
+    {
+        placement.setPosition (parentPos - moveGrabOffset);
+    }
+    else // resize: uniform scale from the gesture-start top-left
+    {
+        const int wanted = parentPos.x - gestureStart.getX();
+        placement = gestureStart.withSize (wanted,
+            juce::roundToInt (wanted * (double) kBaseHeight / kBaseWidth));
+    }
+
+    placement = melodystate::clampWindowBounds (placement, area, kBaseWidth, kBaseHeight);
+    applyPlacement();
+}
+
+void MelodyPanel::mouseUp (const juce::MouseEvent&)
+{
+    if (gesture != WindowGesture::none)
+        persistPlacement();
+    gesture = WindowGesture::none;
+}
+
+void MelodyPanel::mouseMove (const juce::MouseEvent& e)
+{
+    if (inResizeCorner (e.getPosition()))
+        setMouseCursor (juce::MouseCursor::BottomRightCornerResizeCursor);
+    else if (inTitleStrip (e.getPosition()))
+        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    else
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+}
+
 void MelodyPanel::setChoiceParam (const char* paramId, int index)
 {
     if (auto* p = shared.apvts().getParameter (paramId))
@@ -403,13 +530,18 @@ void MelodyPanel::resized()
     // summary readout and the transpose stepper beneath it.
     auto left = area.removeFromLeft (280);
     grid.setBounds (left.removeFromTop (280));
-    left.removeFromTop (10);
-    summaryArea = left.removeFromTop (80);
     left.removeFromTop (8);
+    summaryArea = left.removeFromTop (78);
+    left.removeFromTop (6);
     auto transposeRow = left.removeFromTop (22);
     transposeDown.setBounds (transposeRow.removeFromLeft (30));
     transposeUp.setBounds (transposeRow.removeFromRight (30));
     transposeLabelArea = transposeRow.reduced (4, 0);
+    left.removeFromTop (4);
+    auto octaveRow = left.removeFromTop (22);
+    octaveDown.setBounds (octaveRow.removeFromLeft (30));
+    octaveUp.setBounds (octaveRow.removeFromRight (30));
+    octaveLabelArea = octaveRow.reduced (4, 0);
 
     area.removeFromLeft (16);
     auto col = area; // right control column
@@ -532,11 +664,34 @@ void MelodyPanel::paint (juce::Graphics& g)
                     transposeLabelArea, juce::Justification::centredRight);
     }
 
+    // Octave readout between its +/- chips.
+    {
+        const int o = choiceParam (params::melodyOctave);
+        g.setColour (theme::textMuted);
+        g.setFont (theme::semiBold (9.5f));
+        g.drawText ("OCTAVE", octaveLabelArea, juce::Justification::centredLeft);
+        g.setColour (theme::textSecondary);
+        g.setFont (theme::medium (11.0f));
+        g.drawText ((o > 0 ? "+" : "") + juce::String (o) + " oct",
+                    octaveLabelArea, juce::Justification::centredRight);
+    }
+
     // Section captions above each control group.
     g.setFont (theme::semiBold (9.5f));
     g.setColour (theme::textSecondary.withAlpha (0.85f));
     for (const auto& [caption, rect] : sectionLabels)
         g.drawText (caption, rect, juce::Justification::centredLeft);
+
+    // Resize grip: three diagonal hairlines in the bottom-right corner.
+    {
+        g.setColour (theme::textMuted.withAlpha (0.7f));
+        const float bx = (float) getWidth() - 5.0f, by = (float) getHeight() - 5.0f;
+        for (int i = 0; i < 3; ++i)
+        {
+            const float d = 3.0f + 4.0f * (float) i;
+            g.drawLine (bx - d, by, bx, by - d, 1.0f);
+        }
+    }
 }
 
 void MelodyPanel::animate()
@@ -565,6 +720,16 @@ void MelodyPanel::animate()
         {
             transposeCache = t;
             repaint (transposeLabelArea);
+        }
+    }
+
+    // Repaint the octave readout when the param moves (UI or automation).
+    {
+        const int o = choiceParam (params::melodyOctave);
+        if (o != octaveCache)
+        {
+            octaveCache = o;
+            repaint (octaveLabelArea);
         }
     }
 
