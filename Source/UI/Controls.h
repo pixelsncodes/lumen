@@ -138,6 +138,7 @@ public:
     void setActive (int index, bool notify);
     int active() const noexcept { return activeIndex; }
     void setTooltip (const juce::String& tip); // one description for the whole bar
+    void setTabTooltips (const juce::StringArray& tips); // one per tab, in order
 
 private:
     juce::OwnedArray<juce::TextButton> buttons;

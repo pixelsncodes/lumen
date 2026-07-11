@@ -45,8 +45,11 @@ public:
 
     // Replace the whole patch (parameters + matrix/macros + Lens tables)
     // with a preset/DAW state tree — the one shared load path (Phase 7).
-    // Message thread only.
-    void loadPresetState (juce::ValueTree newState);
+    // keepSessionImage = true (preset switches): the loaded Lens image is
+    // session-level — it survives the switch and its macros are NOT
+    // re-derived; the preset's params land as stored. False (DAW state
+    // restore): the incoming state is the whole truth. Message thread only.
+    void loadPresetState (juce::ValueTree newState, bool keepSessionImage = false);
 
     juce::AudioProcessorValueTreeState apvts;
 

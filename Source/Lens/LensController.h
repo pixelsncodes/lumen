@@ -16,8 +16,9 @@ namespace lumen
 //     mip-mapped Wavetable and swap it into the SynthEngine atomically;
 //   - retire old tables safely (freed only once the engine's render counter
 //     has advanced past the swap — CLAUDE.md rule 1);
-//   - persist the generated frames + 64x64 PNG thumbnail in the APVTS state
-//     tree (LensState) — never a path to the original file (SPEC 13);
+//   - persist the generated frames, a 64x64 PNG thumbnail and the original
+//     source-encoded image bytes in the APVTS state tree (LensState) —
+//     never a path to the original file (SPEC 13, extended);
 //   - apply the SPEC 13.5 chroma patch when "Set patch from colors" is on;
 //   - rebuild tables from state after setStateInformation.
 //
@@ -29,7 +30,10 @@ public:
     ~LensController();
 
     // Decode + analyze + install into the current target osc. False if the
-    // file can't be decoded as an image.
+    // file can't be decoded as an image. The file's encoded bytes (PNG/JPEG
+    // exactly as loaded) persist in the state tree so a reloaded session
+    // shows and re-analyzes the full-quality image; the in-memory overload
+    // encodes the image to PNG for the same purpose (never a raw bitmap).
     bool loadImageFile (const juce::File& file);
     bool loadImage (const juce::Image& image, const juce::String& sourceName);
 
@@ -42,11 +46,11 @@ public:
     void removeImage (int osc);
 
     // Settings. Mode and target persist in the LENS state tree; changing the
-    // mode re-analyzes the in-session source image if one is still in memory
-    // (after a state reload only the generated table exists — SPEC 13 stores
-    // no source data — so the new mode applies to the next drop). The COLORS
-    // toggle is session-global: default ON, survives preset loads, and is
-    // never recalled from or written into preset/DAW state.
+    // mode re-analyzes the in-session source image if one exists (state
+    // reloads now rebuild it from the persisted source bytes, so mode
+    // switches keep working after a reload). The COLORS toggle is
+    // session-global: default ON, survives preset loads, and is never
+    // recalled from or written into preset/DAW state.
     void setMode (int newMode);
     void setChroma (bool on);
     void setTarget (int osc);
@@ -73,6 +77,8 @@ public:
 private:
     static int oscIndex (int osc) noexcept { return osc == 1 ? 1 : 0; }
 
+    bool loadImageInternal (juce::MemoryBlock encodedBytes, const juce::Image& image,
+                            const juce::String& sourceName);
     void analyzeAndInstall (int osc, bool storeState, bool allowChroma);
     void capturePreImageState (int osc);
     void restorePreImageState (int osc);
@@ -89,7 +95,8 @@ private:
     juce::AudioProcessorValueTreeState& apvts;
     SynthEngine& engine;
 
-    lens::Analysis session[2];              // in-session sources, not persisted
+    lens::Analysis session[2];              // in-session sources
+    juce::MemoryBlock sourceBytes[2];       // original encoded bytes (persisted)
     bool chromaOn = true;                   // COLORS: session-global, default ON
     juce::Image display[2];
 

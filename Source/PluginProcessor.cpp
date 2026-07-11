@@ -4,6 +4,7 @@
 #include "Melody/MelodyController.h"
 #include "Melody/MelodyPlayer.h"
 #include "State/EngineBindings.h"
+#include "State/LensState.h"
 #include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/PresetManager.h"
@@ -302,10 +303,18 @@ void LumenAudioProcessor::setStateInformation (const void* data, int sizeInBytes
             loadPresetState (juce::ValueTree::fromXml (*xml));
 }
 
-void LumenAudioProcessor::loadPresetState (juce::ValueTree newState)
+void LumenAudioProcessor::loadPresetState (juce::ValueTree newState, bool keepSessionImage)
 {
     if (! newState.hasType (apvts.state.getType()))
         return;
+
+    // Session-level Lens image (design decision, final): preset switches
+    // change synth params only — the image, its full-res source bytes and
+    // the lens mode/target carry over; macros stay exactly as the preset
+    // stores them (re-derivation happens only on explicit image load/scan).
+    if (keepSessionImage)
+        lumen::lensstate::preserveSessionImages (apvts.state, newState);
+
     apvts.state.removeListener (this);
     apvts.replaceState (std::move (newState));
     initializeModState(); // re-ensure trees, republish, re-listen
