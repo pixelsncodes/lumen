@@ -26,8 +26,9 @@ xcopy /E /I /Y build\Lumen_artefacts\Release\VST3\Lumen.vst3 "C:\Program Files\C
 ```
 
 Current status of those gates on this branch: full Windows suite **ALL
-TESTS PASSED**; `--check-params` **114/114 attached**; pluginval strictness
-10 **SUCCESS** (log: `demo/rc/pluginval-strictness10.log`).
+TESTS PASSED**; `--check-params` **115/115 attached** (114 + the
+post-release `melodyOctave`, see *Post-release additions*); pluginval
+strictness 10 **SUCCESS** (log: `demo/rc/pluginval-strictness10.log`).
 
 ## The 5-minute demo script
 
@@ -88,6 +89,46 @@ None — released state.
   over 15 fresh seeds showed every pass ends on its own (max 801 blocks)
   and every voice drains within its release tail — no transport bug; the
   wait is now a bounded wait-until-ended plus an explicit release drain.
+
+## Post-release additions
+
+Merged into `feature/lumena-melody` after the Phase 5 showcase (2026-07-11),
+each on its own branch off `4d46813`, integrated in order with a gate
+checkpoint after every merge; submodule pointer unchanged at `32972f6`.
+
+- **Tone audibility floor** (`feature/tone-audibility-floor`): a dark image
+  now produces a DARK-sounding patch, not a near-silent one. The Tone macro
+  is remapped `T = 0.45 + 0.55·T_raw²` (floor 0.45, γ 2.0) — monotone, so
+  image ordering is preserved and bright inputs barely move; 02-neon-dusk
+  and 04-forest-dark land above the 0.45 audibility floor. Patch/audio only:
+  the MIDI layer is untouched (seed-2024 exports for all 8 gallery images
+  byte-identical pre/post).
+- **Full-res image persistence** (`feature/image-persistence`): the original
+  source-encoded image bytes now ride in the saved state, so a reloaded
+  project (or preset switch) shows and re-analyzes the full-quality image
+  instead of the 64×64 thumbnail. The Lens image is **session-level** — it
+  survives preset switches, and a switched-to preset's macros land exactly
+  as stored (no silent re-derivation). State-tree field only; no automation
+  parameter added.
+- **SCAN / SPECTRAL glyphs**: the two Lens mode tabs are now directional-line
+  glyphs `|` (Scan) and `—` (Spectral) with per-tab tooltips; same hit areas
+  and behavior.
+- **OCTAVE control** (`feature/octave-window`): a `melodyOctave` stepper
+  (−2..+2, default 0) sits under TRANSPOSE. Effective pitch shift is
+  `transpose + 12·octave`, applied post-generation and per-note clamped to
+  MIDI 0..127 — pitch-only, exactly like Transpose: the stored take and seed
+  never change, and 0/0 exports byte-identically to the pre-change render.
+  This is the 115th parameter, appended at the end (first 8 untouched).
+- **Moveable / resizable melody window**: the MELODY window drags by its
+  title strip and resizes from a corner grip (aspect locked to the fixed
+  580×476 layout, minimum = that size). Placement persists with the patch
+  and is clamped on restore, so a stale/off-screen save can never strand it.
+
+Integration gates (this merge, on the merged tip): full Windows suite green;
+115/115 param round-trip; determinism (61 seeds × checkerboard, ×2,
+byte-identical); octave-0/transpose-0 seed-2024 export hash matches the
+pinned pre-change value; tone floor holds for 02-neon-dusk and 04-forest-dark;
+pluginval strictness 10 SUCCESS on the rebuilt VST3.
 
 ## Merge-readiness checklist 1 — Phase 4.5 engine (ear test, human)
 
