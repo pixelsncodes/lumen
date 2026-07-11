@@ -49,6 +49,8 @@ MelodyPlayer::LiveState MelodyPlayer::liveState() const noexcept
     s.col        = pubCol.load (std::memory_order_relaxed);
     s.row        = pubRow.load (std::memory_order_relaxed);
     s.triggerSeq = pubTrigger.load (std::memory_order_relaxed);
+    for (int w = 0; w < 4; ++w)
+        s.notes[w] = pubNotes[w].load (std::memory_order_relaxed);
     return s;
 }
 
@@ -68,12 +70,30 @@ void MelodyPlayer::stopInternal()
     playing.store (false, std::memory_order_release);
     pubCol.store (-1, std::memory_order_relaxed);
     pubRow.store (-1, std::memory_order_relaxed);
+    publishNotes(); // all keys clear on stop
 }
 
 void MelodyPlayer::publish() noexcept
 {
     // playing is already an atomic kept current by start/stop; nothing else to
     // do here beyond what the trigger loop already stored.
+}
+
+void MelodyPlayer::publishNotes() noexcept
+{
+    // Rebuild the sounding-note bitmask from the authoritative sounding[] set so
+    // the UI keyboard lights exactly the notes the engine is playing. Relaxed
+    // stores of display-only state: no ordering coupling with generation or the
+    // note-on/off calls, no effect on playback timing.
+    std::uint32_t mask[4] = { 0, 0, 0, 0 };
+    for (int i = 0; i < numSounding; ++i)
+    {
+        const int n = sounding[i].note;
+        if (n >= 0 && n < 128)
+            mask[n >> 5] |= (1u << (n & 31));
+    }
+    for (int w = 0; w < 4; ++w)
+        pubNotes[w].store (mask[w], std::memory_order_relaxed);
 }
 
 void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
@@ -185,5 +205,10 @@ void MelodyPlayer::process (double bpm, double sampleRate, int numSamples)
             stopInternal();
         }
     }
+
+    // Publish the net sounding set for this block (releases + triggers + any
+    // loop-wrap above) so the UI keyboard tracks the audio exactly, in step with
+    // the region highlight's triggerSeq. stopInternal() already published 0.
+    publishNotes();
 }
 } // namespace lumen

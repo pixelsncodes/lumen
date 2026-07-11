@@ -69,6 +69,11 @@ public:
         int          col = -1;
         int          row = -1;
         std::uint32_t triggerSeq = 0;
+        // Bitmask of the notes currently sounding (bit n of notes[n >> 5] set =>
+        // MIDI note n is on), so the UI can light every audible key — one bit in
+        // MELODY, several in CHORDS/ARP. Mirrors sounding[] exactly; published
+        // whenever the audio thread starts/ends a note.
+        std::uint32_t notes[4] = { 0, 0, 0, 0 };
     };
     LiveState liveState() const noexcept;
 
@@ -83,6 +88,7 @@ private:
     void startInternal() noexcept;
     void stopInternal();          // audio thread: silence melody notes, reset
     void publish() noexcept;
+    void publishNotes() noexcept; // audio thread: mirror sounding[] into pubNotes
 
     SynthEngine& engine;
 
@@ -109,6 +115,7 @@ private:
     std::atomic<int>          pubCol { -1 };
     std::atomic<int>          pubRow { -1 };
     std::atomic<std::uint32_t> pubTrigger { 0 };
+    std::atomic<std::uint32_t> pubNotes[4] { {}, {}, {}, {} }; // sounding-note bitmask for the UI keyboard
     std::atomic<double>       pubBpm { 120.0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodyPlayer)

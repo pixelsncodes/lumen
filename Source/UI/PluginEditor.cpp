@@ -302,6 +302,40 @@ void LumenAudioProcessorEditor::timerCallback()
         applyingExternalMidi = false;
     }
 
+    // Mirror the internally-played melody/chord/arp notes onto the on-screen
+    // keyboard. The player publishes the exact set of notes it is currently
+    // sounding (the same 60 Hz-polled live state that drives the image-region
+    // highlight); we reconcile it against what we last lit and toggle only the
+    // differences. Channel 2 keeps these keys independent from live host/
+    // hardware MIDI on channel 1 — because MidiKeyboardState stores a bit per
+    // (note, channel), a key held by both sources stays lit until BOTH release
+    // it, with no stuck keys and no premature clear. The guard stops the
+    // resulting listener callbacks from re-triggering the engine (the notes are
+    // already sounding on the audio thread).
+    {
+        const auto live = processor.melodyPlayer().liveState();
+        applyingExternalMidi = true;
+        for (int w = 0; w < 4; ++w)
+        {
+            const std::uint32_t want = live.notes[w];
+            const std::uint32_t changed = want ^ melodyLitMask[w];
+            if (changed != 0)
+                for (int bit = 0; bit < 32; ++bit)
+                {
+                    const std::uint32_t m = 1u << bit;
+                    if ((changed & m) == 0)
+                        continue;
+                    const int note = w * 32 + bit;
+                    if ((want & m) != 0)
+                        keyboardState.noteOn (2, note, 0.8f);
+                    else
+                        keyboardState.noteOff (2, note, 0.0f);
+                }
+            melodyLitMask[w] = want;
+        }
+        applyingExternalMidi = false;
+    }
+
     header->animate();
     if (deepView->isVisible())
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
