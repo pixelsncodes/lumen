@@ -14,6 +14,15 @@ FetchContent_Declare(JUCE
 )
 FetchContent_MakeAvailable(JUCE)
 
+# Lumena — image-driven melody generator core (git submodule, external/lumena).
+# Built as a plain static lib; its own tests/demo stay off inside our tree.
+set(LUMENA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/lumena)
+# The VST3 is a shared module (.so/.dll), so every object linked into it must be
+# position-independent. Lumena is a static lib and doesn't set this itself, so
+# force PIC here (the Standalone exe links either way; the VST3 needs it).
+set_target_properties(Lumena PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # /W4 /WX (+ correct UTF-8 source decoding) on project sources only;
 # JUCE module code keeps its own warning setup.
 function(lumen_strict_sources)
@@ -35,6 +44,7 @@ juce_add_binary_data(LumenAssets SOURCES
     Assets/Fonts/InterMedium.ttf
     Assets/Fonts/InterSemiBold.ttf
     Assets/Fonts/InterLicenseOFL.txt
+    Assets/icon/lumen-icon-512.png   # app icon, rendered in the header + gear menu
 )
 
 # ---------------------------------------------------------------------------
@@ -46,6 +56,11 @@ juce_add_plugin(Lumen
     PLUGIN_CODE                 Lmn1
     FORMATS                     VST3 Standalone
     PRODUCT_NAME                "Lumen"
+    # App icon: JUCE builds the embedded Windows icon (taskbar, alt-tab, exe
+    # file, window) from these PNGs. Big = 512 master; small = 128 for crisp
+    # small-size rendering. Same art the in-app header/gear menu embeds.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon/lumen-icon-512.png"
+    ICON_SMALL                  "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon/lumen-icon-128.png"
     IS_SYNTH                    TRUE
     NEEDS_MIDI_INPUT            TRUE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -97,20 +112,32 @@ set(LUMEN_PLUGIN_SOURCES
     Source/Lens/LensController.cpp
     Source/State/MidiLearn.cpp
     Source/State/PresetManager.cpp
+    Source/State/MelodyState.cpp
+    Source/Melody/MelodyPlayer.cpp
     Source/UI/LumenLookAndFeel.cpp
     Source/UI/Controls.cpp
     Source/UI/Visualizers.cpp
     Source/UI/LensPanel.cpp
+    Source/UI/MelodyPanel.cpp
     Source/UI/Cards.cpp
     Source/UI/PluginEditor.cpp
     ${LUMEN_ENGINE_SOURCES}
 )
+# MelodyController.cpp is the one plugin TU that includes the Lumena headers.
+# It is kept out of LUMEN_PLUGIN_SOURCES so the /W4 /WX strict pass never sees
+# the third-party headers (the library builds under its own warning setup).
+set(LUMEN_MELODY_BRIDGE Source/Melody/MelodyController.cpp)
 target_sources(Lumen PRIVATE
     ${LUMEN_PLUGIN_SOURCES}
+    ${LUMEN_MELODY_BRIDGE}
     Source/PluginProcessor.h
     Source/Lens/LensController.h
     Source/State/MidiLearn.h
     Source/State/PresetManager.h
+    Source/State/MelodyState.h
+    Source/Melody/MelodySequence.h
+    Source/Melody/MelodyPlayer.h
+    Source/Melody/MelodyController.h
     Source/UI/Theme.h
     Source/UI/Tooltips.h
     Source/UI/LumenLookAndFeel.h
@@ -118,6 +145,7 @@ target_sources(Lumen PRIVATE
     Source/UI/WaterfallModel.h
     Source/UI/Visualizers.h
     Source/UI/LensPanel.h
+    Source/UI/MelodyPanel.h
     Source/UI/Cards.h
     Source/UI/PluginEditor.h
     Source/Engine/UiTap.h
@@ -133,6 +161,7 @@ target_compile_definitions(Lumen PUBLIC
 target_link_libraries(Lumen
     PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_opengl
             juce::juce_cryptography LumenAssets
+            Lumena::Lumena
     PUBLIC  juce::juce_recommended_config_flags
 )
 
@@ -184,9 +213,14 @@ set(LUMEN_TESTS_SOURCES
     Tools/Tests/TestsMain.cpp
     Source/Lens/LensController.cpp # drop/clear reversibility test drives it directly
     Source/State/MidiLearn.cpp     # MIDI map save/load round-trip test
+    Source/State/MelodyState.cpp   # Melody Density wiring test drives generate()
+    Source/Melody/MelodyPlayer.cpp # ditto (MelodyController hands it the sequence)
     ${LUMEN_ENGINE_SOURCES}
 )
-target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES})
+# MelodyController.cpp is the Lumena bridge (includes the third-party headers), so
+# it is added outside lumen_strict_sources — exactly as the plugin target keeps it
+# out of its /W4 /WX pass.
+target_sources(lumen_tests PRIVATE ${LUMEN_TESTS_SOURCES} ${LUMEN_MELODY_BRIDGE})
 lumen_strict_sources(Tools/Tests/TestsMain.cpp)
 
 target_include_directories(lumen_tests PRIVATE Source)
@@ -197,4 +231,5 @@ target_link_libraries(lumen_tests PRIVATE
     juce::juce_dsp
     juce::juce_graphics
     juce::juce_recommended_config_flags
+    Lumena::Lumena
 )

@@ -213,6 +213,7 @@ private:
     HeaderIconButton minimizeButton { HeaderIconButton::Glyph::minimize, "Minimize" };
     HeaderIconButton closeButton { HeaderIconButton::Glyph::close, "Close" };
     juce::ComponentDragger windowDragger;
+    juce::Image logo; // app icon, drawn left of the wordmark (loaded once)
 };
 
 // Deep view: the SPEC 14 card grid + footer.

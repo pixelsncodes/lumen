@@ -2,7 +2,10 @@
 
 #include "Engine/ModDestinations.h"
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
 #include "State/ModState.h"
+#include "UI/MelodyPanel.h" // melodygrid::draw
 #include "UI/Theme.h"
 
 using namespace lumen;
@@ -214,6 +217,26 @@ void LensImageView::paint (juce::Graphics& g)
         g.setColour (white.withAlpha (0.95f));
         g.fillRect (juce::Rectangle<float> (x - beam * 0.5f, dest.getY(), beam, dest.getHeight()));
     }
+
+    // Melody sampling grid: overlay the grid (and the sampled path /
+    // sounding-cell glow) on the Lens image whenever the Melody panel is open
+    // OR a melody has been generated, so it persists after the panel is closed.
+    auto& melody = shared.processor.melodyController();
+    if (melody.isPanelActive() || melody.hasMelody())
+    {
+        const auto live = shared.processor.melodyPlayer().liveState();
+        melodygrid::DrawInfo info;
+        info.imageArea = dest;
+        info.cols = melody.hasMelody() ? melody.gridCols() : MelodyController::kGridResolution;
+        info.rows = melody.hasMelody() ? melody.gridRows() : MelodyController::kGridResolution;
+        info.seq = melody.hasMelody() ? &melody.sequence() : nullptr;
+        info.liveCol = melodyGlowCol;
+        info.liveRow = melodyGlowRow;
+        info.glow = melodyGlow;
+        info.playing = live.playing;
+        info.accent = theme::neonYellow;
+        melodygrid::draw (g, info);
+    }
 }
 
 void LensImageView::animate()
@@ -224,8 +247,36 @@ void LensImageView::animate()
     const int version = lens.tableVersion();
     const int mode = lens.mode();
 
+    // Melody overlay glow: track the currently-sounding cell and fade it out.
+    auto& melody = shared.processor.melodyController();
+    const bool melodyActive = melody.isPanelActive() || melody.hasMelody();
+    bool melodyRepaint = melodyActive != lastMelodyActive;
+    lastMelodyActive = melodyActive;
+    if (melodyActive)
+    {
+        const auto live = shared.processor.melodyPlayer().liveState();
+        if (live.triggerSeq != melodyLastTrigger)
+        {
+            melodyLastTrigger = live.triggerSeq;
+            melodyGlow = 1.0f;
+            melodyGlowCol = live.col;
+            melodyGlowRow = live.row;
+            melodyRepaint = true;
+        }
+        else if (melodyGlow > 0.0f)
+        {
+            melodyGlow = juce::jmax (0.0f, melodyGlow - 0.11f);
+            melodyRepaint = true;
+        }
+        if (! live.playing && melodyGlow > 0.0f)
+        {
+            melodyGlow = 0.0f;
+            melodyRepaint = true;
+        }
+    }
+
     if (std::abs (morph - lastMorph) > 0.002f || version != lastVersion
-        || mode != lastMode || osc != lastOsc)
+        || mode != lastMode || osc != lastOsc || melodyRepaint)
     {
         lastMorph = morph;
         lastVersion = version;
@@ -240,6 +291,94 @@ void LensImageView::animate()
 }
 
 // ---------------------------------------------------------------------------
+// LensIconToggle
+// ---------------------------------------------------------------------------
+
+LensIconToggle::LensIconToggle (Glyph glyphToDraw, juce::Colour onColour, juce::String tip)
+    : glyph (glyphToDraw), accent (onColour)
+{
+    setTooltip (std::move (tip));
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void LensIconToggle::mouseUp (const juce::MouseEvent& e)
+{
+    if (enabledFlag && getLocalBounds().contains (e.getPosition()) && onClick != nullptr)
+        onClick();
+}
+
+void LensIconToggle::paint (juce::Graphics& g)
+{
+    const auto bounds = getLocalBounds().toFloat();
+
+    // Greyed when disabled (e.g. the play chip before a melody exists).
+    const float dim = enabledFlag ? 1.0f : 0.35f;
+
+    // Well: filled with the accent when on, otherwise a neutral chip that
+    // brightens slightly on hover — mirrors how the tab strips read.
+    g.setColour ((on ? accent.withAlpha (0.22f)
+                     : theme::well.withAlpha (hovered && enabledFlag ? 0.95f : 0.75f))
+                     .withMultipliedAlpha (dim));
+    g.fillRoundedRectangle (bounds, 4.0f);
+    g.setColour ((on ? accent : theme::hairline).withMultipliedAlpha (dim));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
+
+    const auto c   = bounds.getCentre();
+    const auto ink = (on ? accent : (hovered && enabledFlag ? theme::textPrimary
+                                                            : theme::textSecondary))
+                         .withMultipliedAlpha (dim);
+    g.setColour (ink);
+
+    if (glyph == Glyph::colors)
+    {
+        // Three overlapping colour swatches = a little palette.
+        const float r = bounds.getHeight() * 0.20f;
+        g.fillEllipse (c.x - r * 1.1f, c.y - r * 0.2f, r * 1.6f, r * 1.6f);
+        g.fillEllipse (c.x - r * 0.2f, c.y - r * 1.1f, r * 1.6f, r * 1.6f);
+        g.fillEllipse (c.x + r * 0.3f, c.y + r * 0.1f, r * 1.6f, r * 1.6f);
+    }
+    else if (glyph == Glyph::playStop)
+    {
+        // Play triangle when idle; stop square when playing (on == playing).
+        if (on)
+        {
+            const float s = bounds.getHeight() * 0.20f;
+            g.fillRoundedRectangle (c.x - s, c.y - s, s * 2.0f, s * 2.0f, 1.0f);
+        }
+        else
+        {
+            const float w = bounds.getWidth()  * 0.20f;
+            const float h = bounds.getHeight() * 0.24f;
+            juce::Path tri;
+            tri.addTriangle (c.x - w, c.y - h, c.x - w, c.y + h, c.x + w * 1.3f, c.y);
+            g.fillPath (tri);
+        }
+    }
+    else
+    {
+        // Eighth note: a slanted note head, a stem, and a small flag.
+        const float headW = bounds.getWidth()  * 0.30f;
+        const float headH = bounds.getHeight() * 0.22f;
+        const float headX = c.x - headW * 0.9f;
+        const float headY = c.y + headH * 0.6f;
+
+        juce::Path head;
+        head.addEllipse (headX, headY, headW, headH);
+        g.fillPath (head, juce::AffineTransform::rotation (-0.35f, headX + headW * 0.5f,
+                                                            headY + headH * 0.5f));
+
+        const float stemX = headX + headW * 0.95f;
+        const float stemTop = c.y - bounds.getHeight() * 0.30f;
+        g.drawLine (stemX, headY + headH * 0.2f, stemX, stemTop, 1.4f);
+
+        juce::Path flag;
+        flag.startNewSubPath (stemX, stemTop);
+        flag.quadraticTo (stemX + 5.0f, stemTop + 3.0f, stemX + 3.0f, stemTop + 8.0f);
+        g.strokePath (flag, juce::PathStrokeType (1.4f));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // LensPanel
 // ---------------------------------------------------------------------------
 
@@ -247,26 +386,36 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
     : shared (sharedContext),
       compact (compactLayout),
       image (sharedContext, [this] { return shared.processor.lensController().target(); }),
-      modeTabs ({ "SCAN", compactLayout ? "SPEC" : "SPECTRAL" }, // compact card is 96 px wide
+      // Directional-line glyphs matching the row's icon chips: "|" = Scan
+      // (rows played as waveforms, beam travels down), em dash = Spectral
+      // (spectrogram columns, beam travels across). UTF-8 escape for the
+      // dash — narrow non-ASCII literals garble on Windows (gotchas note).
+      modeTabs ({ "|", juce::String::fromUTF8 ("\xe2\x80\x94") },
                 [this] (int index) { shared.processor.lensController().setMode (index); }),
       targetTabs ({ "A", "B" },
                   [this] (int index) { shared.processor.lensController().setTarget (index); })
 {
     addAndMakeVisible (image);
-    modeTabs.setTooltip ("Scan plays image rows as waveforms; Spectral reads it as a spectrogram");
+    modeTabs.setTabTooltips ({ "Scan", "Spectral" });
     targetTabs.setTooltip ("Which oscillator receives the image wavetable");
     addAndMakeVisible (modeTabs);
     addAndMakeVisible (targetTabs);
 
-    colorsChip.setClickingTogglesState (false);
-    colorsChip.setColour (juce::TextButton::buttonOnColourId, theme::accentMod);
-    colorsChip.setTooltip ("COLORS: an image drop also sets the patch from the image's colors");
-    colorsChip.onClick = [this]
+    // Colors are now a hard-selected option: always apply the image's palette
+    // to the patch on drop. No user toggle — force it on and keep it on.
+    shared.processor.lensController().setChroma (true);
+
+    playChip.onClick = [this]
     {
-        auto& lens = shared.processor.lensController();
-        lens.setChroma (! lens.chroma());
+        auto& mc = shared.processor.melodyController();
+        if (mc.isPlaying()) mc.stop();
+        else                mc.play();
     };
-    addAndMakeVisible (colorsChip);
+    playChip.setChipEnabled (false);   // greyed until a melody exists and the panel is closed
+    addAndMakeVisible (playChip);
+
+    melodyChip.onClick = [this] { shared.processor.melodyController().togglePanel(); };
+    addAndMakeVisible (melodyChip);
 }
 
 void LensPanel::resized()
@@ -275,27 +424,34 @@ void LensPanel::resized()
 
     if (compact)
     {
-        // Deep card interior: image left, control column right.
+        // Deep card interior: image left, control column right. COLORS and
+        // MELODY share one row as icon squares, freeing a row for the tabs.
         image.setBounds (area.removeFromLeft (area.getWidth() - 96));
         auto column = area.withTrimmedLeft (6);
         modeTabs.setBounds (column.removeFromTop (17));
         column.removeFromTop (5);
         targetTabs.setBounds (column.removeFromTop (17));
         column.removeFromTop (5);
-        colorsChip.setBounds (column.removeFromTop (17));
+        auto chips = column.removeFromTop (18);
+        playChip.setBounds (chips.removeFromLeft (18));
+        chips.removeFromLeft (6);
+        melodyChip.setBounds (chips.removeFromLeft (18));
     }
     else
     {
-        // Play-view panel: title strip, image, one control row. The mode
-        // tabs get the width A/B can spare so SPECTRAL sets naturally.
+        // Play-view panel: title strip, image, one control row. COLORS and
+        // MELODY are now 20 px icon squares, so the SCAN/SPECTRAL tabs get the
+        // width the old 58 px text chips used to swallow.
         area.reduce (10, 8);
         area.removeFromTop (18); // title
         auto controls = area.removeFromBottom (20);
         image.setBounds (area.withTrimmedBottom (6));
         targetTabs.setBounds (controls.removeFromRight (44));
         controls.removeFromRight (6);
-        colorsChip.setBounds (controls.removeFromRight (62));
-        controls.removeFromRight (6);
+        melodyChip.setBounds (controls.removeFromRight (20));
+        controls.removeFromRight (5);
+        playChip.setBounds (controls.removeFromRight (20));
+        controls.removeFromRight (8);
         modeTabs.setBounds (controls);
     }
 }
@@ -339,9 +495,14 @@ void LensPanel::animate()
         modeTabs.setActive (lens.mode(), false);
     if (targetTabs.active() != lens.target())
         targetTabs.setActive (lens.target(), false);
-    if (colorsChip.getToggleState() != lens.chroma())
-    {
-        colorsChip.setToggleState (lens.chroma(), juce::dontSendNotification);
-        repaint();
-    }
+
+    auto& mc = shared.processor.melodyController();
+    const bool melodyActive = mc.isPanelActive();
+    // Play chip: greyed until a melody exists and the panel is closed; shows the
+    // stop glyph (toggle on) while playing.
+    playChip.setChipEnabled (mc.hasMelody() && ! melodyActive);
+    if (playChip.getToggleState() != mc.isPlaying())
+        playChip.setToggleState (mc.isPlaying());
+    if (melodyChip.getToggleState() != melodyActive)
+        melodyChip.setToggleState (melodyActive);
 }

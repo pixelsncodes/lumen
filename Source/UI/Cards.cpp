@@ -536,6 +536,9 @@ HeaderBar::HeaderBar (const UiShared& shared, std::function<void (int)> onViewCh
       master (shared, "masterGain", "", theme::neonYellow), // unlabelled: header space is tight
       meter (shared)
 {
+    logo = juce::ImageCache::getFromMemory (BinaryData::lumenicon512_png,
+                                            BinaryData::lumenicon512_pngSize);
+
     addAndMakeVisible (viewTabs);
     addAndMakeVisible (master);
     addAndMakeVisible (meter);
@@ -596,9 +599,18 @@ void HeaderBar::paint (juce::Graphics& g)
     g.setColour (theme::hairlineLight);
     g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
 
+    // App icon, then the wordmark. The logo sits in the same left slot the
+    // wordmark used; the text shifts right by the icon's width so nothing else
+    // in the header moves.
+    const int logoSize = 28;
+    const int logoX = 22;
+    if (logo.isValid())
+        g.drawImageWithin (logo, logoX, (getHeight() - logoSize) / 2, logoSize, logoSize,
+                           juce::RectanglePlacement::centred);
+
     g.setColour (theme::textPrimary);
     g.setFont (theme::semiBold (22.0f));
-    theme::drawTrackedText (g, "LUMEN", { 24, 0, 240, getHeight() },
+    theme::drawTrackedText (g, "LUMEN", { logoX + logoSize + 10, 0, 220, getHeight() },
                             juce::Justification::centredLeft, 0.34f);
 
     // Preset strip well; the name button sits transparently on top.
@@ -636,7 +648,12 @@ void HeaderBar::showGearMenu()
     // Plugin: a minimal branded menu (the host owns the audio devices).
     juce::PopupMenu menu;
     menu.setLookAndFeel (&menuLnf);
-    menu.addSectionHeader ("Lumen");
+    // Branded "about" line: the app icon beside the name, then the version.
+    juce::PopupMenu::Item brand ("Lumen");
+    brand.setImage (juce::Drawable::createFromImageData (BinaryData::lumenicon512_png,
+                                                         BinaryData::lumenicon512_pngSize));
+    brand.setEnabled (false);
+    menu.addItem (brand);
     menu.addItem (1, "Version " + juce::String (JucePlugin_VersionString), false, false);
     menu.addSeparator();
     menu.addItem (2, "MIDI Learn: right-click any knob", false, false);

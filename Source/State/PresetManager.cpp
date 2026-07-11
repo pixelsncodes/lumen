@@ -79,7 +79,8 @@ bool PresetManager::loadIndex (int index)
     if (entry.isFactory())
     {
         const auto& preset = presets::bank()[static_cast<size_t> (entry.factoryIndex)];
-        processor.loadPresetState (presets::buildState (preset, processor.apvts));
+        processor.loadPresetState (presets::buildState (preset, processor.apvts),
+                                   /*keepSessionImage=*/true);
         return true;
     }
 
@@ -93,7 +94,7 @@ bool PresetManager::loadIndex (int index)
         state.setProperty ("presetName", entry.name, nullptr);
     if (! state.hasProperty ("presetCategory"))
         state.setProperty ("presetCategory", entry.category, nullptr);
-    processor.loadPresetState (state);
+    processor.loadPresetState (state, /*keepSessionImage=*/true);
     return true;
 }
 
@@ -101,7 +102,8 @@ bool PresetManager::loadFactory (const juce::String& name)
 {
     if (const auto* preset = presets::find (name))
     {
-        processor.loadPresetState (presets::buildState (*preset, processor.apvts));
+        processor.loadPresetState (presets::buildState (*preset, processor.apvts),
+                                   /*keepSessionImage=*/true);
         return true;
     }
     return false;

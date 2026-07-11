@@ -4,7 +4,9 @@
 
 namespace lumen::params
 {
-inline constexpr int kStateVersion = 1;
+// v2: adds the Melody generator's musical parameters (Lumena integration).
+// v3: adds Melody Density (image-driven rhythmic density, Phase 3).
+inline constexpr int kStateVersion = 3;
 
 // Frozen first 8 (SPEC section 12, Maschine knob page 1).
 // NEVER reorder, remove, or insert before these.
@@ -121,6 +123,38 @@ inline constexpr const char* reverbWidth   = "reverbWidth";
 // --- Phase 7: voice modes + glide (SPEC section 11) ----------------------
 inline constexpr const char* voiceMode = "voiceMode";
 inline constexpr const char* glideTime = "glideTime";
+
+// --- Melody generator (Lumena integration) -------------------------------
+// The musical controls of the image-driven melody. The RNG seed and lock
+// toggle are NOT parameters (they live in the MELODY state sub-tree).
+inline constexpr const char* melodyKeyMode   = "melodyKeyMode";
+inline constexpr const char* melodyMode       = "melodyMode";      // Melody/Chords/Arp
+inline constexpr const char* melodyLength    = "melodyLength";
+inline constexpr const char* melodyPhrase    = "melodyPhrase";     // Phrased/Freeform (Melody mode)
+inline constexpr const char* melodyArpPattern = "melodyArpPattern"; // Arp mode
+inline constexpr const char* melodyLoopLength = "melodyLoopLength"; // Off/1/2/4/8 bars
+// Four musical macro controls (0..1).
+inline constexpr const char* melodyEnergy         = "melodyEnergy";
+inline constexpr const char* melodyComplexity     = "melodyComplexity";
+inline constexpr const char* melodyImageInfluence = "melodyImageInfluence";
+inline constexpr const char* melodyRepetition     = "melodyRepetition";
+// Image-driven rhythmic density (Phase 3): 0 = groove only, up = busy image
+// regions subdivide into denser rhythm. Maps to MelodyOptions::imageRhythmAmount.
+inline constexpr const char* melodyDensity        = "melodyDensity";
+// Regeneration locks (constrain Mutate / Regenerate).
+inline constexpr const char* melodyLockRhythm  = "melodyLockRhythm";
+inline constexpr const char* melodyLockPitch   = "melodyLockPitch";
+inline constexpr const char* melodyLockHarmony = "melodyLockHarmony";
+// Phase 5 (showcase UI): loop the melody transport at the sequence end, and a
+// post-generation semitone shift applied at playback/export time only (the
+// stored sequence, the seed and the generator are never touched).
+inline constexpr const char* melodyLoopPlayback = "melodyLoopPlayback";
+inline constexpr const char* melodyTranspose    = "melodyTranspose";
+// Octave shift (-2..+2), same post-generation contract as Transpose: the
+// effective pitch shift is melodyTranspose + 12 * melodyOctave, applied per
+// note at playback/export time only (clamped to MIDI 0..127) — never
+// regenerates, never re-seeds.
+inline constexpr const char* melodyOctave       = "melodyOctave";
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 } // namespace lumen::params

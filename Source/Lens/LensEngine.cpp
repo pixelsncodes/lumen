@@ -330,7 +330,17 @@ PatchTargets patchTargetsFor (const ChromaStats& c)
     for (int m = 0; m < 4; ++m)
         t.macros[m] = juce::jlimit (0.0f, 1.0f,
                                     kMacroDefaults[m] + kMacroGain * (stats[m] - 0.5f));
+
+    // Tone only: keep dark images dark-sounding instead of near-silent
+    // (audibility floor — see the kToneFloor block in the header).
+    t.macros[0] = toneAudibilityRemap (t.macros[0]);
     return t;
+}
+
+float toneAudibilityRemap (float rawTone01, float toneFloor, float gamma) noexcept
+{
+    const float raw = juce::jlimit (0.0f, 1.0f, rawTone01);
+    return toneFloor + (1.0f - toneFloor) * std::pow (raw, gamma);
 }
 
 juce::Image makeThumbnail (const Analysis& analysis)

@@ -272,6 +272,72 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         glideRange, defaults.glideSeconds,
         Attributes().withLabel ("s").withStringFromValueFunction (secondsToText)));
 
+    // Melody generator (Lumena). Musical controls only — the RNG seed and lock
+    // toggle persist in the MELODY state sub-tree, not as parameters. Defaults
+    // mirror Lumena's MelodyOptions (bias 0.25, ornaments 0.15, Phrased).
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyKeyMode), "Melody Key Mode",
+        juce::StringArray { "From Image", "Random" }, 0));
+
+    // Generation mode: a plain melody, a block-chord progression, or an
+    // arpeggio. Melody is the default and keeps the original behaviour.
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyMode), "Melody Mode",
+        juce::StringArray { "Melody", "Chords", "Arp" }, 0));
+
+    // LENGTH: number of notes generated (chords: number of chords).
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyLength), "Melody Length",
+        juce::StringArray { "8", "16", "32" }, 1)); // default 16
+
+    // Phrase structure (Melody mode) and arp direction (Arp mode).
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyPhrase), "Melody Phrasing",
+        juce::StringArray { "Phrased", "Freeform" }, 0));
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyArpPattern), "Melody Arp Pattern",
+        juce::StringArray { "Up", "Down", "Up-Down", "Converge", "Random" }, 2));
+
+    // Loop length in bars (Off = one-shot). Makes the output a seamless loop.
+    layout.add (std::make_unique<ChoiceParam> (pid (melodyLoopLength), "Melody Loop Length",
+        juce::StringArray { "Off", "1 bar", "2 bars", "4 bars", "8 bars" }, 0));
+
+    // Four musical macros, all 0..1:
+    //   Energy          -> velocity + density (drive)
+    //   Complexity      -> ornament/embellishment density
+    //   Image Influence -> how strongly the image steers pitch contour
+    //   Repetition      -> how often the motif recurs vs. varies
+    layout.add (std::make_unique<FloatParam> (pid (melodyEnergy), "Melody Energy",
+        unitRange, 0.5f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyComplexity), "Melody Complexity",
+        unitRange, 0.15f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyImageInfluence), "Melody Image Influence",
+        unitRange, 0.25f, unitAttr));
+    layout.add (std::make_unique<FloatParam> (pid (melodyRepetition), "Melody Repetition",
+        unitRange, 0.2f, unitAttr));
+
+    // Density (Phase 3): how strongly per-region image detail/contrast subdivides
+    // the rhythm — 0 keeps the plain session groove (default, so existing patches
+    // are unchanged), up drives busier notes in busy image regions. 0..1 like the
+    // other macros; consumed at generation time, so no audio-rate smoothing.
+    layout.add (std::make_unique<FloatParam> (pid (melodyDensity), "Melody Density",
+        unitRange, 0.0f, unitAttr));
+
+    // Regeneration locks: hold a dimension while Mutate/Regenerate change the
+    // other. Both off = fully fresh; both on = unchanged.
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockRhythm),  "Melody Lock Rhythm",  false));
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockPitch),   "Melody Lock Pitch",   false));
+    // Lock Harmony: hold the chord progression while pitch/rhythm re-roll. Engine
+    // + param only in Phase 4b (no UI yet — Phase 5). Appended last so no existing
+    // parameter's automation index shifts. Default off (inert for old presets).
+    layout.add (std::make_unique<BoolParam> (pid (melodyLockHarmony), "Melody Lock Harmony", false));
+
+    // Phase 5 showcase controls, appended last (no automation index shifts).
+    // Loop Playback wraps the melody transport at the sequence end instead of
+    // stopping — audition the loop without re-pressing PLAY. Transpose shifts
+    // pitches at playback/export time only; the stored sequence and the seed
+    // are never touched, so it is freely reversible.
+    layout.add (std::make_unique<BoolParam> (pid (melodyLoopPlayback), "Melody Loop Playback", false));
+    layout.add (std::make_unique<IntParam> (pid (melodyTranspose), "Melody Transpose",
+        -12, 12, 0, juce::AudioParameterIntAttributes{}.withLabel ("st")));
+    layout.add (std::make_unique<IntParam> (pid (melodyOctave), "Melody Octave",
+        -2, 2, 0, juce::AudioParameterIntAttributes{}.withLabel ("oct")));
+
     return layout;
 }
 } // namespace lumen::params

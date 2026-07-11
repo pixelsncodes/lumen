@@ -1,0 +1,5 @@
+key:   Ab Mixolydian
+mood:  warm (major) — hue 234°, sat 0.22, lum 0.66
+form:  A A′ B A′′ B C
+seed:  5eed0008
+notes: 20

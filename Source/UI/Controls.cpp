@@ -477,6 +477,12 @@ void TabsBar::setTooltip (const juce::String& tip)
         button->setTooltip (tip);
 }
 
+void TabsBar::setTabTooltips (const juce::StringArray& tips)
+{
+    for (int i = 0; i < buttons.size() && i < tips.size(); ++i)
+        buttons[i]->setTooltip (tips[i]);
+}
+
 void TabsBar::setActive (int index, bool notify)
 {
     activeIndex = juce::jlimit (0, buttons.size() - 1, index);

@@ -1,0 +1,5 @@
+key:   Bb Harmonic Minor
+mood:  vivid & dark (minor) — hue 308°, sat 0.91, lum 0.10
+form:  A A′ B C
+seed:  5eed0002
+notes: 16

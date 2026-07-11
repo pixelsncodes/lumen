@@ -1,7 +1,10 @@
 #include "PluginProcessor.h"
 
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
 #include "State/EngineBindings.h"
+#include "State/LensState.h"
 #include "State/MidiLearn.h"
 #include "State/ModState.h"
 #include "State/PresetManager.h"
@@ -28,6 +31,11 @@ LumenAudioProcessor::LumenAudioProcessor()
 
     initializeModState();
     lens = std::make_unique<lumen::LensController> (apvts, engine);
+    melodyPlayerObj = std::make_unique<lumen::MelodyPlayer> (engine);
+    melodyLoopPlaybackValue = apvts.getRawParameterValue (lumen::params::melodyLoopPlayback);
+    melodyTransposeValue    = apvts.getRawParameterValue (lumen::params::melodyTranspose);
+    melodyOctaveValue       = apvts.getRawParameterValue (lumen::params::melodyOctave);
+    melody = std::make_unique<lumen::MelodyController> (apvts, *lens, *melodyPlayerObj);
     midiLearnController = std::make_unique<lumen::MidiLearnController> (apvts);
 
     // Default patch = Slow Aurora (user-approved deviation from SPEC section
@@ -222,6 +230,15 @@ void LumenAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     engine.setParams (params);
 
+    // Advance the melody sequencer: it triggers its own notes into the engine
+    // at the host tempo (block-accurate), independent of the host transport.
+    if (melodyLoopPlaybackValue != nullptr)
+        melodyPlayerObj->setLooping (melodyLoopPlaybackValue->load() > 0.5f);
+    if (melodyTransposeValue != nullptr && melodyOctaveValue != nullptr)
+        melodyPlayerObj->setTranspose (juce::roundToInt (melodyTransposeValue->load())
+                                       + 12 * juce::roundToInt (melodyOctaveValue->load()));
+    melodyPlayerObj->process (params.bpm, getSampleRate(), buffer.getNumSamples());
+
     // Sample-accurate note events: render up to each event, then apply it.
     int segmentStart = 0;
     for (const auto metadata : midiMessages)
@@ -288,15 +305,25 @@ void LumenAudioProcessor::setStateInformation (const void* data, int sizeInBytes
             loadPresetState (juce::ValueTree::fromXml (*xml));
 }
 
-void LumenAudioProcessor::loadPresetState (juce::ValueTree newState)
+void LumenAudioProcessor::loadPresetState (juce::ValueTree newState, bool keepSessionImage)
 {
     if (! newState.hasType (apvts.state.getType()))
         return;
+
+    // Session-level Lens image (design decision, final): preset switches
+    // change synth params only — the image, its full-res source bytes and
+    // the lens mode/target carry over; macros stay exactly as the preset
+    // stores them (re-derivation happens only on explicit image load/scan).
+    if (keepSessionImage)
+        lumen::lensstate::preserveSessionImages (apvts.state, newState);
+
     apvts.state.removeListener (this);
     apvts.replaceState (std::move (newState));
     initializeModState(); // re-ensure trees, republish, re-listen
     if (lens != nullptr)
         lens->applyStateToEngine(); // rebuild Lens tables from the state
+    if (melody != nullptr)
+        melody->applyState(); // restore seed/lock + the exact saved melody
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

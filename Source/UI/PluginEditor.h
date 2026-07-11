@@ -4,8 +4,10 @@
 
 #include "UI/Cards.h"
 #include "UI/LumenLookAndFeel.h"
+#include "UI/MelodyPanel.h"
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 
 // Phase 5 editor: Play + Deep views (SPEC 14), OpenGL-accelerated with an
@@ -90,6 +92,7 @@ private:
     std::unique_ptr<HeaderBar> header;
     std::unique_ptr<DeepView> deepView;
     std::unique_ptr<PlayView> playView;
+    std::unique_ptr<MelodyPanel> melodyPanel; // floating overlay, on top of the views
     juce::TooltipWindow tooltipWindow { &content }; // parented: tips render inside the editor
 
     juce::OpenGLContext glContext;
@@ -97,6 +100,11 @@ private:
 
     int tick = 0;
     bool applyingExternalMidi = false; // guards keyboardState listener re-entry
+    // Notes the internal melody/chord/arp player currently has lit on the
+    // keyboard (channel 2), so each timer tick only diffs against the player's
+    // published sounding set. Kept separate from live host/hardware MIDI
+    // (channel 1) so neither source clears the other's keys.
+    std::uint32_t melodyLitMask[4] = { 0, 0, 0, 0 };
 
     // Lens drop feedback (overlay while dragging, brief message after).
     bool fileDragOver = false;

@@ -1,0 +1,198 @@
+#include "State/MelodyState.h"
+
+namespace lumen::melodystate
+{
+namespace
+{
+const juce::Identifier kMelody   { "MELODY" };
+const juce::Identifier kSeq      { "SEQ" };
+const juce::Identifier kSeed     { "seed" };
+const juce::Identifier kLocked   { "locked" };
+const juce::Identifier kCols     { "cols" };
+const juce::Identifier kRows     { "rows" };
+const juce::Identifier kBeats    { "beats" };
+const juce::Identifier kKey      { "key" };
+const juce::Identifier kSteps    { "steps" };
+const juce::Identifier kMood     { "mood" };
+const juce::Identifier kForm     { "form" };
+const juce::Identifier kWinX     { "winX" };
+const juce::Identifier kWinY     { "winY" };
+const juce::Identifier kWinW     { "winW" };
+const juce::Identifier kWinH     { "winH" };
+} // namespace
+
+juce::ValueTree ensureTree (juce::ValueTree& state)
+{
+    auto tree = state.getChildWithName (kMelody);
+    if (! tree.isValid())
+    {
+        tree = juce::ValueTree (kMelody);
+        state.appendChild (tree, nullptr);
+    }
+    return tree;
+}
+
+juce::ValueTree getTree (const juce::ValueTree& state)
+{
+    return state.getChildWithName (kMelody);
+}
+
+juce::uint64 seed (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    if (! tree.isValid())
+        return 0;
+    return static_cast<juce::uint64> (
+        tree.getProperty (kSeed).toString().getHexValue64());
+}
+
+bool locked (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() && static_cast<bool> (tree.getProperty (kLocked, false));
+}
+
+void setSeed (juce::ValueTree& state, juce::uint64 seedValue)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kSeed, juce::String::toHexString (
+                                 static_cast<juce::int64> (seedValue)), nullptr);
+}
+
+void setLocked (juce::ValueTree& state, bool lockedValue)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kLocked, lockedValue, nullptr);
+}
+
+void setSummary (juce::ValueTree& state, const juce::String& mood,
+                 const juce::String& form)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kMood, mood, nullptr);
+    tree.setProperty (kForm, form, nullptr);
+}
+
+juce::String summaryMood (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() ? tree.getProperty (kMood).toString() : juce::String();
+}
+
+juce::String summaryForm (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() ? tree.getProperty (kForm).toString() : juce::String();
+}
+
+void storeSequence (juce::ValueTree& state, const melody::Sequence& seq)
+{
+    auto tree = ensureTree (state);
+    tree.removeChild (tree.getChildWithName (kSeq), nullptr);
+
+    juce::ValueTree node (kSeq);
+    node.setProperty (kCols, seq.gridCols, nullptr);
+    node.setProperty (kRows, seq.gridRows, nullptr);
+    node.setProperty (kBeats, seq.totalBeats, nullptr);
+    node.setProperty (kKey, seq.keyName, nullptr);
+
+    // Compact CSV: one "note,vel,start,len,col,row" record per step, ';'
+    // separated. At <=32 notes this stays tiny and human-inspectable.
+    juce::String csv;
+    csv.preallocateBytes (seq.steps.size() * 24);
+    for (const auto& s : seq.steps)
+    {
+        csv << s.note << ',' << s.velocity << ',' << s.startBeats << ','
+            << s.lengthBeats << ',' << s.col << ',' << s.row << ';';
+    }
+    node.setProperty (kSteps, csv, nullptr);
+    tree.appendChild (node, nullptr);
+}
+
+bool hasSequence (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    return tree.isValid() && tree.getChildWithName (kSeq).isValid();
+}
+
+bool loadSequence (const juce::ValueTree& state, melody::Sequence& out)
+{
+    const auto tree = getTree (state);
+    if (! tree.isValid())
+        return false;
+    const auto node = tree.getChildWithName (kSeq);
+    if (! node.isValid())
+        return false;
+
+    out = melody::Sequence {};
+    out.gridCols   = static_cast<int> (node.getProperty (kCols, 8));
+    out.gridRows   = static_cast<int> (node.getProperty (kRows, 8));
+    out.totalBeats = static_cast<double> (node.getProperty (kBeats, 0.0));
+    out.keyName    = node.getProperty (kKey).toString();
+
+    const juce::String csv = node.getProperty (kSteps).toString();
+    juce::StringArray records;
+    records.addTokens (csv, ";", "");
+    for (const auto& record : records)
+    {
+        if (record.trim().isEmpty())
+            continue;
+        juce::StringArray f;
+        f.addTokens (record, ",", "");
+        if (f.size() < 6)
+            continue;
+        melody::Step s;
+        s.note        = f[0].getIntValue();
+        s.velocity    = f[1].getFloatValue();
+        s.startBeats  = f[2].getDoubleValue();
+        s.lengthBeats = f[3].getDoubleValue();
+        s.col         = f[4].getIntValue();
+        s.row         = f[5].getIntValue();
+        out.steps.push_back (s);
+    }
+    return true;
+}
+
+void setWindowBounds (juce::ValueTree& state, juce::Rectangle<int> bounds)
+{
+    auto tree = ensureTree (state);
+    tree.setProperty (kWinX, bounds.getX(), nullptr);
+    tree.setProperty (kWinY, bounds.getY(), nullptr);
+    tree.setProperty (kWinW, bounds.getWidth(), nullptr);
+    tree.setProperty (kWinH, bounds.getHeight(), nullptr);
+}
+
+juce::Rectangle<int> windowBounds (const juce::ValueTree& state)
+{
+    const auto tree = getTree (state);
+    if (! tree.isValid() || ! tree.hasProperty (kWinW))
+        return {};
+    return { static_cast<int> (tree.getProperty (kWinX, 0)),
+             static_cast<int> (tree.getProperty (kWinY, 0)),
+             static_cast<int> (tree.getProperty (kWinW, 0)),
+             static_cast<int> (tree.getProperty (kWinH, 0)) };
+}
+
+juce::Rectangle<int> clampWindowBounds (juce::Rectangle<int> bounds,
+                                        juce::Rectangle<int> area,
+                                        int minW, int minH)
+{
+    // Uniform scale off the minimum size (the window keeps its aspect ratio),
+    // clamped between "controls stay usable" and "fits inside the area".
+    const double maxScale = juce::jmax (1.0,
+        juce::jmin (area.getWidth() / static_cast<double> (juce::jmax (1, minW)),
+                    area.getHeight() / static_cast<double> (juce::jmax (1, minH))));
+    const double scale = juce::jlimit (1.0, maxScale,
+        bounds.getWidth() / static_cast<double> (juce::jmax (1, minW)));
+    const int w = juce::roundToInt (minW * scale);
+    const int h = juce::roundToInt (minH * scale);
+
+    const int x = juce::jlimit (area.getX(),
+                                juce::jmax (area.getX(), area.getRight() - w),
+                                bounds.getX());
+    const int y = juce::jlimit (area.getY(),
+                                juce::jmax (area.getY(), area.getBottom() - h),
+                                bounds.getY());
+    return { x, y, w, h };
+}
+} // namespace lumen::melodystate

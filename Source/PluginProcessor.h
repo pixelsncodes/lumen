@@ -9,7 +9,8 @@
 #include <memory>
 #include <vector>
 
-namespace lumen { class LensController; class MidiLearnController; class PresetManager; }
+namespace lumen { class LensController; class MidiLearnController; class PresetManager;
+                  class MelodyController; class MelodyPlayer; }
 
 class LumenAudioProcessor final : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
@@ -44,8 +45,11 @@ public:
 
     // Replace the whole patch (parameters + matrix/macros + Lens tables)
     // with a preset/DAW state tree — the one shared load path (Phase 7).
-    // Message thread only.
-    void loadPresetState (juce::ValueTree newState);
+    // keepSessionImage = true (preset switches): the loaded Lens image is
+    // session-level — it survives the switch and its macros are NOT
+    // re-derived; the preset's params land as stored. False (DAW state
+    // restore): the incoming state is the whole truth. Message thread only.
+    void loadPresetState (juce::ValueTree newState, bool keepSessionImage = false);
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -66,6 +70,11 @@ public:
     // Lens image engine (Phase 6): drop handling, table swaps, chroma patch.
     // Message thread only.
     lumen::LensController& lensController() noexcept { return *lens; }
+
+    // Melody generator (Lumena integration). The controller is message-thread
+    // only; the player publishes live playback state read on the UI timer.
+    lumen::MelodyController& melodyController() noexcept { return *melody; }
+    lumen::MelodyPlayer& melodyPlayer() noexcept { return *melodyPlayerObj; }
 
     // Latest parsed matrix/macro config (stable between UI edits) — used by
     // knobs to know their modulation span without re-parsing the ValueTree.
@@ -119,11 +128,19 @@ private:
 
     lumen::SynthEngine engine;
     std::unique_ptr<lumen::LensController> lens;
+    std::unique_ptr<lumen::MelodyPlayer> melodyPlayerObj;
+    std::unique_ptr<lumen::MelodyController> melody;
     std::unique_ptr<lumen::PresetManager> presets;
     std::unique_ptr<lumen::MidiLearnController> midiLearnController;
 
     // One atomic per engine binding, same order as lumen::bindings::all().
     std::vector<std::atomic<float>*> bindingValues;
+
+    // Raw APVTS values the melody player snapshots once per block (not engine
+    // bindings — they steer the sequencer, not the voices).
+    std::atomic<float>* melodyLoopPlaybackValue = nullptr;
+    std::atomic<float>* melodyTransposeValue    = nullptr;
+    std::atomic<float>* melodyOctaveValue       = nullptr;
 
     // Lock-free matrix publish: message thread writes the next pool entry and
     // swaps the pointer; the audio thread copies from the published entry at

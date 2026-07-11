@@ -1,6 +1,9 @@
 #include "UI/PluginEditor.h"
 
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
+#include "Melody/MelodyPlayer.h"
+#include "State/MelodyState.h"
 #include "State/MidiLearn.h"
 #include "UI/Theme.h"
 #include "UI/Tooltips.h"
@@ -37,13 +40,25 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     deepView = std::make_unique<DeepView> (shared, history);
     playView = std::make_unique<PlayView> (shared, history, keyboardState);
 
+    melodyPanel = std::make_unique<MelodyPanel> (shared);
+
     content.addAndMakeVisible (*header);
     content.addAndMakeVisible (*playView);
     content.addChildComponent (*deepView);
+    content.addChildComponent (*melodyPanel); // on top of the views, hidden until toggled
     content.setBounds (0, 0, kBaseWidth, kBaseHeight);
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
+    // Restore the persisted melody-window placement (default: centered under
+    // the header). setWindowPlacement clamps, so a stale or off-screen saved
+    // position can never leave the window unreachable.
+    {
+        const auto stored = lumen::melodystate::windowBounds (processor.apvts.state);
+        const juce::Rectangle<int> fallback ((kBaseWidth - MelodyPanel::kBaseWidth) / 2, 140,
+                                             MelodyPanel::kBaseWidth, MelodyPanel::kBaseHeight);
+        melodyPanel->setWindowPlacement (stored.isEmpty() ? fallback : stored);
+    }
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);
@@ -287,11 +302,60 @@ void LumenAudioProcessorEditor::timerCallback()
         applyingExternalMidi = false;
     }
 
+    // Mirror the internally-played melody/chord/arp notes onto the on-screen
+    // keyboard. The player publishes the exact set of notes it is currently
+    // sounding (the same 60 Hz-polled live state that drives the image-region
+    // highlight); we reconcile it against what we last lit and toggle only the
+    // differences. Channel 2 keeps these keys independent from live host/
+    // hardware MIDI on channel 1 — because MidiKeyboardState stores a bit per
+    // (note, channel), a key held by both sources stays lit until BOTH release
+    // it, with no stuck keys and no premature clear. The guard stops the
+    // resulting listener callbacks from re-triggering the engine (the notes are
+    // already sounding on the audio thread).
+    {
+        const auto live = processor.melodyPlayer().liveState();
+        applyingExternalMidi = true;
+        for (int w = 0; w < 4; ++w)
+        {
+            const std::uint32_t want = live.notes[w];
+            const std::uint32_t changed = want ^ melodyLitMask[w];
+            if (changed != 0)
+                for (int bit = 0; bit < 32; ++bit)
+                {
+                    const std::uint32_t m = 1u << bit;
+                    if ((changed & m) == 0)
+                        continue;
+                    const int note = w * 32 + bit;
+                    if ((want & m) != 0)
+                        keyboardState.noteOn (2, note, 0.8f);
+                    else
+                        keyboardState.noteOff (2, note, 0.0f);
+                }
+            melodyLitMask[w] = want;
+        }
+        applyingExternalMidi = false;
+    }
+
     header->animate();
     if (deepView->isVisible())
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
     else
         playView->animate();
+
+    // Melody overlay: follow the Lens "MELODY" toggle, animate while visible,
+    // and reclaim any sequence the audio thread retired.
+    {
+        const bool showMelody = processor.melodyController().isPanelActive();
+        if (melodyPanel->isVisible() != showMelody)
+        {
+            melodyPanel->setVisible (showMelody);
+            if (showMelody)
+                melodyPanel->toFront (false);
+        }
+        if (showMelody)
+            melodyPanel->animate();
+        processor.melodyPlayer().collectGarbage();
+    }
 
     if (dropMessageFrames > 0 && --dropMessageFrames == 0)
         repaint();
