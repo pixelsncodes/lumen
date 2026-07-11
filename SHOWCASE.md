@@ -123,6 +123,21 @@ checkpoint after every merge; submodule pointer unchanged at `32972f6`.
   title strip and resizes from a corner grip (aspect locked to the fixed
   580×476 layout, minimum = that size). Placement persists with the patch
   and is clamped on restore, so a stale/off-screen save can never strand it.
+- **Keyboard lights from internal playback** (`feature/keyboard-playback-lights`):
+  the on-screen keyboard now lights from the PLAY-button melody/chord/arp
+  player, not just live host/hardware MIDI. The player publishes its exact
+  sounding-note set on the same `LiveState` snapshot that drives the image-
+  region highlight; the editor mirrors it onto the keyboard on channel 2,
+  separate from live MIDI on channel 1, so a key held by both stays lit until
+  both release (polyphonic in CHORDS/ARP, mono in MELODY, all keys clear on
+  stop). UI-only — no new parameter; seed-2024 02-neon-dusk export
+  byte-identical.
+- **App icon**: the Lumen mark ships as `Assets/icon/lumen.ico` (16/32/48/64/
+  128/256 px, transparency preserved) wired via CMake `ICON_BIG`/`ICON_SMALL`,
+  so the standalone exe carries it (taskbar, alt-tab, exe file, window). The
+  same art is embedded as `BinaryData` and rendered in the header beside the
+  wordmark and in the gear menu's about line. Cosmetic — no param, no layout
+  redesign; MIDI export byte-identical.
 
 Integration gates (this merge, on the merged tip): full Windows suite green;
 115/115 param round-trip; determinism (61 seeds × checkerboard, ×2,

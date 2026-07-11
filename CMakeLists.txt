@@ -44,6 +44,7 @@ juce_add_binary_data(LumenAssets SOURCES
     Assets/Fonts/InterMedium.ttf
     Assets/Fonts/InterSemiBold.ttf
     Assets/Fonts/InterLicenseOFL.txt
+    Assets/icon/lumen-icon-512.png   # app icon, rendered in the header + gear menu
 )
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,11 @@ juce_add_plugin(Lumen
     PLUGIN_CODE                 Lmn1
     FORMATS                     VST3 Standalone
     PRODUCT_NAME                "Lumen"
+    # App icon: JUCE builds the embedded Windows icon (taskbar, alt-tab, exe
+    # file, window) from these PNGs. Big = 512 master; small = 128 for crisp
+    # small-size rendering. Same art the in-app header/gear menu embeds.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon/lumen-icon-512.png"
+    ICON_SMALL                  "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon/lumen-icon-128.png"
     IS_SYNTH                    TRUE
     NEEDS_MIDI_INPUT            TRUE
     NEEDS_MIDI_OUTPUT           FALSE
