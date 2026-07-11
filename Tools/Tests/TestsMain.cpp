@@ -2371,6 +2371,50 @@ public:
             passBlocks (player, 200);
             expect (! player.isPlaying(), "unlooped player stops at the next end");
         }
+
+        beginTest ("keyboard mirror: liveState publishes every sounding note, clears on stop");
+        {
+            // A 3-note chord, all starting at beat 0: CHORDS/ARP must light every
+            // audible key at once (not just the last-triggered cell), and stop
+            // must clear them all. This is the exact set the on-screen keyboard
+            // mirrors onto channel 2.
+            auto chord = []
+            {
+                melody::Sequence s;
+                s.totalBeats = 4.0;
+                for (const int n : { 60, 64, 67 })
+                {
+                    melody::Step st; st.note = n; st.startBeats = 0.0; st.lengthBeats = 2.0;
+                    s.steps.push_back (st);
+                }
+                return s;
+            };
+            auto litCount = [] (const MelodyPlayer::LiveState& ls)
+            {
+                int c = 0;
+                for (int n = 0; n < 128; ++n)
+                    if ((ls.notes[n >> 5] & (1u << (n & 31))) != 0)
+                        ++c;
+                return c;
+            };
+            auto noteLit = [] (const MelodyPlayer::LiveState& ls, int n)
+            {
+                return (ls.notes[n >> 5] & (1u << (n & 31))) != 0;
+            };
+
+            MelodyPlayer player (engine);
+            player.setSequence (std::make_unique<melody::Sequence> (chord()));
+            player.play();
+            passBlocks (player, 1); // 0.02 beats in: the whole chord is sounding
+            const auto sounding = player.liveState();
+            expect (noteLit (sounding, 60) && noteLit (sounding, 64) && noteLit (sounding, 67),
+                    "every chord note is published as sounding (polyphony)");
+            expectEquals (litCount (sounding), 3, "no phantom keys beyond the chord tones");
+
+            player.stop();
+            passBlocks (player, 1);
+            expectEquals (litCount (player.liveState()), 0, "all keys clear on stop");
+        }
     }
 };
 
