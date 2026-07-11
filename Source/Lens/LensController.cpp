@@ -23,10 +23,25 @@ LensController::~LensController()
 
 bool LensController::loadImageFile (const juce::File& file)
 {
-    return loadImage (juce::ImageFileFormat::loadFrom (file), file.getFileName());
+    // Keep the file's encoded bytes verbatim: they are what gets persisted,
+    // so a reloaded session re-decodes the exact PNG/JPEG that was loaded.
+    juce::MemoryBlock bytes;
+    if (! file.loadFileAsData (bytes))
+        return false;
+    return loadImageInternal (std::move (bytes),
+                              juce::ImageFileFormat::loadFrom (bytes.getData(), bytes.getSize()),
+                              file.getFileName());
 }
 
 bool LensController::loadImage (const juce::Image& image, const juce::String& sourceName)
+{
+    // In-memory sources (tests, generated images) have no file encoding;
+    // lossless PNG stands in as the persisted source — never a raw bitmap.
+    return loadImageInternal (lens::encodePng (image), image, sourceName);
+}
+
+bool LensController::loadImageInternal (juce::MemoryBlock encodedBytes, const juce::Image& image,
+                                        const juce::String& sourceName)
 {
     auto analysis = lens::analyzeImage (image);
     if (! analysis.valid)
@@ -42,6 +57,7 @@ bool LensController::loadImage (const juce::Image& image, const juce::String& so
         capturePreImageState (osc);
 
     session[osc] = std::move (analysis);
+    sourceBytes[osc] = std::move (encodedBytes);
     display[osc] = session[osc].working;
     names[osc] = sourceName;
     analyzeAndInstall (osc, true, true);
@@ -158,7 +174,7 @@ void LensController::analyzeAndInstall (int osc, bool storeState, bool allowChro
     {
         const auto thumbPng = lens::encodePng (lens::makeThumbnail (analysis));
         lensstate::storeImage (apvts.state, osc, frames, thumbPng,
-                               analysis.seed, names[osc]);
+                               sourceBytes[osc], analysis.seed, names[osc]);
     }
 
     // The result loads into the osc's Image slot and takes over (SPEC 13.6).
@@ -189,6 +205,7 @@ void LensController::removeImage (int osc)
 {
     const int index = oscIndex (osc);
     session[index] = {};
+    sourceBytes[index] = {};
     clearTable (index);
     display[index] = {};
     names[index] = {};
@@ -339,14 +356,31 @@ void LensController::applyStateToEngine()
     std::vector<float> frames;
     for (int osc = 0; osc < 2; ++osc)
     {
-        session[osc] = {};  // the loaded state has no source image, only data
+        session[osc] = {};
+        sourceBytes[osc] = {};
         preImage[osc] = {}; // a loaded state is a new baseline — old snapshots
                             // must not be restored over it
         if (lensstate::loadImageFrames (apvts.state, osc, frames))
         {
+            // The stored frames stay authoritative for the table (bit-exact
+            // recall); the persisted source bytes rebuild the full-quality
+            // in-session image for display and later explicit re-analysis.
             installTable (osc, frames);
-            display[osc] = lensstate::loadThumbnail (apvts.state, osc);
             names[osc] = lensstate::sourceName (apvts.state, osc);
+
+            juce::MemoryBlock bytes;
+            if (lensstate::loadSourceBytes (apvts.state, osc, bytes))
+            {
+                auto analysis = lens::analyzeImageData (bytes.getData(), bytes.getSize());
+                if (analysis.valid)
+                {
+                    session[osc] = std::move (analysis);
+                    sourceBytes[osc] = std::move (bytes);
+                    display[osc] = session[osc].working;
+                }
+            }
+            if (! session[osc].valid) // pre-`data` states: thumbnail display
+                display[osc] = lensstate::loadThumbnail (apvts.state, osc);
         }
         else
         {

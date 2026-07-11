@@ -975,7 +975,8 @@ public:
         juce::ValueTree state ("PARAMS");
         const auto thumbPng = lens::encodePng (lens::makeThumbnail (a1));
         expect (thumbPng.getSize() > 0, "thumbnail PNG encoded");
-        lensstate::storeImage (state, 0, scan1, thumbPng, a1.seed, "gradient.png");
+        lensstate::storeImage (state, 0, scan1, thumbPng, juce::MemoryBlock(),
+                               a1.seed, "gradient.png");
 
         // Through XML text — exactly what getStateInformation/presets do.
         const auto xmlText = state.toXmlString();
@@ -1239,6 +1240,164 @@ public:
             expectGreaterThan (warm.macros[2] - busy.macros[2], 0.15f, "Space separates");
             expectGreaterThan (busy.macros[3] - warm.macros[3], 0.15f, "Texture separates");
         }
+    }
+};
+
+// Image persistence: the ORIGINAL source-encoded bytes (PNG/JPEG as loaded)
+// ride in the state tree, so a reloaded session shows and re-analyzes the
+// full-quality image instead of the 64x64 thumbnail (the low-res reload
+// bug), and the bytes round-trip hash-equal to what was loaded.
+class LensImagePersistenceTest final : public juce::UnitTest
+{
+public:
+    LensImagePersistenceTest()
+        : juce::UnitTest ("Lens image source bytes round-trip at full quality", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("file load stores the file's bytes verbatim");
+        NullProcessor source;
+        SynthEngine engine;
+        LensController lensController (source.apvts, engine);
+
+        const auto originalBytes = lens::encodePng (lens::testimages::busy());
+        expect (originalBytes.getSize() > 0, "test image encodes");
+        const auto originalHash =
+            lens::sha256Hex (originalBytes.getData(), originalBytes.getSize());
+        logMessage ("  source bytes SHA-256: " + originalHash);
+
+        const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("lumen_persistence_test.png");
+        expect (file.replaceWithData (originalBytes.getData(), originalBytes.getSize()),
+                "temp file written");
+        expect (lensController.loadImageFile (file), "image file loads");
+        file.deleteFile();
+
+        juce::MemoryBlock stored;
+        expect (lensstate::loadSourceBytes (source.apvts.state, 0, stored),
+                "source bytes stored in the state tree");
+        expectEquals (lens::sha256Hex (stored.getData(), stored.getSize()), originalHash,
+                      "stored bytes hash-equal to the loaded file bytes");
+
+        beginTest ("state round-trip restores the bytes and the full-res image");
+        const auto xml = source.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes");
+        if (xml == nullptr)
+            return;
+
+        NullProcessor restoredProcessor;
+        SynthEngine restoredEngine;
+        restoredProcessor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        LensController restored (restoredProcessor.apvts, restoredEngine); // ctor restores
+
+        juce::MemoryBlock roundTripped;
+        expect (lensstate::loadSourceBytes (restoredProcessor.apvts.state, 0, roundTripped),
+                "source bytes survive the round-trip");
+        const auto restoredHash =
+            lens::sha256Hex (roundTripped.getData(), roundTripped.getSize());
+        logMessage ("  restored bytes SHA-256: " + restoredHash);
+        expectEquals (restoredHash, originalHash,
+                      "restored image bytes hash-equal to original source bytes");
+
+        const auto expected = lens::analyzeImage (lens::testimages::busy()).working;
+        const auto shown = restored.displayImage (0);
+        expect (shown.isValid(), "restored session shows an image");
+        expectEquals (shown.getWidth(), expected.getWidth(),
+                      "full-quality width, not the 64 px thumbnail");
+        expectEquals (shown.getHeight(), expected.getHeight(),
+                      "full-quality height, not the 64 px thumbnail");
+        expect (restored.hasImage (0), "table restored");
+    }
+};
+
+// Session-level image (design decision, final): a preset switch changes
+// synth params only — the image survives and the macros land exactly as the
+// preset stores them (re-derivation only on explicit image load/scan).
+class LensPresetSwitchTest final : public juce::UnitTest
+{
+public:
+    LensPresetSwitchTest()
+        : juce::UnitTest ("Lens image survives preset switches, macros stay preset", "State") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("image + macros across a non-Lens preset switch");
+        NullProcessor processor;
+        SynthEngine engine;
+        LensController lensController (processor.apvts, engine);
+        expect (lensController.loadImage (lens::testimages::busy(), "busy"), "image loads");
+        expect (lensstate::hasImage (processor.apvts.state, 0), "image stored on osc A");
+        juce::MemoryBlock bytesBefore;
+        expect (lensstate::loadSourceBytes (processor.apvts.state, 0, bytesBefore),
+                "source bytes present before the switch");
+
+        const presets::FactoryPreset* preset = nullptr;
+        for (const auto& candidate : presets::bank())
+            if (! candidate.hasLens())
+            {
+                preset = &candidate;
+                break;
+            }
+        expect (preset != nullptr, "a non-Lens factory preset exists");
+        if (preset == nullptr)
+            return;
+
+        // The exact sequence loadPresetState(keepSessionImage = true) runs.
+        auto newState = presets::buildState (*preset, processor.apvts);
+        expect (lensstate::preserveSessionImages (processor.apvts.state, newState),
+                "session image carried into the preset state");
+        processor.apvts.replaceState (newState);
+        lensController.applyStateToEngine();
+
+        expect (lensstate::hasImage (processor.apvts.state, 0), "image survives the switch");
+        expect (lensController.hasImage (0), "table still installed");
+        expect (lensController.displayImage (0).isValid(), "image still shown");
+        juce::MemoryBlock bytesAfter;
+        expect (lensstate::loadSourceBytes (processor.apvts.state, 0, bytesAfter),
+                "source bytes survive the switch");
+        expect (bytesAfter == bytesBefore, "source bytes identical across the switch");
+
+        // Macros equal the preset's stored positions — no image re-derivation.
+        const char* macroIds[4] = { params::macro1, params::macro2,
+                                    params::macro3, params::macro4 };
+        for (int m = 0; m < 4; ++m)
+        {
+            auto* param = processor.apvts.getParameter (macroIds[m]);
+            expect (param != nullptr, juce::String (macroIds[m]) + " exists");
+            if (param == nullptr)
+                continue;
+            expectWithinAbsoluteError (param->convertFrom0to1 (param->getValue()),
+                                       presets::macroPosition (*preset, m), 1.0e-4f,
+                                       juce::String (macroIds[m])
+                                           + " equals the preset's stored value");
+        }
+
+        beginTest ("a Lens preset's own image still applies on a clean session");
+        NullProcessor clean;
+        SynthEngine cleanEngine;
+        LensController cleanController (clean.apvts, cleanEngine);
+        const presets::FactoryPreset* lensPreset = nullptr;
+        for (const auto& candidate : presets::bank())
+            if (candidate.hasLens())
+            {
+                lensPreset = &candidate;
+                break;
+            }
+        expect (lensPreset != nullptr, "a Lens factory preset exists");
+        if (lensPreset == nullptr)
+            return;
+
+        auto presetState = presets::buildState (*lensPreset, clean.apvts);
+        expect (! lensstate::preserveSessionImages (clean.apvts.state, presetState),
+                "nothing to preserve on a clean session");
+        clean.apvts.replaceState (presetState);
+        cleanController.applyStateToEngine();
+        expect (cleanController.hasImage (lensPreset->lens.targetOsc),
+                "the preset's own image installs untouched");
     }
 };
 
@@ -2501,6 +2660,8 @@ LensCentroidTest lensCentroidTest;
 LensStripeBinsTest lensStripeBinsTest;
 LensChromaTest lensChromaTest;
 LensReversibilityTest lensReversibilityTest;
+LensImagePersistenceTest lensImagePersistenceTest;
+LensPresetSwitchTest lensPresetSwitchTest;
 FactoryPresetBankTest factoryPresetBankTest;
 FactoryPresetAgreementTest factoryPresetAgreementTest;
 FactoryPresetStateTest factoryPresetStateTest;

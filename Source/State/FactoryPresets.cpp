@@ -1006,19 +1006,21 @@ juce::ValueTree buildState (const FactoryPreset& preset,
     }
 
     // LENS settings always present (stable round-trips); frames + thumbnail
-    // only for the two Lens-built presets — generated, never a source path.
-    // COLORS is session-global (LensController), not part of preset state.
+    // + source bytes only for the two Lens-built presets — generated from
+    // the named test image, never a source path. COLORS is session-global
+    // (LensController), not part of preset state.
     lensstate::setMode (state, preset.lens.mode);
     lensstate::setTarget (state, preset.hasLens() ? preset.lens.targetOsc : 0);
     if (preset.hasLens())
     {
-        const auto analysis = lens::analyzeImage (lens::testimages::byName (preset.lens.image));
+        const auto source = lens::testimages::byName (preset.lens.image);
+        const auto analysis = lens::analyzeImage (source);
         const auto frames = lens::buildFrames (analysis, preset.lens.mode == 1
                                                              ? lens::Mode::spectral
                                                              : lens::Mode::scan);
         const auto thumbPng = lens::encodePng (lens::makeThumbnail (analysis));
         lensstate::storeImage (state, preset.lens.targetOsc, frames, thumbPng,
-                               analysis.seed, preset.lens.image);
+                               lens::encodePng (source), analysis.seed, preset.lens.image);
     }
 
     return state;

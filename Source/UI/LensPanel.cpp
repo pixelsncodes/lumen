@@ -386,13 +386,17 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
     : shared (sharedContext),
       compact (compactLayout),
       image (sharedContext, [this] { return shared.processor.lensController().target(); }),
-      modeTabs ({ "SCAN", compactLayout ? "SPEC" : "SPECTRAL" }, // compact card is 96 px wide
+      // Directional-line glyphs matching the row's icon chips: "|" = Scan
+      // (rows played as waveforms, beam travels down), em dash = Spectral
+      // (spectrogram columns, beam travels across). UTF-8 escape for the
+      // dash — narrow non-ASCII literals garble on Windows (gotchas note).
+      modeTabs ({ "|", juce::String::fromUTF8 ("\xe2\x80\x94") },
                 [this] (int index) { shared.processor.lensController().setMode (index); }),
       targetTabs ({ "A", "B" },
                   [this] (int index) { shared.processor.lensController().setTarget (index); })
 {
     addAndMakeVisible (image);
-    modeTabs.setTooltip ("Scan plays image rows as waveforms; Spectral reads it as a spectrogram");
+    modeTabs.setTabTooltips ({ "Scan", "Spectral" });
     targetTabs.setTooltip ("Which oscillator receives the image wavetable");
     addAndMakeVisible (modeTabs);
     addAndMakeVisible (targetTabs);

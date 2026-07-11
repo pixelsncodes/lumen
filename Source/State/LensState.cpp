@@ -11,6 +11,7 @@ namespace
     const juce::Identifier kOsc ("osc");
     const juce::Identifier kFrames ("frames");
     const juce::Identifier kThumb ("thumb");
+    const juce::Identifier kData ("data");
     const juce::Identifier kSeed ("seed");
     const juce::Identifier kSource ("source");
 
@@ -61,6 +62,7 @@ void setTarget (juce::ValueTree& state, int osc)
 void storeImage (juce::ValueTree& state, int osc,
                  const std::vector<float>& frames,
                  const juce::MemoryBlock& thumbPng,
+                 const juce::MemoryBlock& sourceBytes,
                  juce::uint64 seed, const juce::String& sourceName)
 {
     if (static_cast<int> (frames.size()) != kFrameFloats)
@@ -81,6 +83,12 @@ void storeImage (juce::ValueTree& state, int osc,
     node.setProperty (kThumb,
                       juce::Base64::toBase64 (thumbPng.getData(), thumbPng.getSize()),
                       nullptr);
+    if (sourceBytes.getSize() > 0)
+        node.setProperty (kData,
+                          juce::Base64::toBase64 (sourceBytes.getData(), sourceBytes.getSize()),
+                          nullptr);
+    else
+        node.removeProperty (kData, nullptr);
     node.setProperty (kSeed, juce::String::toHexString (static_cast<juce::int64> (seed)), nullptr);
     node.setProperty (kSource, sourceName, nullptr);
 }
@@ -127,6 +135,24 @@ juce::Image loadThumbnail (const juce::ValueTree& state, int osc)
     return juce::ImageFileFormat::loadFrom (decoded.getData(), decoded.getDataSize());
 }
 
+bool loadSourceBytes (const juce::ValueTree& state, int osc, juce::MemoryBlock& out)
+{
+    const auto node = imageNode (getTree (state), osc);
+    if (! node.isValid())
+        return false;
+
+    const auto encoded = node.getProperty (kData).toString();
+    if (encoded.isEmpty())
+        return false;
+
+    juce::MemoryOutputStream decoded;
+    if (! juce::Base64::convertFromBase64 (decoded, encoded) || decoded.getDataSize() == 0)
+        return false;
+
+    out.replaceAll (decoded.getData(), decoded.getDataSize());
+    return true;
+}
+
 juce::String sourceName (const juce::ValueTree& state, int osc)
 {
     return imageNode (getTree (state), osc).getProperty (kSource).toString();
@@ -136,5 +162,39 @@ bool hasImage (const juce::ValueTree& state, int osc)
 {
     const auto node = imageNode (getTree (state), osc);
     return node.isValid() && node.getProperty (kFrames).toString().isNotEmpty();
+}
+
+bool preserveSessionImages (const juce::ValueTree& currentState,
+                            juce::ValueTree& incomingState)
+{
+    const auto currentLens = getTree (currentState);
+    if (! currentLens.isValid())
+        return false;
+
+    bool preservedAny = false;
+    for (int osc = 0; osc < 2; ++osc)
+    {
+        const auto currentNode = imageNode (currentLens, osc);
+        if (! currentNode.isValid()
+            || currentNode.getProperty (kFrames).toString().isEmpty())
+            continue; // no session image on this osc: the incoming preset's
+                      // image (if any) stays
+
+        auto incomingLens = ensureTree (incomingState);
+        if (auto stale = imageNode (incomingLens, osc); stale.isValid())
+            incomingLens.removeChild (stale, nullptr);
+        incomingLens.appendChild (currentNode.createCopy(), nullptr);
+        preservedAny = true;
+    }
+
+    // The images carry their workflow settings with them; without a session
+    // image the incoming preset keeps its own mode/target (the Lens factory
+    // presets stay pristine on a clean session).
+    if (preservedAny)
+    {
+        setMode (incomingState, mode (currentState));
+        setTarget (incomingState, target (currentState));
+    }
+    return preservedAny;
 }
 } // namespace lumen::lensstate
