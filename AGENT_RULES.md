@@ -15,8 +15,12 @@
   points. Never force-push, rewrite history, or delete branches/tags.
 - All files you create (reports, auditions/, session notes) live INSIDE
   external/lumena. SESSION_NOTES.md is in the submodule — append there.
-- The parent suite's failing wavetable SHA-256 golden (Windows-pinned Lens
-  hash) is pre-existing and unrelated. Ignore it.
+- The parent suite's wavetable SHA-256 golden diverges ONLY on Linux (a
+  floating-point difference), is pre-existing, and may be ignored ON LINUX
+  RUNS ONLY. On Windows it PASSES and counts — do not ignore it there.
+  It is unrelated to, and must not be conflated with, the seed-2024
+  melody-MIDI export hash (2e37a1d9…3670), which is a SEPARATE test, a hard
+  gate, and must always genuinely pass.
 
 ## Current invariants (post-Phase-4.5 clock — this is the law)
 - **G2 Same-seed determinism.** Same image + same settings + same seed =
