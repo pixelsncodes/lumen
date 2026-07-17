@@ -1312,3 +1312,88 @@ only inferred from Phase 7's headless `MelodyRestoreExportTest`.
     with identical content, confirming the restore path (not just
     `generate()`) drives visibility correctly through the actual code path
     a project reload uses.
+
+---
+
+## Phase 9 — GENERATED readout visibility rule changed: image required (`ui/panel-polish`)
+
+**Supersedes Phase 8's visibility condition.** Phase 8 made the readout
+track `hasMelody()` alone (and fixed *when* that got polled — see above).
+This phase changes *what* it's gated on, per a direct user decision: the
+readout must be visible if and only if **`hasImageSource() && hasMelody()`**
+— an image loaded in Lens *and* a melody. With no image, the whole block
+(KEY/MOOD/FORM/SEED rows, TRANSPOSE/OCTAVE steppers) hides even if a melody
+generated from a now-gone image is still alive and playable. Rationale: the
+readout is provenance for the *current* image (KEY/MOOD/FORM/SEED describe
+what was detected from it), so once that image is gone the readout would be
+describing something no longer on screen — different intent from
+PLAY/LOOP/export, which describe the *melody itself* and correctly don't
+care whether an image is still loaded (Phases 6-7, untouched by this).
+
+### Change
+
+`Source/UI/MelodyReadout.cpp::animate()` — one-line condition change:
+
+```cpp
+// before (Phase 8)
+const bool active = m.hasMelody();
+// after (Phase 9)
+const bool active = m.hasImageSource() && m.hasMelody();
+```
+
+Still driven from the same unconditional `PlayView::animateReadout()` poll
+Phase 8 added (called every timer tick regardless of Play/Deep view) — only
+the condition inside it changed, exactly as scoped.
+
+### Cleanup: Phase 6's per-control image gate on SEED edit/lock is now dead code
+
+Phase 6 had given `seedLabel`/`lockToggle` their *own* independent
+`hasImageSource()`-driven enable/dim state (`imageActiveCache`,
+`MelodyReadout.cpp`), because at the time the surrounding block could be
+visible (`hasMelody()` true) while the image was absent — exactly the case
+this phase now makes impossible. Since the whole readout can no longer be
+visible without an image, that inner gate could never fire its "disabled"
+branch again — removed rather than left as dead, misleading complexity:
+
+- `imageActiveCache` member deleted (`MelodyReadout.h`).
+- The `imageActive`/`seedLabel.setEnabled()`/`lockToggle.setEnabled()` block
+  deleted from `animate()`.
+- `LockToggle::paint()`/`mouseUp()` reverted to their pre-Phase-6 form (no
+  `isEnabled()` dim multiplier, no `isEnabled()` click guard) — both are
+  vestigial once the toggle can never exist in a disabled state, and keeping
+  them would misleadingly imply an independent image-gating axis still
+  exists inside the readout.
+
+Nothing else in `MelodyReadout` changed — `refreshSeedText()`,
+`summaryCache`, the `LockToggle`'s actual lock-toggling behavior, and the
+TRANSPOSE/OCTAVE steppers are all untouched (they were never part of either
+gate).
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite -> `ALL TESTS PASSED` (no
+  `MelodyController`/engine surface touched this phase — pure UI condition +
+  dead-code removal — so no new headless test; matches the "screenshot, not
+  unit test" precedent for `Source/UI/*.cpp` changes).
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`
+  (unchanged).
+- `lumen_render --preset init --analyze`: nan_count 0, metrics unchanged
+  (no DSP touched).
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- Screenshots in `build/verify/`, all four required scenarios (reusing
+  Phase 7/8's `--melody-remove-image`/`--melody-restore` CLI flags):
+  - `readout9_fresh_empty.png` — fresh instance, no image, no melody:
+    nothing renders below LENS (unchanged from Phase 8).
+  - `readout9_with_image.png` — image + melody: readout fully visible
+    (unchanged from Phase 8).
+  - `readout9_no_image_has_melody.png` — melody generated, then
+    `--melody-remove-image`: readout now **hidden** (the changed behavior —
+    Phase 8 kept it visible here). Side panel confirms PLAY/LOOP/DRAG
+    MIDI/SAVE .MID stay enabled regardless (Phases 6-7 untouched), while
+    REGENERATE/MUTATE/RHYTHM/PITCH/HARMONY stay dimmed (Phase 6's separate
+    image gate, also untouched).
+  - `readout9_restored.png` — melody generated, then `--melody-restore`
+    (`applyState()` re-run) with the image still present: readout visible,
+    confirming the restore path satisfies the new AND condition correctly.

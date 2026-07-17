@@ -2,8 +2,13 @@
 
 #include "UI/Controls.h"
 
-// The GENERATED info readout shown below the Lens image once a melody exists:
-// KEY / MOOD / FORM / SEED rows, then TRANSPOSE and OCTAVE -/+ steppers.
+// The GENERATED info readout shown below the Lens image: KEY / MOOD / FORM /
+// SEED rows, then TRANSPOSE and OCTAVE -/+ steppers. Visible only while an
+// image is loaded in Lens AND a melody exists (hasImageSource() &&
+// hasMelody(), Phase 9) — it's provenance for the current image, so it hides
+// the moment that image is gone even if the melody it describes is still
+// alive and playable (PLAY/LOOP/export stay independently gated on
+// hasMelody() alone, Phases 6-7, and are unaffected by this).
 // Ported from the old MelodyPanel popup's summary block (Source/UI/MelodyPanel.cpp,
 // now dead code) with the same styling; new here is the SEED row's click-to-edit
 // hex value and its master-lock padlock (MelodyController::setSeed()/locked()/
@@ -17,7 +22,14 @@ public:
 
     void resized() override;
     void paint (juce::Graphics& g) override;
-    void animate(); // ~60 Hz; hides/shows with hasMelody(), repaints only on change
+    // ~60 Hz, polled unconditionally regardless of Play/Deep view
+    // (PlayView::animateReadout(), Phase 8). Hides/shows with
+    // hasImageSource() && hasMelody() (Phase 9 — supersedes Phase 8's
+    // hasMelody()-only rule): the readout is provenance for the *current*
+    // Lens image, so it hides the instant that image is gone, even if the
+    // melody it described is still alive and playable. Repaints only on
+    // change.
+    void animate();
 
 private:
     // Seed hex value: single-click to edit (1-8 hex digits enforced by input
@@ -65,11 +77,12 @@ private:
     // readout: cheap enough not to need attachments or child components.
     juce::Rectangle<int> titleArea, keyRow, moodRow, formRow, seedCaptionArea;
 
-    bool activeCache = false;   // hasMelody() — the whole block hides without it
-    // No-image state: only the seed edit box + lock toggle disable/dim (they
-    // trigger new generation, unlike TRANSPOSE/OCTAVE, which just shift
-    // playback/export and stay usable). KEY/MOOD/FORM/SEED stay readable.
-    bool imageActiveCache = true;
+    // hasImageSource() && hasMelody() (Phase 9) — the whole block hides
+    // without either. Since visibility itself now requires an image, the
+    // seed edit box and lock toggle no longer need their own separate
+    // enabled/dim state (Phase 6's per-control image gate is now redundant
+    // and was removed): they can never be shown without an image present.
+    bool activeCache = false;
     bool lockedCache = false;
     juce::String summaryCache;
     int transposeCache = 0, octaveCache = 0;

@@ -63,20 +63,22 @@ void MelodyReadout::SeedLabel::textWasEdited()
 
 void MelodyReadout::LockToggle::paint (juce::Graphics& g)
 {
+    // No enabled/dim state of its own: this toggle only exists while the
+    // whole readout is visible, which (Phase 9) already requires an image to
+    // be loaded — so it's never shown in a state where it'd need to dim.
     const bool locked = shared.processor.melodyController().locked();
-    const float dim = isEnabled() ? 1.0f : 0.4f;
     const auto bounds = getLocalBounds().toFloat();
-    g.setColour ((locked ? theme::neonYellow.withAlpha (0.22f) : theme::well.withAlpha (0.75f)).withMultipliedAlpha (dim));
+    g.setColour (locked ? theme::neonYellow.withAlpha (0.22f) : theme::well.withAlpha (0.75f));
     g.fillRoundedRectangle (bounds, 4.0f);
-    g.setColour ((locked ? theme::neonYellow : theme::hairline).withMultipliedAlpha (dim));
+    g.setColour (locked ? theme::neonYellow : theme::hairline);
     g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
     drawLockGlyph (g, bounds.reduced (bounds.getWidth() * 0.28f),
-                   (locked ? theme::neonYellow : theme::textSecondary).withMultipliedAlpha (dim));
+                   locked ? theme::neonYellow : theme::textSecondary);
 }
 
 void MelodyReadout::LockToggle::mouseUp (const juce::MouseEvent& e)
 {
-    if (! isEnabled() || ! getLocalBounds().contains (e.getPosition()))
+    if (! getLocalBounds().contains (e.getPosition()))
         return;
     auto& m = shared.processor.melodyController();
     m.setLocked (! m.locked());
@@ -245,7 +247,12 @@ void MelodyReadout::paint (juce::Graphics& g)
 void MelodyReadout::animate()
 {
     auto& m = shared.processor.melodyController();
-    const bool active = m.hasMelody();
+    // Phase 9: requires the image too, not just the melody — the readout is
+    // provenance for the *current* Lens image, so it hides the instant that
+    // image is gone even if the melody it describes is still playable/
+    // exportable (that stays gated on hasMelody() alone in MelodySidePanel,
+    // Phases 6-7, untouched by this).
+    const bool active = m.hasImageSource() && m.hasMelody();
     if (active != activeCache)
     {
         activeCache = active;
@@ -255,15 +262,6 @@ void MelodyReadout::animate()
     }
     if (! active)
         return;
-
-    const bool imageActive = m.hasImageSource();
-    if (imageActive != imageActiveCache)
-    {
-        imageActiveCache = imageActive;
-        seedLabel.setEnabled (imageActive);
-        lockToggle.setEnabled (imageActive);
-        repaint();
-    }
 
     juce::String composed;
     composed << m.detectedKey() << '|' << m.moodText() << '|' << m.formText() << '|' << m.seed();
