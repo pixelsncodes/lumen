@@ -3,7 +3,6 @@
 #include "Lens/LensController.h"
 #include "Melody/MelodyController.h"
 #include "Melody/MelodyPlayer.h"
-#include "State/MelodyState.h"
 #include "State/MidiLearn.h"
 #include "UI/Theme.h"
 #include "UI/Tooltips.h"
@@ -40,25 +39,21 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     deepView = std::make_unique<DeepView> (shared, history);
     playView = std::make_unique<PlayView> (shared, history, keyboardState);
 
-    melodyPanel = std::make_unique<MelodyPanel> (shared);
+    melodySidePanel = std::make_unique<MelodySidePanel> (shared);
 
     content.addAndMakeVisible (*header);
     content.addAndMakeVisible (*playView);
     content.addChildComponent (*deepView);
-    content.addChildComponent (*melodyPanel); // on top of the views, hidden until toggled
+    content.addChildComponent (*melodySidePanel); // on top of the views, hidden until toggled
     content.setBounds (0, 0, kBaseWidth, kBaseHeight);
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
-    // Restore the persisted melody-window placement (default: centered under
-    // the header). setWindowPlacement clamps, so a stale or off-screen saved
-    // position can never leave the window unreachable.
-    {
-        const auto stored = lumen::melodystate::windowBounds (processor.apvts.state);
-        const juce::Rectangle<int> fallback ((kBaseWidth - MelodyPanel::kBaseWidth) / 2, 140,
-                                             MelodyPanel::kBaseWidth, MelodyPanel::kBaseHeight);
-        melodyPanel->setWindowPlacement (stored.isEmpty() ? fallback : stored);
-    }
+    // The side panel overlays the right edge of the fixed content canvas at its
+    // logical width and full content height; the whole content scales as one
+    // unit on window resize, so the panel scales with everything else.
+    melodySidePanel->setBounds (kBaseWidth - MelodySidePanel::kPanelWidth, 0,
+                                MelodySidePanel::kPanelWidth, kBaseHeight);
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);
@@ -346,14 +341,14 @@ void LumenAudioProcessorEditor::timerCallback()
     // and reclaim any sequence the audio thread retired.
     {
         const bool showMelody = processor.melodyController().isPanelActive();
-        if (melodyPanel->isVisible() != showMelody)
+        if (melodySidePanel->isVisible() != showMelody)
         {
-            melodyPanel->setVisible (showMelody);
+            melodySidePanel->setVisible (showMelody);
             if (showMelody)
-                melodyPanel->toFront (false);
+                melodySidePanel->toFront (false);
         }
         if (showMelody)
-            melodyPanel->animate();
+            melodySidePanel->animate();
         processor.melodyPlayer().collectGarbage();
     }
 

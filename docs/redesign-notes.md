@@ -439,3 +439,101 @@ Confirms the whole path — CLI seed pin → `renderFresh()`'s new truncation �
    `external/lumena`. The "reroll one domain independently" gap noted in
    Phase 0 §3f still exists (per the user's decision, it's explicitly out of
    scope — RHYTHM/PITCH/HARMONY remain locks, not rerolls).
+
+---
+
+## Phase 2 — Side panel component (Opus)
+
+Executed against overriding decisions from the user (not PLAN.md §Phase 2's
+"prefer widening" wording): **overlay, not window resize**. Editor sizing is
+untouched — the panel is a docked overlay on the fixed 1040×660 content canvas.
+
+### What was built
+
+- New `Source/UI/MelodySidePanel.{h,cpp}` — a plain `juce::Component` docked to
+  the right edge of the editor `content` at logical width
+  `kPanelWidth = 316`, full content height (660). Added as a hidden child of
+  `content` (`PluginEditor.cpp` — `addChildComponent`), shown/hidden by the
+  existing 60 Hz poll of `MelodyController::isPanelActive()`
+  (`PluginEditor.cpp` timer), exactly the mechanism the popup used. No
+  `setTransform` gymnastics: a plain `setBounds` docks it, and the editor's
+  whole-content scale transform (`resized()`) scales it with everything else.
+  This is simpler than the popup's per-panel transform and needs no
+  move/resize gesture code — documented deviation from the decision's
+  "setTransform positioning" phrasing; the requirement it protects
+  ("overlay, don't resize the editor") is fully met.
+- Controls ported 1:1 from `MelodyPanel` with the **same param IDs and
+  attachment patterns** (TabsBar choice-param drivers registered via
+  `registerAttachment` for `--check-params`, `ParamToggle`, `ModKnob`,
+  `styleChip`): close `[x]`, PLAY + LOOP, MODE, KEY, LENGTH, SHAPE
+  (PHRASED/FREEFORM in Melody mode, UP/DOWN/UP-DN/CONV/RAND in Arp mode —
+  same mode-driven swap as the popup, confirmed on screenshot), FEEL knobs
+  (ENERGY/COMPLEX/IMAGE/REPEAT/DENSITY), LOOP LENGTH, SEED
+  (RHYTHM/PITCH/HARMONY lock toggles — styled as the existing `ParamToggle`
+  chips, which fill the accent colour when engaged so a locked lock reads
+  obviously "on"), REGENERATE/MUTATE, EXPORT (DRAG MIDI drag-source ported
+  from `MelodyPanel::MidiDragSource`, SAVE .MID). No new widget classes.
+- **REGENERATE locked indicator**: `paintOverChildren` draws a dim scrim + a
+  small padlock glyph over REGENERATE whenever
+  `MelodyController::locked()` (the master seed lock) is engaged, polled in
+  `animate()`. Forward-compatible: no UI toggles the master lock yet (that's
+  the padlock next to the seed hex, Phase 3), but the indicator responds the
+  moment `locked()` is true (e.g. restored from state) — signalling that a
+  locked regenerate reproduces the same sequence (Phase 1 behaviour).
+
+### Deliberately NOT in the side panel (per the user's decisions)
+
+- **The Lens image + sampling-grid visualization** stays in the LENS panel.
+  `LensImageView::paint` already overlays the grid/path/glow whenever
+  `isPanelActive() || hasMelody()` (`LensPanel.cpp`), unchanged — so the Lens
+  overlay keeps working with the side panel open or closed.
+- **The GENERATED readout (KEY/MOOD/FORM/SEED) and the TRANSPOSE/OCTAVE
+  steppers** are Phase 3 (they move under the Lens image). They were NOT
+  moved — they still live in the old `MelodyPanel` popup's `paint()`/steppers.
+  Consequence: because the popup is no longer shown (see below), the GENERATED
+  readout is temporarily **not visible anywhere** between Phase 2 and Phase 3.
+  This is intentional per "leave the readout where it lives, don't half-move
+  it" + "that readout is Phase 3, not now." Phase 3 rebuilds it under the image.
+
+### Popup retirement — partial, files kept
+
+- The old `MelodyPanel` is **no longer instantiated or shown**: `PluginEditor`
+  now owns a `MelodySidePanel` instead, and the Lens `melodyChip` toggles the
+  same `isPanelActive()` flag the side panel polls. The melody chip wiring in
+  `LensPanel.cpp` was untouched (it already called `togglePanel()`).
+- `Source/UI/MelodyPanel.{h,cpp}` are **kept in the build** because the
+  `melodygrid` namespace (grid/path/glow drawing) lives in that TU and is used
+  by `LensPanel.cpp`. The `MelodyPanel` **class** is now dead code (defined,
+  never constructed) but compiles clean under `/W4`.
+
+### Leftovers for Phase 5 cleanup
+
+1. **`MelodyPanel` class is dead** (only `melodygrid` in that TU is live).
+   Phase 5 should extract `melodygrid` into its own small file (e.g.
+   `Source/UI/MelodyGrid.{h,cpp}`) and delete the rest of `MelodyPanel`,
+   including its floating-window move/resize gesture code and the summary/
+   transpose/octave paint — after Phase 3 has relocated the readout.
+2. **`melodystate::windowBounds` / `setWindowBounds` / `clampWindowBounds`**
+   (in `State/MelodyState.{h,cpp}`) are now unused — they persisted the
+   floating popup's placement, which a fixed dock doesn't need. Remove in
+   Phase 5 along with any `MELODY` window-bounds attribute handling. The
+   `#include "State/MelodyState.h"` was dropped from `PluginEditor.cpp`.
+3. **Seed display formatting** (8 hex digits / 32-bit, per Phase 1's note): the
+   side panel shows no seed, so nothing to format here. Phase 3's seed row
+   under the image must render/accept **8 hex digits**; `seedValue` is already
+   ≤ 32-bit so `toHexString` yields ≤ 8 significant digits, but Phase 3 should
+   zero-pad to a fixed 8 for a stable readout.
+
+### Verification
+
+- Build: **VST3 + Standalone + tests all built clean** (Release, `/W4`
+  warnings-as-errors — a warning would have failed the build).
+- Tests: full `lumen_tests.exe` suite → `ALL TESTS PASSED` (includes the
+  Phase 1 `MelodySeedLockTest` and the regenerate-determinism torture test).
+- Screenshot: `Lumen.exe --screenshot ... --view play --lens-image busy.png
+  --melody --melody-seed 1234ABCD` — side panel renders docked full-height on
+  the right, all sections in mockup order, correct spacing, SHAPE showing the
+  Melody-mode PHRASED/FREEFORM strip. Keyboard remains visible/functional to
+  the left of the panel; the Lens (and its master knob/meter on the header
+  right) sit underneath the docked panel while it is open — the accepted
+  consequence of overlay-not-resize; everything is reachable again on close.

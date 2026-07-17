@@ -4,7 +4,7 @@
 
 #include "UI/Cards.h"
 #include "UI/LumenLookAndFeel.h"
-#include "UI/MelodyPanel.h"
+#include "UI/MelodySidePanel.h"
 
 #include <atomic>
 #include <cstdint>
@@ -92,7 +92,7 @@ private:
     std::unique_ptr<HeaderBar> header;
     std::unique_ptr<DeepView> deepView;
     std::unique_ptr<PlayView> playView;
-    std::unique_ptr<MelodyPanel> melodyPanel; // floating overlay, on top of the views
+    std::unique_ptr<MelodySidePanel> melodySidePanel; // right-docked overlay, on top of the views
     juce::TooltipWindow tooltipWindow { &content }; // parented: tips render inside the editor
 
     juce::OpenGLContext glContext;
