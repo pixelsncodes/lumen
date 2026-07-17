@@ -819,25 +819,16 @@ void PlayView::resized()
 
 void PlayView::layoutLensColumn()
 {
-    // Normal dock: same rect the Lens panel has always used, readout directly
-    // beneath it (clear of the macro knob row, which ends at x=740). While the
-    // melody side panel is open, that rect sits entirely underneath it (side
-    // panel right-docks at kPanelWidth from the right edge, 316 wide) — so
-    // both the Lens image and the GENERATED readout beneath it would be
-    // hidden. The readout's row is shared with the macro knobs (x 300-740),
-    // so sliding the column only as far as clearing the side panel would land
-    // it on top of them; instead slide all the way to the left edge, clear of
-    // both the knobs and the side panel. It's allowed to overlap the
-    // waterfall/spectrogram display either way.
-    constexpr int kLensW = 260, kLensH = 288, kLensY = 12;
-    constexpr int kLensNormalX = 764, kLensOpenX = 16;
+    // The Lens image docks at its fixed position with the GENERATED readout
+    // directly beneath it (clear of the macro knob row, which ends at x=740).
+    // The melody panel is now a window extension docked to the right of the
+    // base canvas, so it never overlaps this column — the Lens image and the
+    // readout stay put whether the panel is open or closed.
+    constexpr int kLensW = 260, kLensH = 288, kLensY = 12, kLensX = 764;
     constexpr int kReadoutY = 304, kReadoutBottom = 476; // clears the keyboard (y 484) by 8px
 
-    const bool sidePanelOpen = shared.processor.melodyController().isPanelActive();
-    const int lensX = sidePanelOpen ? kLensOpenX : kLensNormalX;
-
-    lensPanel.setBounds (lensX, kLensY, kLensW, kLensH);
-    readout.setBounds (lensX, kReadoutY, kLensW, kReadoutBottom - kReadoutY);
+    lensPanel.setBounds (kLensX, kLensY, kLensW, kLensH);
+    readout.setBounds (kLensX, kReadoutY, kLensW, kReadoutBottom - kReadoutY);
 }
 
 void PlayView::paint (juce::Graphics& g)
@@ -889,15 +880,6 @@ void PlayView::animate()
     waterfall.animate (audioActive);
     lensPanel.animate();
     readout.animate();
-
-    // Reposition the Lens column (image + readout) when the melody side
-    // panel opens/closes, so they stay clear of it (or restore on close).
-    const bool sidePanelOpen = shared.processor.melodyController().isPanelActive();
-    if (sidePanelOpen != sidePanelOpenCache)
-    {
-        sidePanelOpenCache = sidePanelOpen;
-        layoutLensColumn();
-    }
 
     // Keyboard follow: scan the sounding notes once per tick. If any sounding
     // note is visible the window must not move (a held key sliding under the

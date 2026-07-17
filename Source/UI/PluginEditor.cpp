@@ -44,20 +44,21 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     content.addAndMakeVisible (*header);
     content.addAndMakeVisible (*playView);
     content.addChildComponent (*deepView);
-    content.addChildComponent (*melodySidePanel); // on top of the views, hidden until toggled
-    content.setBounds (0, 0, kBaseWidth, kBaseHeight);
+    content.addChildComponent (*melodySidePanel); // beside the base canvas, hidden until toggled
+    // The content canvas is wide enough to hold the base 1040x660 UI plus the
+    // melody panel strip docked immediately to its right. The base region is
+    // never touched when the panel opens; only the editor window grows to
+    // reveal the strip (see setPanelOpen / resized).
+    content.setBounds (0, 0, kBaseWidth + MelodySidePanel::kPanelWidth, kBaseHeight);
     header->setBounds (0, 0, kBaseWidth, 48);
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
-    // The side panel overlays the right edge of the fixed content canvas at its
-    // logical width, ending above the keyboard (kBaseHeight - 48 header - 116
-    // keyboard - 10 gap = 522, alongside the keyboard's fixed y=532 in
-    // PlayView) rather than running the full content height, so the keyboard
-    // stays fully visible while the panel is open. The whole content scales
-    // as one unit on window resize, so the panel scales with everything else.
-    constexpr int kSidePanelHeight = 522;
-    melodySidePanel->setBounds (kBaseWidth - MelodySidePanel::kPanelWidth, 0,
-                                MelodySidePanel::kPanelWidth, kSidePanelHeight);
+    // The panel is a window extension: it lives in the strip just past the base
+    // canvas (logical x = kBaseWidth) at full content height, matching the
+    // mockup. Nothing in the base canvas moves; the editor simply widens to
+    // reveal this strip when the panel opens.
+    melodySidePanel->setBounds (kBaseWidth, 0,
+                                MelodySidePanel::kPanelWidth, kBaseHeight);
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);
@@ -94,8 +95,39 @@ LumenAudioProcessorEditor::~LumenAudioProcessorEditor()
 
 void LumenAudioProcessorEditor::resized()
 {
-    const float scale = (float) getWidth() / (float) kBaseWidth;
+    // Scale is derived from HEIGHT, not width, on purpose: the base 1040x660
+    // canvas must stay pixel-identical whether or not the melody panel strip is
+    // docked. Opening the panel widens the editor (the aspect ratio is relocked
+    // to include the strip in setPanelOpen) but leaves the height unchanged, so
+    // keying the content scale off height keeps the base UI fixed in both
+    // states, and keeps a corner-drag consistent because the aspect lock ties
+    // width to height. Host-safety corollary: if a host refuses the
+    // programmatic widen, the strip (logical x >= kBaseWidth) simply falls
+    // outside the editor bounds and is clipped away — the base UI is unaffected.
+    const float scale = (float) getHeight() / (float) kBaseHeight;
     content.setTransform (juce::AffineTransform::scale (scale));
+}
+
+void LumenAudioProcessorEditor::setPanelOpen (bool open)
+{
+    if (panelOpen == open)
+        return;
+    panelOpen = open;
+
+    // Widen (open) or narrow (close) the editor by the panel strip while
+    // keeping the base canvas at its current on-screen scale. The aspect ratio
+    // is relocked to the new logical width and the resize limits are rescaled
+    // so that a subsequent corner-drag scales the whole thing — base + strip —
+    // consistently in either state.
+    const int logicalWidth = open ? (kBaseWidth + MelodySidePanel::kPanelWidth) : kBaseWidth;
+    const int currentHeight = getHeight();
+    const float scale = (float) currentHeight / (float) kBaseHeight;
+
+    if (auto* boundsConstrainer = getConstrainer())
+        boundsConstrainer->setFixedAspectRatio ((double) logicalWidth / (double) kBaseHeight);
+    setResizeLimits (juce::roundToInt (logicalWidth * 0.7), juce::roundToInt (kBaseHeight * 0.7),
+                     logicalWidth * 2, kBaseHeight * 2);
+    setSize (juce::roundToInt (logicalWidth * scale), currentHeight);
 }
 
 void LumenAudioProcessorEditor::paint (juce::Graphics& g)
@@ -350,6 +382,10 @@ void LumenAudioProcessorEditor::timerCallback()
             melodySidePanel->setVisible (showMelody);
             if (showMelody)
                 melodySidePanel->toFront (false);
+            // Grow/shrink the editor window so the panel strip is revealed or
+            // reclaimed (see setPanelOpen). Geometry only — the show/hide edge
+            // is still driven by the isPanelActive() poll above.
+            setPanelOpen (showMelody);
         }
         if (showMelody)
             melodySidePanel->animate();

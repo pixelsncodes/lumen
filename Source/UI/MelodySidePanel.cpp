@@ -231,32 +231,31 @@ void MelodySidePanel::resized()
 {
     sectionLabels.clear();
 
-    // Tightened spacing (Phase 3 layout fix B): the panel now ends above the
-    // keyboard instead of running full content height, so every gap here is
-    // trimmed from the original popup-derived spacing to keep all ten
-    // sections on-screen without clipping.
-    auto area = getLocalBounds().reduced (16, 10);
+    // The panel is a full-height window extension (Phase 3b superseded the
+    // fix-B height cap), so the ten sections breathe across the whole content
+    // height with the roomy, evenly-spaced layout the mockup shows.
+    auto area = getLocalBounds().reduced (16, 16);
 
-    closeButton.setBounds (getWidth() - 30, 8, 20, 20);
-    area.removeFromTop (14); // clear the close-button strip
+    closeButton.setBounds (getWidth() - 30, 12, 20, 20);
+    area.removeFromTop (22); // clear the close-button strip
 
     // Row / captioned-section helpers, mirroring the popup's layout idiom.
-    auto row = [&area] (int h, int gap = 8)
+    auto row = [&area] (int h, int gap = 18)
     {
         auto r = area.removeFromTop (h);
         area.removeFromTop (gap);
         return r;
     };
-    auto section = [&] (const juce::String& caption, int h, int gap = 9)
+    auto section = [&] (const juce::String& caption, int h, int gap = 18)
     {
-        auto cap = area.removeFromTop (12);
+        auto cap = area.removeFromTop (14);
         sectionLabels.emplace_back (caption, cap);
-        area.removeFromTop (2);
+        area.removeFromTop (4);
         return row (h, gap);
     };
 
     // Transport (no caption): PLAY with the LOOP chip beside it.
-    auto transportRow = row (28, 10);
+    auto transportRow = row (30, 18);
     loopToggle->setBounds (transportRow.removeFromRight (72));
     transportRow.removeFromRight (8);
     playButton.setBounds (transportRow);
@@ -272,7 +271,7 @@ void MelodySidePanel::resized()
     arpPatternTabs.setBounds (shapeRow);
 
     // FEEL: five macro knobs across the column.
-    auto knobs = section ("FEEL", 54);
+    auto knobs = section ("FEEL", 62);
     const int kw = knobs.getWidth() / 5;
     energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (2, 0));
     complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
@@ -283,13 +282,13 @@ void MelodySidePanel::resized()
     loopTabs.setBounds (section ("LOOP LENGTH", 22));
 
     // SEED: the three regeneration locks, then the two regeneration actions.
-    auto lockRow = section ("SEED", 22, 8);
+    auto lockRow = section ("SEED", 22);
     const int lw = lockRow.getWidth() / 3;
     lockRhythm->setBounds  (lockRow.removeFromLeft (lw).withTrimmedRight (4));
     lockPitch->setBounds   (lockRow.removeFromLeft (lw).withTrimmedRight (4));
     lockHarmony->setBounds (lockRow);
 
-    auto actionRow = row (28, 10);
+    auto actionRow = row (30, 18);
     regenerateButton.setBounds (actionRow.removeFromLeft (actionRow.getWidth() / 2 - 4));
     mutateButton.setBounds     (actionRow.removeFromRight (actionRow.getWidth()));
     regenerateBounds = regenerateButton.getBounds();

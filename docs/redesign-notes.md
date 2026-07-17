@@ -549,6 +549,13 @@ with things Phase 3 needed to keep visible.
 
 ### Layout fix A — Lens column repositions around the open side panel
 
+> **REVERTED in Phase 3b.** The shift/restore logic below no longer exists —
+> the melody panel became a window extension, so it never overlaps the Lens
+> column and the column stays put. `layoutLensColumn()` is now a static layout;
+> the `sidePanelOpen`/`sidePanelOpenCache` poll and the `kLensOpenX` shift were
+> deleted. The GENERATED readout under the image is unchanged and stays. See
+> the Phase 3b section at the bottom of this file.
+
 `PlayView::layoutLensColumn()` (`Source/UI/Cards.cpp`) now computes the Lens
 panel's x each time the side panel's open/closed state changes (polled once
 per `PlayView::animate()` tick, edge-triggered, same "poll + diff" idiom as
@@ -568,6 +575,12 @@ everything else in this codebase — not a new mechanism):
   other direction when `isPanelActive()` goes false.
 
 ### Layout fix B — side panel ends above the keyboard
+
+> **SUPERSEDED in Phase 3b.** The 522 height cap is gone — as a window
+> extension the panel runs the full content height (660) and overlays nothing,
+> so the keyboard stays fully visible with no cap needed. The internal spacing
+> that was tightened to fit 522 has been loosened back to a roomy full-height
+> layout matching the mockup. See the Phase 3b section at the bottom.
 
 `MelodySidePanel` now docks at height 522 instead of the full content height
 660 (`PluginEditor.cpp`: `kSidePanelHeight = 522`, chosen so its bottom edge
@@ -685,3 +698,91 @@ that back it) in the same pass that extracts `melodygrid` into its own file.
   clipping, keyboard fully visible below the shortened side panel.
 - `lumen_render --preset init --analyze`: nan_count 0, metrics unchanged
   from prior phases (no DSP touched).
+
+---
+
+## Phase 3b — Panel becomes a window extension (not an internal overlay)
+
+Goal (from the mockup `assets/side-panel-mockup.png`): the melody panel extends
+the editor **to the right** as a separate full-height column. The base 1040×660
+UI stays pixel-identical and nothing inside it moves. This replaces Phase 2's
+"overlay on the fixed canvas" approach and removes both Phase 3 layout fixes,
+which only existed to work around that overlay.
+
+### What changed
+
+1. **Panel is now a window extension, not an overlay.**
+   - `content` (the scaled canvas in `PluginEditor`) is now `kBaseWidth +
+     kPanelWidth` wide (1040 + 316 = 1356) × 660. The base UI still occupies
+     logical x 0…1040 exactly as before; the panel lives in the strip at
+     logical x = 1040, width 316, **full height 660** (`MelodySidePanel` bounds
+     in the `PluginEditor` constructor).
+   - When the panel opens, `LumenAudioProcessorEditor::setPanelOpen(true)`
+     widens the editor by the panel width (316 × current scale), relocks the
+     aspect ratio to `(kBaseWidth+kPanelWidth):kBaseHeight`, and rescales the
+     resize limits to the wider logical width. On close it narrows back to the
+     base width and restores the base aspect ratio/limits. Show/hide is still
+     driven by the existing `isPanelActive()` poll in `timerCallback()` — only
+     the geometry response is new; `setPanelOpen` is called on the same
+     visibility-change edge.
+
+2. **`resized()` now derives the content scale from HEIGHT, not width.**
+   Previously `scale = getWidth()/kBaseWidth`. Now `scale = getHeight()/
+   kBaseHeight`. Because opening the panel changes width but not height, keying
+   the scale off height keeps the base canvas pixel-identical in both states,
+   and the aspect lock keeps a corner-drag consistent (width is tied to height).
+   This is also the host-safety mechanism — see "Known limitation" below.
+
+3. **The content scale transform covers the panel region.** The panel is a
+   child of `content`, so the single `content.setTransform(scale)` scales it
+   with everything else. Panel controls scale with the rest of the UI across
+   the 70–200 % zoom range — no separate transform, structurally guaranteed.
+
+4. **Layout fix A reverted.** `PlayView::layoutLensColumn()` (`Cards.cpp`) is
+   static again: the LENS panel + GENERATED readout dock at their fixed x=764
+   and never move. The `sidePanelOpen` shift, `kLensOpenX`, the
+   `sidePanelOpenCache` member, and the reposition-on-toggle poll in
+   `PlayView::animate()` were all deleted. The GENERATED readout under the image
+   (Phase 3's real deliverable) is untouched and stays.
+
+5. **Layout fix B superseded.** `MelodySidePanel` runs the full 660 height again
+   (the `kSidePanelHeight = 522` cap is gone). `MelodySidePanel::resized()`'s
+   spacing was loosened from the tightened 522-fit values back to a roomy
+   full-height layout (padding 16, section gaps 18, FEEL knob row 62) so the ten
+   sections breathe across the whole height like the mockup. The keyboard stays
+   fully visible because the panel no longer overlays anything.
+
+### Known limitation — host must honour the programmatic resize (verify in DAW)
+
+The panel strip is only visible if the host grows the plugin view when the
+editor calls `setSize`. Most hosts do, but some ignore programmatic resizes.
+The plugin is **safe** either way: because the content scale is derived from
+height (not width), a host that ignores the widen leaves the base 1040×660 UI
+fully correct and simply clips away the strip at logical x ≥ 1040 — the panel
+just won't be visible; nothing is broken, misdrawn, or shrunk. On close the
+editor narrows back regardless.
+
+**User to verify** in Maschine 3 and Ableton Live: open the melody panel and
+confirm the host view actually widens to reveal the strip (and narrows back on
+close). If a host refuses to resize, the melody controls are unreachable in
+that host until it does — that is the accepted degraded state, not a crash.
+pluginval strictness 10 passes (SUCCESS) and does not itself exercise the
+host-side resize, so this specific behaviour is a DAW-only check.
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite → `ALL TESTS PASSED`.
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`.
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- `lumen_render --preset init --analyze`: nan_count 0 (no DSP touched).
+- Screenshots (`--view play --lens-image busy.png`): (a) panel closed, no
+  melody — editor is exactly 1040×660, base UI in its normal position, no
+  readout; (b) panel open with a melody — editor is exactly **1356×660** (base
+  widened by exactly 316), the full-height panel column renders all ten
+  sections with roomy spacing matching the mockup, and the base region is
+  **pixel-identical** to (a): a per-zone diff of the waterfall, keyboard, and
+  header showed 0 differing pixels (a single AA-jitter pixel on one macro knob).
+  The LENS image + GENERATED readout stay at x=764 in both states (fix A
+  revert confirmed — the column no longer shifts).

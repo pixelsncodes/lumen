@@ -6,13 +6,14 @@
 #include <utility>
 #include <vector>
 
-// The Melody side panel: a right-docked overlay carrying the Lumena generator
+// The Melody side panel: a window extension carrying the Lumena generator
 // controls (transport, mode/key/length/shape, the FEEL macros, loop length,
-// the regeneration locks + actions, and MIDI export). Shown over the right
-// edge of the editor's fixed 1040x660 content canvas when the Lens "MELODY"
-// toggle is active — the same polled-bool mechanism the old popup used, but
-// docked instead of floating (no move/resize gesture, no image/grid; the Lens
-// image keeps drawing the sampling-grid overlay in its own panel).
+// the regeneration locks + actions, and MIDI export). It docks in the strip
+// immediately to the right of the base 1040x660 canvas (logical x = kBaseWidth)
+// at full content height; the editor widens by kPanelWidth to reveal it when
+// the Lens "MELODY" toggle is active — the same polled-bool mechanism the old
+// popup used. The base UI never moves (no image/grid here; the Lens image keeps
+// drawing the sampling-grid overlay in its own panel).
 //
 // The GENERATED readout (KEY/MOOD/FORM/SEED) and the TRANSPOSE/OCTAVE steppers
 // are intentionally NOT here — those move under the Lens image in a later phase
@@ -28,8 +29,8 @@ public:
     void paintOverChildren (juce::Graphics& g) override;
     void animate();
 
-    // Logical width of the docked panel; the editor positions it flush against
-    // the right edge of the content canvas at this width and full content
+    // Logical width of the panel strip; the editor widens by this amount when
+    // the panel opens and places it just past the base canvas at full content
     // height, then scales the whole content as one unit like every other view.
     static constexpr int kPanelWidth = 316;
 

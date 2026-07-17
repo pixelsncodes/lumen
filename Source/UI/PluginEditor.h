@@ -76,6 +76,9 @@ public:
 
 private:
     void timerCallback() override;
+    // Widen/narrow the editor by the melody panel strip. Relocks the aspect
+    // ratio and resize limits so a corner-drag stays consistent in both states.
+    void setPanelOpen (bool open);
     void handleNoteOn (juce::MidiKeyboardState*, int, int note, float velocity) override;
     void handleNoteOff (juce::MidiKeyboardState*, int, int note, float) override;
 
@@ -99,6 +102,7 @@ private:
     bool glAttached = false;
 
     int tick = 0;
+    bool panelOpen = false; // melody strip docked -> editor is widened
     bool applyingExternalMidi = false; // guards keyboardState listener re-entry
     // Notes the internal melody/chord/arp player currently has lit on the
     // keyboard (channel 2), so each timer tick only diffs against the player's

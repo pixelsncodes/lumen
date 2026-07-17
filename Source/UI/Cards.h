@@ -281,9 +281,9 @@ public:
     void animate();
 
 private:
-    // Repositions lensPanel + readout along x: normal dock, or shifted left
-    // (may overlap the waterfall) while the melody side panel is open, so
-    // both stay fully visible instead of sitting underneath it.
+    // Docks lensPanel + the GENERATED readout beneath it at their fixed
+    // position. Static now that the melody panel is a window extension that
+    // never overlaps this column.
     void layoutLensColumn();
 
     UiShared shared;
@@ -294,5 +294,4 @@ private:
     juce::OwnedArray<ModKnob> macroKnobs;
     FlatKeyboard keyboard;
     bool leftArrowLit = false, rightArrowLit = false;
-    bool sidePanelOpenCache = false;
 };
