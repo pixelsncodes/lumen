@@ -786,3 +786,164 @@ host-side resize, so this specific behaviour is a DAW-only check.
   header showed 0 differing pixels (a single AA-jitter pixel on one macro knob).
   The LENS image + GENERATED readout stay at x=764 in both states (fix A
   revert confirmed — the column no longer shifts).
+
+---
+
+## Phase 4 — SCAN/SPECTRAL icon fix (Sonnet, tiny)
+
+Pure paint-code swap, exactly as scoped. The two mode-tab glyphs in
+`LensPanel::LensPanel`'s `modeTabs` initializer (`LensPanel.cpp`) were
+reversed: SCAN (tab index 0, `lens.mode() == 0`) was drawing `"|"` (vertical)
+and SPECTRAL (index 1) was drawing the em dash (horizontal). Swapped the two
+glyph strings in the initializer list so SCAN now draws the em dash
+(horizontal — rows played as waveforms, beam travels down the image) and
+SPECTRAL draws `"|"` (vertical — spectrogram columns, beam travels across).
+Updated the adjacent comment to match. Nothing else touched: `setTabTooltips
+({ "Scan", "Spectral" })` still pairs correctly with the (unchanged) tab
+order, and the scanline-direction logic that actually drives the beam
+(`LensImageView::paint`, `scanMode = lens.mode() == 0`) was left alone per the
+task — that's mode *behavior*, not the icon.
+
+Verified by screenshot: cropped and 4×-zoomed the mode-tab row
+(`build/verify/lens_row_zoom.png`) and confirmed the **active** tab (SCAN, the
+default) now shows the horizontal glyph, with SPECTRAL's vertical glyph
+alongside, unselected.
+
+---
+
+## Phase 5 — Dead code removal, persistence QA, and interaction QA (Sonnet)
+
+Executed together with Phase 4 in one session per the task's explicit
+instruction to merge the two phases.
+
+### Dead code removal
+
+1. **`melodygrid` extracted to its own file first**, so `LensPanel.cpp` keeps
+   compiling once the rest of `MelodyPanel` is gone (per the Phase 2/3
+   leftover notes above). New `Source/UI/MelodyGrid.{h,cpp}` holds the
+   `melodygrid` namespace (`DrawInfo`, `draw()`) verbatim — no logic changes.
+   `LensPanel.cpp`'s include changed from `UI/MelodyPanel.h` to
+   `UI/MelodyGrid.h`. `CMakeLists.txt` swapped `MelodyPanel.{h,cpp}` for
+   `MelodyGrid.{h,cpp}` in both the header and source lists.
+2. **`Source/UI/MelodyPanel.{h,cpp}` deleted outright** — grepped first
+   (`grep -rn MelodyPanel Source Tools CMakeLists.txt`) and confirmed the only
+   remaining hits after the `melodygrid` extraction were the class definition
+   itself (now unused) and a few historical/provenance comments in
+   `MelodySidePanel.{h,cpp}` and `MelodyReadout.h` ("ported from the old
+   MelodyPanel popup...") — left alone, they're documentation of where the
+   code came from, not dead code. This removes the popup class itself, its
+   floating-window move/resize gesture code (`mouseDown`/`mouseDrag`/
+   `mouseUp`/`mouseMove`, `applyPlacement`/`persistPlacement`,
+   `inTitleStrip`/`inResizeCorner`), and the superseded summary/transpose/
+   octave paint code (`paint()`'s GENERATED block, `TRANSPOSE`/`OCTAVE`
+   readouts, `sectionLabels`) — all fully superseded by `MelodySidePanel` and
+   `MelodyReadout` since Phase 2/3.
+3. **`melodystate::windowBounds`/`setWindowBounds`/`clampWindowBounds`**
+   removed from `Source/State/MelodyState.{h,cpp}` (impl + the four
+   `kWinX/Y/W/H` `Identifier`s), along with the now-unused
+   `<juce_graphics/juce_graphics.h>` include in `MelodyState.h` (nothing left
+   in that header uses a graphics type). `MelodyWindowBoundsTest` removed from
+   `Tools/Tests/TestsMain.cpp` along with its registration — it existed solely
+   to cover these helpers.
+4. **Phase 3 layout-fix A/B remnants**: none found. Grepped for
+   `kLensOpenX`, `sidePanelOpenCache`, `kSidePanelHeight`, and
+   `windowBounds` across `Source/` and `Tools/` — Phase 3b's revert (see
+   above) already fully removed them; `PlayView::layoutLensColumn()` is
+   confirmed static (fixed x=764, no open/closed branch) and
+   `MelodySidePanel` has no height cap. Nothing left to clean up here.
+
+### Persistence QA
+
+Confirmed via existing tests rather than new ones, with one genuine gap
+filled:
+
+- **Master seed + master lock**: already covered end-to-end by
+  `MelodySeedLockTest`'s "master lock + seed round-trip through saved state"
+  case (`apvts.copyState()`/`replaceState()` + `applyState()`).
+- **Domain locks (RHYTHM/PITCH/HARMONY), transpose, octave, and every other
+  side-panel param** (mode, key mode, length, phrase, arp pattern, loop
+  length, the five FEEL knobs, loop playback): already covered by
+  `MelodyParamRoundtripTest`, which sets all of them to a non-default value,
+  serializes, and restores into a fresh processor.
+- **Gap found and filled**: nothing tested that the melody side panel's
+  open/closed state is correctly *excluded* from persistence (per the task's
+  explicit "panel starts closed on fresh load — open state is not
+  persisted"). Confirmed by code inspection first —
+  `MelodyController::panelActive` is a plain in-memory `bool` (`MelodyController.h`),
+  never written to or read from the `MELODY` ValueTree subtree or any APVTS
+  param — then pinned with a new regression test,
+  `MelodyPanelOpenNotPersistedTest` (`TestsMain.cpp`): a fresh controller
+  starts closed; opening it, saving state, and restoring that state into a
+  **second, freshly-constructed** controller (simulating a real fresh plugin
+  load) leaves the new controller closed; and calling `applyState()` on the
+  *same* controller that had the panel open leaves it open (proving
+  `applyState()` doesn't touch the flag either way — it's simply outside the
+  persisted contract).
+
+Full suite: `ALL TESTS PASSED`, including the new test and all pre-existing
+Melody/State tests.
+
+### Interaction QA
+
+No DAW available in this environment, so verification split between
+screenshot-driven checks (real, decisive) and code inspection (for the one
+thing a static screenshot can't show — live interactive dragging):
+
+- **Open/close + toggle modes + play**: `--view play --lens-image busy.png
+  --melody --melody-seed 1234ABCD --notes 60,64,67` renders the side panel
+  open, MODE/KEY/LENGTH/SHAPE tabs in their correct states, the waterfall
+  active, and three keyboard keys highlighted — all together, no glitches.
+  `--view deep` with the same flags confirms the compact LENS card (using the
+  newly-extracted `MelodyGrid.cpp`) still draws the sampling-grid overlay
+  correctly alongside the open side panel — the `melodygrid` extraction in
+  this phase didn't regress its only other caller.
+- **Base UI never shifts**: pixel-diffed the panel-closed and panel-open
+  screenshots over the region that excludes the LENS/readout column (x
+  0–762, which necessarily differs since one run has an image loaded and a
+  melody generated and the other doesn't) — **1 differing pixel out of
+  502,920** (a single AA-jitter pixel on a macro knob, same class of
+  non-issue Phase 3b's own per-zone diff called out). The editor widened from
+  exactly 1040×660 to exactly 1356×660 (base width + `kPanelWidth`), matching
+  Phase 3b's original measurement.
+- **Corner-drag resize, open and closed**: verified by code inspection, not a
+  live drag — the screenshot harness has no way to synthesize a mouse-drag
+  resize gesture, and this phase didn't touch `PluginEditor::resized()` or
+  `setPanelOpen()`. Re-read both: `resized()` derives `content`'s scale from
+  **height only**, and `setPanelOpen()` relocks the aspect ratio and rescales
+  the resize limits to the current panel state on every open/close toggle.
+  Because JUCE's `ComponentBoundsConstrainer` enforces the locked aspect
+  ratio during an interactive drag, and the content scale never reads width
+  directly, a corner-drag in either state necessarily produces a
+  self-consistent uniform scale — this is the same mechanism Phase 3b
+  screenshot-verified for the open/closed transition itself. **Still worth a
+  few seconds of an actual drag in the standalone or a DAW at the user gate**,
+  same spirit as Phase 3b's own "Known limitation" note about host-side
+  resize honoring.
+- **No dangling listeners**: this phase only deleted unreferenced code and
+  extracted an already-shared free function; no listener registration/
+  deregistration code was touched, so there's no new surface for a dangling
+  listener. The existing "poll + diff" idiom used throughout (see Phase 0's
+  survey) never registers component listeners in the first place, which is
+  what keeps this class of bug from arising here.
+- **Silent-at-idle smoke check**: `--view play` with no `--lens-image`/
+  `--melody`/`--notes` shows the waterfall at its drained flat-surface idle
+  state — confirms the standalone launches and produces no sound/activity
+  indication with nothing playing.
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors) after reconfiguring CMake to pick up the new/removed
+  source files.
+- Tests: full `lumen_tests.exe` suite → `ALL TESTS PASSED` (36 "Melody"-tagged
+  sub-tests in the log, including the three new `MelodyPanelOpenNotPersistedTest`
+  cases).
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`
+  (unchanged from Phase 3 — this phase added/removed no params).
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- Screenshots in `build/verify/`: `closed_no_melody.png`, `open_scan.png`,
+  `open_deep.png`, `open_playing.png`, `silent_check.png`,
+  `lens_row_zoom.png` (gitignored, Windows-visible).
+
+This completes the `ui/side-panel-redesign` branch. Merging is left to the
+user.

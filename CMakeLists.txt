@@ -118,7 +118,7 @@ set(LUMEN_PLUGIN_SOURCES
     Source/UI/Controls.cpp
     Source/UI/Visualizers.cpp
     Source/UI/LensPanel.cpp
-    Source/UI/MelodyPanel.cpp
+    Source/UI/MelodyGrid.cpp
     Source/UI/MelodySidePanel.cpp
     Source/UI/MelodyReadout.cpp
     Source/UI/Cards.cpp
@@ -147,7 +147,7 @@ target_sources(Lumen PRIVATE
     Source/UI/WaterfallModel.h
     Source/UI/Visualizers.h
     Source/UI/LensPanel.h
-    Source/UI/MelodyPanel.h
+    Source/UI/MelodyGrid.h
     Source/UI/MelodySidePanel.h
     Source/UI/MelodyReadout.h
     Source/UI/Cards.h

@@ -5,7 +5,7 @@
 #include "Melody/MelodyController.h"
 #include "Melody/MelodyPlayer.h"
 #include "State/ModState.h"
-#include "UI/MelodyPanel.h" // melodygrid::draw
+#include "UI/MelodyGrid.h" // melodygrid::draw
 #include "UI/Theme.h"
 
 using namespace lumen;
@@ -386,11 +386,11 @@ LensPanel::LensPanel (const UiShared& sharedContext, bool compactLayout)
     : shared (sharedContext),
       compact (compactLayout),
       image (sharedContext, [this] { return shared.processor.lensController().target(); }),
-      // Directional-line glyphs matching the row's icon chips: "|" = Scan
-      // (rows played as waveforms, beam travels down), em dash = Spectral
+      // Directional-line glyphs matching the row's icon chips: em dash = Scan
+      // (rows played as waveforms, beam travels down), "|" = Spectral
       // (spectrogram columns, beam travels across). UTF-8 escape for the
       // dash — narrow non-ASCII literals garble on Windows (gotchas note).
-      modeTabs ({ "|", juce::String::fromUTF8 ("\xe2\x80\x94") },
+      modeTabs ({ juce::String::fromUTF8 ("\xe2\x80\x94"), "|" },
                 [this] (int index) { shared.processor.lensController().setMode (index); }),
       targetTabs ({ "A", "B" },
                   [this] (int index) { shared.processor.lensController().setTarget (index); })

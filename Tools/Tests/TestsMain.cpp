@@ -2653,6 +2653,49 @@ public:
     }
 };
 
+// Phase 5 (side panel redesign): panel open/closed is deliberately NOT part of
+// the persisted contract — a fresh load always shows the panel closed, even if
+// it was left open when the project was saved. Pins that decision so a future
+// change doesn't accidentally start persisting it.
+class MelodyPanelOpenNotPersistedTest final : public juce::UnitTest
+{
+public:
+    MelodyPanelOpenNotPersistedTest()
+        : juce::UnitTest ("Melody panel-open state is never persisted", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        beginTest ("a fresh controller starts with the panel closed");
+        NullProcessor processor;
+        SynthEngine engine;
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (! melody.isPanelActive(), "panel closed by default");
+
+        beginTest ("opening the panel, saving, and restoring into a fresh controller stays closed");
+        melody.setPanelActive (true);
+        expect (melody.isPanelActive(), "panel now open in this session");
+        const auto xml = processor.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes");
+        if (xml != nullptr)
+            processor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+
+        MelodyController reloaded (processor.apvts, lens, player);
+        reloaded.applyState();
+        expect (! reloaded.isPanelActive(),
+                "a freshly-constructed controller simulating a fresh load ignores the "
+                "previous session's open panel and starts closed");
+
+        beginTest ("applyState() on the same controller leaves panel-open state untouched");
+        melody.applyState();
+        expect (melody.isPanelActive(),
+                "applyState() doesn't read or write panel-open state at all");
+    }
+};
+
 // RC pass: every melody parameter — including the Phase 5 additions — must
 // survive a full APVTS state round-trip with a non-default value. This is the
 // save/load contract for the whole melody surface in one pin.
@@ -2918,58 +2961,6 @@ public:
     }
 };
 
-// Melody window placement: persisted with the patch, restored exactly, and
-// clamped on restore so a stale or off-screen position can never leave the
-// window unreachable (same helpers the editor uses).
-class MelodyWindowBoundsTest final : public juce::UnitTest
-{
-public:
-    MelodyWindowBoundsTest()
-        : juce::UnitTest ("Melody window bounds round-trip and off-screen clamp", "State") {}
-
-    void runTest() override
-    {
-        using namespace lumen;
-
-        beginTest ("bounds unset until the user first moves the window");
-        NullProcessor source;
-        expect (melodystate::windowBounds (source.apvts.state).isEmpty(), "empty by default");
-
-        beginTest ("set position + size, serialize, restore into a fresh processor");
-        const juce::Rectangle<int> saved (123, 45, 725, 595);
-        melodystate::setWindowBounds (source.apvts.state, saved);
-        expect (melodystate::windowBounds (source.apvts.state) == saved, "readback matches");
-        const auto xml = source.apvts.copyState().createXml();
-        expect (xml != nullptr, "state serializes to XML");
-        if (xml == nullptr)
-            return;
-        NullProcessor restored;
-        restored.apvts.replaceState (juce::ValueTree::fromXml (*xml));
-        expect (melodystate::windowBounds (restored.apvts.state) == saved,
-                "bounds survive the state round-trip exactly");
-
-        beginTest ("off-screen and out-of-range bounds are clamped on restore");
-        const juce::Rectangle<int> area (0, 0, 1040, 660);
-        const int minW = 580, minH = 476;
-        expect (melodystate::clampWindowBounds ({ 2000, 3000, 580, 476 }, area, minW, minH)
-                    == juce::Rectangle<int> (460, 184, 580, 476),
-                "fully off-screen comes back inside the editor");
-        expect (melodystate::clampWindowBounds ({ -900, -900, 580, 476 }, area, minW, minH)
-                    == juce::Rectangle<int> (0, 0, 580, 476),
-                "negative position clamps to the origin");
-        expect (melodystate::clampWindowBounds ({ 10, 10, 100, 80 }, area, minW, minH)
-                    == juce::Rectangle<int> (10, 10, 580, 476),
-                "below-minimum size grows to the usable minimum");
-        const auto big = melodystate::clampWindowBounds ({ 0, 0, 5000, 5000 }, area, minW, minH);
-        expect (big == juce::Rectangle<int> (0, 0,
-                    juce::roundToInt (minW * (660.0 / 476.0)), 660),
-                "oversize scales down to fit, aspect kept");
-        const juce::Rectangle<int> fine (100, 60, 725, 595);
-        expect (melodystate::clampWindowBounds (fine, area, minW, minH) == fine,
-                "valid bounds pass through untouched");
-    }
-};
-
 FrozenParameterTest frozenParameterTest;
 MelodyDensityWiringTest melodyDensityWiringTest;
 MelodyLockHarmonyWiringTest melodyLockHarmonyWiringTest;
@@ -2977,10 +2968,10 @@ MelodyLoopPlaybackTest melodyLoopPlaybackTest;
 MelodySummaryTest melodySummaryTest;
 MelodyTransposeTest melodyTransposeTest;
 MelodyOctaveGuardTest melodyOctaveGuardTest;
-MelodyWindowBoundsTest melodyWindowBoundsTest;
 MelodyParamRoundtripTest melodyParamRoundtripTest;
 MelodyTortureTest melodyTortureTest;
 MelodySeedLockTest melodySeedLockTest;
+MelodyPanelOpenNotPersistedTest melodyPanelOpenNotPersistedTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;
