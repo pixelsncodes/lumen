@@ -17,6 +17,10 @@
 //              [--melody-remove-image] (drop the Lens image right after
 //                                       generating, for screenshotting the
 //                                       no-image-but-has-a-melody state)
+//              [--melody-restore]      (re-run applyState() after generating,
+//                                       simulating a project reload, for
+//                                       screenshotting the GENERATED readout's
+//                                       post-restore visibility)
 //              [--melody-export <base>](write base.mid + base.txt generation
 //                                       summary — RC showcase gallery)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
@@ -227,6 +231,14 @@ public:
                     if (args.contains ("--melody-remove-image"))
                         lumenProcessor->lensController().removeImage (
                             lumenProcessor->lensController().target());
+                    // --melody-restore: re-run applyState() after generating,
+                    // exercising the exact restore path setStateInformation()
+                    // uses (currentSeq repopulated from the persisted SEQ node,
+                    // not from a fresh generate() call) — for screenshotting
+                    // that the GENERATED readout comes back visible right after
+                    // a simulated project reload, not just after generation.
+                    if (args.contains ("--melody-restore"))
+                        mc.applyState();
                     mc.setPanelActive (true);
                     printToStdout ("Melody: key='" + mc.detectedKey()
                                    + "' notes=" + juce::String ((int) mc.sequence().steps.size())

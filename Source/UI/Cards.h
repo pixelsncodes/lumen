@@ -279,6 +279,13 @@ public:
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;
     void animate();
+    // The GENERATED readout's visibility/content must track
+    // MelodyController::hasMelody() at all times, including while the DEEP
+    // view is showing (and this whole PlayView is hidden) — the editor's
+    // timer calls this unconditionally, independent of animate() above,
+    // which the DEEP view's own animate() branch skips. Mirrors how
+    // melodySidePanel is polled independent of the Play/Deep view split.
+    void animateReadout();
 
 private:
     // Docks lensPanel + the GENERATED readout beneath it at their fixed

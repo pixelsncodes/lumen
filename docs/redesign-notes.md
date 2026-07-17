@@ -1206,3 +1206,109 @@ sequence, so a restored melody with no image loaded keeps both enabled.
     image gate), while DRAG MIDI and SAVE .MID stay fully enabled (this
     phase's melody gate) — confirms the two gates are independent, exactly
     as required.
+
+---
+
+## Phase 8 — GENERATED readout visibility: found the actual desync (`ui/panel-polish`)
+
+Task: make the GENERATED readout (KEY/MOOD/FORM/SEED + TRANSPOSE/OCTAVE)
+visible if and only if `MelodyController::hasMelody()`, matching the Phase 7
+export gate — reported as "can show stale content with an empty Lens and no
+melody."
+
+### Root cause: `MelodyReadout::animate()` was already `hasMelody()`-driven, but wasn't always being called
+
+`MelodyReadout::animate()` (`Source/UI/MelodyReadout.cpp:245-255`) already
+did exactly the right thing in isolation — `setVisible (m.hasMelody())`,
+edge-triggered. The bug wasn't in that function; it was in **when** it gets
+called. `MelodyReadout readout` is a private member of `PlayView`
+(`Source/UI/Cards.h:293`), and the only call site was inside
+`PlayView::animate()`, which the editor's timer only invokes when the DEEP
+view is *not* showing:
+
+```cpp
+// PluginEditor.cpp, before this phase
+if (deepView->isVisible())
+    deepView->animate (tick % 2 == 0);
+else
+    playView->animate();   // <- readout.animate() lived in here
+```
+
+So `readout.animate()` — and therefore the entire visibility contract —
+silently stopped running the instant the user switched to DEEP view, and
+stayed stopped for as long as they remained there. Any `hasMelody()`
+transition that happened while in DEEP (a preset switch clearing the
+sequence, a project loading with `uiView="deep"` persisted and a melody
+already in its saved state — `PluginEditor.cpp:75` restores the last-used
+view on construction, so a session saved while in DEEP view opens directly
+into DEEP, and `readout.animate()` would never run even once until the user
+manually switched to PLAY) left `readout` frozen at whatever visibility/
+content it had going into DEEP — exactly the "stale content" symptom
+described. This is precisely the same class of bug Phase 3's "GENERATED
+readout hides behind `addChildComponent` vs `addAndMakeVisible`" surprise
+was, and the same category of fix Phase 7 applied to `MelodySidePanel`'s
+export controls: a state that must hold *at all times*, driven by a poll
+that wasn't actually running at all times.
+
+The existing `melodySidePanel->animate()` call already avoided this exact
+trap — it's a standalone block in `timerCallback()`, outside the DEEP/PLAY
+`if`/`else`, polled unconditionally every tick regardless of which view is
+showing (`PluginEditor.cpp:378-393`, predates this phase). `readout` just
+hadn't been given the same treatment.
+
+### Fix
+
+- New `PlayView::animateReadout()` (`Cards.h`/`Cards.cpp`) — a thin wrapper
+  that does only `readout.animate()`, split out of the rest of
+  `PlayView::animate()` (waterfall/lensPanel/keyboard-follow, which
+  genuinely are Play-view-only concerns and stay gated as before — no
+  reason to spend CPU on keyboard-follow math while DEEP is showing).
+- `readout.animate()`'s call site moved out of `PlayView::animate()`'s body.
+- `PluginEditor::timerCallback()` now calls `playView->animateReadout()`
+  unconditionally, right after the `if (deepView->isVisible()) ... else
+  playView->animate();` block — mirroring the `melodySidePanel` poll's
+  existing independence from the view split.
+
+`readout` itself is still hidden while DEEP is showing (its parent,
+`playView`, is `setVisible(false)` — nothing paints regardless), so this
+costs nothing extra visually; the fix is purely about not letting the
+*next* frame after switching back to PLAY render stale state, and about a
+freshly-opened editor (DEEP-first, per persisted `uiView`) reflecting the
+real `hasMelody()` state from its very first timer tick instead of only
+once the user happens to switch views.
+
+### New Standalone CLI flag for verification
+
+`--melody-restore` (`Source/Standalone/StandaloneApp.cpp`): after
+generating, calls `MelodyController::applyState()` again on the same
+controller — exercising the actual `setStateInformation()`/
+`loadPresetState()` restore path (`currentSeq` repopulated from the
+persisted `SEQ` node) rather than just a fresh `generate()` call, so the
+readout's post-restore visibility can be screenshotted directly instead of
+only inferred from Phase 7's headless `MelodyRestoreExportTest`.
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite -> `ALL TESTS PASSED` (no UI-visibility
+  test added — `Source/UI/*.cpp` isn't linked into `lumen_tests`, same
+  "screenshot, not unit test" fallback as every prior UI-only phase; the fix
+  itself has no engine/controller-layer surface to test headlessly).
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`
+  (unchanged).
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- Screenshots in `build/verify/`, all four required scenarios:
+  - `readout_fresh_empty.png` — fresh instance, no image, no melody: no
+    GENERATED block renders below the Lens panel at all (the empty region
+    beneath LENS is bare, matching `--view play` with nothing else loaded).
+  - `readout_generated.png` — image + melody generated: readout fully
+    visible (KEY "F Dorian", MOOD, FORM, SEED "1234abcd", TRANSPOSE/OCTAVE).
+  - `readout_no_image_has_melody.png` — melody generated, then
+    `--melody-remove-image`: readout stays fully visible with the same
+    content (matches Phase 6/7 — visibility never depended on the image).
+  - `readout_restored.png` — melody generated, then `--melody-restore`
+    (`applyState()` re-run against the persisted `SEQ`): readout visible
+    with identical content, confirming the restore path (not just
+    `generate()`) drives visibility correctly through the actual code path
+    a project reload uses.

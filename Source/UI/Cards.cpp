@@ -879,7 +879,6 @@ void PlayView::animate()
 
     waterfall.animate (audioActive);
     lensPanel.animate();
-    readout.animate();
 
     // Keyboard follow: scan the sounding notes once per tick. If any sounding
     // note is visible the window must not move (a held key sliding under the
@@ -917,4 +916,9 @@ void PlayView::animate()
         rightArrowLit = right;
         repaint (keyboard.getBounds());
     }
+}
+
+void PlayView::animateReadout()
+{
+    readout.animate();
 }

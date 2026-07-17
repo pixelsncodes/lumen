@@ -372,6 +372,11 @@ void LumenAudioProcessorEditor::timerCallback()
         deepView->animate (tick % 2 == 0); // FFT at ~30 Hz (SPEC 15)
     else
         playView->animate();
+    // GENERATED readout tracks hasMelody() regardless of which view is
+    // showing — polled unconditionally so it can never go stale while DEEP
+    // is up and playView->animate() above is skipped (same reasoning as the
+    // melodySidePanel poll below, which is also view-independent).
+    playView->animateReadout();
 
     // Melody overlay: follow the Lens "MELODY" toggle, animate while visible,
     // and reclaim any sequence the audio thread retired.
