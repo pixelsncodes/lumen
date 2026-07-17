@@ -260,6 +260,10 @@ void MelodySidePanel::resized()
     transportRow.removeFromRight (8);
     playButton.setBounds (transportRow);
 
+    // No-image hint: only reserved while inactive (resized() re-runs on the
+    // animate() edge trigger), so the normal layout is untouched otherwise.
+    hintArea = generationActiveCache ? juce::Rectangle<int>() : row (16, 8);
+
     modeTabs.setBounds    (section ("MODE",   22));
     keyModeTabs.setBounds (section ("KEY",    22));
     lengthTabs.setBounds  (section ("LENGTH", 22));
@@ -304,35 +308,70 @@ void MelodySidePanel::paint (juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     g.setColour (theme::panel);
     g.fillRoundedRectangle (bounds, theme::cornerRadius);
-    g.setColour (theme::neonYellow.withAlpha (0.5f));
-    g.drawRoundedRectangle (bounds.reduced (0.5f), theme::cornerRadius, 1.0f);
 
     // Section captions above each control group.
     g.setFont (theme::semiBold (9.5f));
     g.setColour (theme::textSecondary.withAlpha (0.85f));
     for (const auto& [caption, rect] : sectionLabels)
         g.drawText (caption, rect, juce::Justification::centredLeft);
+
+    if (! generationActiveCache && ! hintArea.isEmpty())
+    {
+        g.setColour (theme::textMuted);
+        g.setFont (theme::font (11.5f));
+        g.drawText ("load an image to generate", hintArea, juce::Justification::centred);
+    }
 }
 
 void MelodySidePanel::paintOverChildren (juce::Graphics& g)
 {
-    // Master-seed-lock indicator on REGENERATE: a dim scrim plus a small
-    // padlock in the top-right corner, because regenerating with the seed
-    // locked and params unchanged intentionally reproduces the same sequence.
+    // Master-seed-lock indicator: a small padlock badge in REGENERATE's
+    // corner, purely informational — locking pins the seed but REGENERATE
+    // stays fully clickable and functional (it reproduces the same sequence
+    // when params are otherwise unchanged), so this no longer dims/scrims
+    // the button the way Phase 2 did.
     if (! lockedCache || regenerateBounds.isEmpty())
         return;
 
     const auto b = regenerateBounds.toFloat();
-    g.setColour (theme::panel.withAlpha (0.35f));
-    g.fillRoundedRectangle (b, theme::wellRadius);
+    const juce::Rectangle<float> badge (b.getRight() - 17.0f, b.getY() + 4.0f, 13.0f, 13.0f);
+    g.setColour (theme::panel.withAlpha (0.9f));
+    g.fillEllipse (badge);
+    drawLockGlyph (g, badge.reduced (2.5f), theme::neonYellow);
+}
 
-    const juce::Rectangle<float> lockArea (b.getRight() - 15.0f, b.getY() + 5.0f, 8.0f, 9.0f);
-    drawLockGlyph (g, lockArea, theme::neonYellow.withAlpha (0.85f));
+void MelodySidePanel::setGenerationControlsEnabled (bool enabled)
+{
+    modeTabs.setEnabled (enabled);
+    keyModeTabs.setEnabled (enabled);
+    lengthTabs.setEnabled (enabled);
+    phraseTabs.setEnabled (enabled);
+    arpPatternTabs.setEnabled (enabled);
+    loopTabs.setEnabled (enabled);
+    energyKnob->setEnabled (enabled);
+    complexityKnob->setEnabled (enabled);
+    imageKnob->setEnabled (enabled);
+    repetitionKnob->setEnabled (enabled);
+    densityKnob->setEnabled (enabled);
+    lockRhythm->setEnabled (enabled);
+    lockPitch->setEnabled (enabled);
+    lockHarmony->setEnabled (enabled);
+    regenerateButton.setEnabled (enabled);
+    mutateButton.setEnabled (enabled);
 }
 
 void MelodySidePanel::animate()
 {
     refreshTransportLabel();
+
+    const bool generationActive = shared.processor.melodyController().hasImageSource();
+    if (generationActive != generationActiveCache)
+    {
+        generationActiveCache = generationActive;
+        setGenerationControlsEnabled (generationActive);
+        resized();
+        repaint();
+    }
 
     if (modeTabs.active() != choiceParam (params::melodyMode))
         modeTabs.setActive (choiceParam (params::melodyMode), false);

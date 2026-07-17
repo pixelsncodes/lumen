@@ -473,6 +473,11 @@ bool MelodyController::isPlaying() const
     return player.isPlaying();
 }
 
+bool MelodyController::hasImageSource() const
+{
+    return lens.displayImage (lens.target()).isValid();
+}
+
 std::vector<unsigned char> MelodyController::toMidiBytes() const
 {
     if (currentSeq.steps.empty())

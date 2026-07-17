@@ -123,7 +123,7 @@ void ModKnob::paint (juce::Graphics& g)
     if (labelText.isEmpty())
         return;
 
-    g.setColour (theme::textSecondary);
+    g.setColour (isEnabled() ? theme::textSecondary : theme::textMuted);
     g.setFont (theme::font (11.0f));
     g.drawText (labelText, getLocalBounds().removeFromBottom (kLabelHeight),
                 juce::Justification::centred);

@@ -947,3 +947,143 @@ thing a static screenshot can't show — live interactive dragging):
 
 This completes the `ui/side-panel-redesign` branch. Merging is left to the
 user.
+
+---
+
+## Phase 6 — Panel polish: border, no-image state, lock indicator (`ui/panel-polish`)
+
+Three fixes on top of the completed redesign, done together per the task's
+explicit bundling.
+
+### Fix A — remove the yellow panel border
+
+`MelodySidePanel::paint()` drew `theme::neonYellow.withAlpha (0.5f)` /
+`drawRoundedRectangle` around the whole panel after the background fill.
+Deleted; the panel background/corner radius/section captions are otherwise
+untouched. No border replaces it — matches the request ("border only").
+
+### Fix B — no-image inactive state
+
+New `MelodyController::hasImageSource()` (`Source/Melody/MelodyController.{h,cpp}`)
+wraps `lens.displayImage (lens.target()).isValid()` — the exact same
+condition `renderFresh()` already gates generation on, so the UI disables in
+lockstep with when generation would actually no-op. Pure controller-layer
+query, no engine/GUI coupling.
+
+- **`MelodySidePanel`**: `animate()` polls `hasImageSource()` each tick
+  (edge-triggered, same "poll + diff" idiom as the rest of the panel) and
+  calls `setGenerationControlsEnabled(bool)`, which toggles `setEnabled()` on
+  MODE, KEY, LENGTH, SHAPE (both tab strips), the five FEEL knobs, LOOP
+  LENGTH, the three SEED domain locks (RHYTHM/PITCH/HARMONY), and REGENERATE/
+  MUTATE. `juce::Component::isEnabled()` walks the parent chain, so disabling
+  each container (`TabsBar`/`ModKnob`/`ParamToggle`/`TextButton`) is
+  sufficient to both block clicks (JUCE's `Button`/`Slider` internals already
+  check `isEnabled()`) and drive dimmed painting — no per-child wiring
+  needed. PLAY, LOOP, DRAG MIDI, and SAVE .MID are never touched by this
+  method, so a previously generated melody stays playable/exportable with no
+  image loaded, per the requirement.
+  - A small hint ("load an image to generate") is reserved in a fixed strip
+    between the transport row and MODE, added via `resized()` — which is
+    manually re-invoked from the same `animate()` edge trigger (nothing else
+    calls `resized()` at runtime once the panel is docked, so this is a
+    deliberate, one-off relayout call, not a per-frame cost). When active the
+    strip collapses back to empty and the layout is byte-identical to before
+    this phase — confirmed by screenshot.
+- **`MelodyReadout`**: the SEED row's edit label and lock padlock
+  (`seedLabel`/`lockToggle`) independently disable via the same
+  `hasImageSource()` poll in `animate()`, gated inside the existing
+  `hasMelody()`-active branch (so it only matters once a melody exists to
+  show a readout for). KEY/MOOD/FORM and the TRANSPOSE/OCTAVE steppers are
+  untouched — they're playback/export-adjacent, not generation triggers, so
+  they stay usable exactly like PLAY/LOOP/EXPORT. `LockToggle` (a plain
+  `juce::Component`, not a `Button`) didn't inherit JUCE's `isEnabled()`
+  click-gating for free, so `mouseUp` now checks `isEnabled()` explicitly,
+  and `paint()` dims via the same `withMultipliedAlpha` idiom
+  `LensIconToggle` already used elsewhere in the codebase.
+
+**Look-and-feel change enabling all of the above**: `LumenLookAndFeel`
+overrides `drawButtonBackground`/`drawToggleButton` completely (replacing
+JUCE's own disabled-state dimming), and neither previously consulted
+`button.isEnabled()`. Both now multiply their fill/outline colours by 0.4
+alpha when disabled — the one shared visual mechanism every `TextButton`,
+`TabsBar` tab, and `ParamToggle` chip in the plugin now gets "for free" by
+calling `setEnabled(false)`, not just this panel. `ModKnob::paint()`'s label
+and `LumenLookAndFeel::drawRotarySlider`'s arc/needle already checked
+`isEnabled()` (the rotary path predates this phase); `ModKnob::paint()`'s
+text colour now also dims to `theme::textMuted` to match. Verified nothing
+else in the plugin currently calls `setEnabled(false)` on a `Button`/
+`ToggleButton` (grepped), so this is a pure addition with no other visual
+surface affected.
+
+### Fix C — seed lock no longer scrims REGENERATE
+
+`MelodySidePanel::paintOverChildren()` previously drew a
+`theme::panel.withAlpha(0.35f)` scrim across the whole REGENERATE button plus
+a corner padlock whenever the master seed is locked. The scrim never actually
+blocked clicks (it was an overlay paint in the parent, not a child
+component — REGENERATE was always live underneath), but visually implied the
+button was disabled. Replaced with a small circular padlock badge only (13px,
+solid dark backing behind the glyph for legibility against the button's own
+fill) — purely informational now, no dimming of the button itself.
+
+Confirmed via the `MelodySeedLockTest` suite (`Tools/Tests/TestsMain.cpp`,
+extended this phase) that locking never blocks or degrades REGENERATE:
+"locked REGENERATE across a mode change: same seed, new (mode-driven)
+sequence" pins the seed, switches MODE from Melody to Arp and regenerates,
+switches back to Melody and regenerates again, and asserts the seed stayed
+fixed across both calls while the note sequence changed both times (mode
+genuinely drives different generation, even with an unchanged seed) — this
+is the ARP -> MELODY case the task called out by name. Button hit-testing/
+enabled state are unaffected by the lock by construction: nothing in
+`setLocked()`/`lockedCache` ever touches `regenerateButton.setEnabled()`
+(only Fix B's `hasImageSource()` gate does, independently).
+
+### New test coverage (`Tools/Tests/TestsMain.cpp`, `MelodySeedLockTest`)
+
+- `hasImageSource()` reflects load/remove/reload of the Lens image (osc 0) —
+  pure controller-layer logic, testable headless in the existing
+  `lumen_tests` harness (no `juce_gui_basics` dependency).
+- The ARP<->MELODY locked-regenerate case described above.
+
+**Enablement/dimming itself is not covered by a test** — `lumen_tests`
+doesn't link `juce_gui_basics` or compile any `Source/UI/*.cpp` (checked:
+`LUMEN_TESTS_SOURCES` in `CMakeLists.txt` has no UI sources, and no existing
+test constructs a real `Component`), so `juce::Component::isEnabled()`/
+paint-time dimming genuinely can't be exercised in that harness. Verified via
+screenshot instead, per the task's own fallback instruction.
+
+### CLI addition for verification
+
+Added `--melody-lock` to the Standalone screenshot harness
+(`Source/Standalone/StandaloneApp.cpp`) — engages the master seed lock after
+`--melody-seed` pins it, so the REGENERATE padlock state is screenshot-able
+and reproducible. Same spirit as the existing `--melody-seed`/`--melody-export`
+dev-only flags; no prior way existed to reach this state without a live click.
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite -> `ALL TESTS PASSED`, including the
+  two new cases above.
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`
+  (unchanged — no params added/removed).
+- `lumen_render --preset init --analyze`: nan_count 0, metrics unchanged
+  (no DSP touched).
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- Screenshots in `build/verify/` (gitignored, Windows-visible):
+  - `no_image_dimmed.png` — panel open, no image: MODE/KEY/LENGTH/SHAPE/FEEL/
+    LOOP LENGTH/SEED locks/REGENERATE/MUTATE all dimmed, hint text visible,
+    PLAY/LOOP/EXPORT still bright and enabled, no yellow border.
+  - `with_image_active.png` — panel open, image + melody loaded: everything
+    fully active, no hint text, no border, GENERATED readout's SEED
+    edit/lock enabled.
+  - `locked_regen.png` / `regen_zoom.png` — master lock engaged
+    (`--melody-lock`): REGENERATE shows only the small corner padlock, no
+    scrim, button otherwise looks identical to unlocked.
+  - `silent_check.png` — standalone launches clean with no image/melody/
+    notes (idle smoke check).
+- Pixel-scanned `with_image_active.png` for residual yellow border pixels
+  along the panel boundary — none found; the only yellow near the edge is
+  the pre-existing DRAG MIDI drag-handle outline (unrelated, confirmed by
+  crop inspection).

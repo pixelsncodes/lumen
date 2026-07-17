@@ -57,6 +57,10 @@ private:
     void setChoiceParam (const char* paramId, int index);
     int  choiceParam (const char* paramId) const;
     void refreshTransportLabel();
+    // Enables/dims MODE, KEY, LENGTH, SHAPE, FEEL, LOOP LENGTH, the seed
+    // domain locks, and REGENERATE/MUTATE. PLAY/LOOP/EXPORT are never touched
+    // here — they stay usable for an already-generated melody with no image.
+    void setGenerationControlsEnabled (bool enabled);
 
     UiShared shared;
 
@@ -95,6 +99,14 @@ private:
     // unchanged intentionally reproduces the same sequence.
     juce::Rectangle<int> regenerateBounds;
     bool lockedCache = false;
+
+    // No-image state: generation controls disable/dim and a hint is shown in
+    // hintArea (reserved only while inactive — resized() is re-run on the
+    // edge trigger from animate(), same "poll + diff" idiom as the rest of
+    // this panel). PLAY/LOOP/EXPORT are unaffected, so a previously generated
+    // melody stays playable and exportable with no image loaded.
+    bool generationActiveCache = true;
+    juce::Rectangle<int> hintArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodySidePanel)
 };

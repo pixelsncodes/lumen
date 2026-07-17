@@ -66,6 +66,10 @@ private:
     juce::Rectangle<int> titleArea, keyRow, moodRow, formRow, seedCaptionArea;
 
     bool activeCache = false;   // hasMelody() — the whole block hides without it
+    // No-image state: only the seed edit box + lock toggle disable/dim (they
+    // trigger new generation, unlike TRANSPOSE/OCTAVE, which just shift
+    // playback/export and stay usable). KEY/MOOD/FORM/SEED stay readable.
+    bool imageActiveCache = true;
     bool lockedCache = false;
     juce::String summaryCache;
     int transposeCache = 0, octaveCache = 0;

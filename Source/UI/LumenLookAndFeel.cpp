@@ -167,6 +167,7 @@ void LumenLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
 {
     const auto accent = button.findColour (juce::TextButton::buttonOnColourId);
     const bool on = button.getToggleState();
+    const float dim = button.isEnabled() ? 1.0f : 0.4f;
     const auto bounds = button.getLocalBounds().toFloat().reduced (1.0f);
 
     if (button.getComponentID() == "power")
@@ -174,27 +175,28 @@ void LumenLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
         // Small power dot: accent ring, filled when enabled.
         const float d = juce::jmin (bounds.getWidth(), bounds.getHeight()) - 2.0f;
         const auto circle = juce::Rectangle<float> (d, d).withCentre (bounds.getCentre());
-        g.setColour (on ? accent : theme::hairlineLight);
+        g.setColour ((on ? accent : theme::hairlineLight).withMultipliedAlpha (dim));
         g.drawEllipse (circle, 1.5f);
         if (on)
         {
-            g.setColour (accent);
+            g.setColour (accent.withMultipliedAlpha (dim));
             g.fillEllipse (circle.reduced (d * 0.28f));
         }
         else if (shouldDrawButtonAsHighlighted)
         {
-            g.setColour (theme::textMuted);
+            g.setColour (theme::textMuted.withMultipliedAlpha (dim));
             g.fillEllipse (circle.reduced (d * 0.34f));
         }
         return;
     }
 
     // Text chip (RND / SYNC / PP / ...): pill with the label inside.
-    g.setColour (on ? accent.withAlpha (0.22f) : theme::well);
+    g.setColour ((on ? accent.withAlpha (0.22f) : theme::well).withMultipliedAlpha (dim));
     g.fillRoundedRectangle (bounds, bounds.getHeight() * 0.5f);
-    g.setColour (on ? accent : theme::hairline);
+    g.setColour ((on ? accent : theme::hairline).withMultipliedAlpha (dim));
     g.drawRoundedRectangle (bounds, bounds.getHeight() * 0.5f, 1.0f);
-    g.setColour (on ? theme::textPrimary : (shouldDrawButtonAsHighlighted ? theme::textSecondary : theme::textMuted));
+    g.setColour ((on ? theme::textPrimary : (shouldDrawButtonAsHighlighted ? theme::textSecondary : theme::textMuted))
+                     .withMultipliedAlpha (dim));
     g.setFont (theme::medium (juce::jmin (11.0f, bounds.getHeight() * 0.62f)));
     g.drawText (button.getButtonText(), bounds, juce::Justification::centred);
 }
@@ -205,6 +207,7 @@ void LumenLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
 {
     auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
     const bool on = button.getToggleState();
+    const float dim = button.isEnabled() ? 1.0f : 0.4f;
 
     juce::Colour fill = on ? theme::hairlineLight : theme::well;
     if (shouldDrawButtonAsDown)
@@ -212,9 +215,9 @@ void LumenLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
     else if (shouldDrawButtonAsHighlighted)
         fill = fill.brighter (0.05f);
 
-    g.setColour (fill);
+    g.setColour (fill.withMultipliedAlpha (dim));
     g.fillRoundedRectangle (bounds, 4.0f);
-    g.setColour (on ? theme::textMuted : theme::hairline);
+    g.setColour ((on ? theme::textMuted : theme::hairline).withMultipliedAlpha (dim));
     g.drawRoundedRectangle (bounds, 4.0f, 1.0f);
 }
 

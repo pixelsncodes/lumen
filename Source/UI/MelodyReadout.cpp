@@ -64,18 +64,19 @@ void MelodyReadout::SeedLabel::textWasEdited()
 void MelodyReadout::LockToggle::paint (juce::Graphics& g)
 {
     const bool locked = shared.processor.melodyController().locked();
+    const float dim = isEnabled() ? 1.0f : 0.4f;
     const auto bounds = getLocalBounds().toFloat();
-    g.setColour (locked ? theme::neonYellow.withAlpha (0.22f) : theme::well.withAlpha (0.75f));
+    g.setColour ((locked ? theme::neonYellow.withAlpha (0.22f) : theme::well.withAlpha (0.75f)).withMultipliedAlpha (dim));
     g.fillRoundedRectangle (bounds, 4.0f);
-    g.setColour (locked ? theme::neonYellow : theme::hairline);
+    g.setColour ((locked ? theme::neonYellow : theme::hairline).withMultipliedAlpha (dim));
     g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
     drawLockGlyph (g, bounds.reduced (bounds.getWidth() * 0.28f),
-                   locked ? theme::neonYellow : theme::textSecondary);
+                   (locked ? theme::neonYellow : theme::textSecondary).withMultipliedAlpha (dim));
 }
 
 void MelodyReadout::LockToggle::mouseUp (const juce::MouseEvent& e)
 {
-    if (! getLocalBounds().contains (e.getPosition()))
+    if (! isEnabled() || ! getLocalBounds().contains (e.getPosition()))
         return;
     auto& m = shared.processor.melodyController();
     m.setLocked (! m.locked());
@@ -254,6 +255,15 @@ void MelodyReadout::animate()
     }
     if (! active)
         return;
+
+    const bool imageActive = m.hasImageSource();
+    if (imageActive != imageActiveCache)
+    {
+        imageActiveCache = imageActive;
+        seedLabel.setEnabled (imageActive);
+        lockToggle.setEnabled (imageActive);
+        repaint();
+    }
 
     juce::String composed;
     composed << m.detectedKey() << '|' << m.moodText() << '|' << m.formText() << '|' << m.seed();

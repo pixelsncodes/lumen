@@ -12,6 +12,8 @@
 //              [--melody]              (generate + open the MELODY panel)
 //              [--melody-seed <hex>]   (pin the melody RNG seed first, so
 //                                       showcase assets reproduce exactly)
+//              [--melody-lock]         (engage the master seed lock, for
+//                                       screenshotting the REGENERATE padlock)
 //              [--melody-export <base>](write base.mid + base.txt generation
 //                                       summary — RC showcase gallery)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
@@ -209,6 +211,10 @@ public:
                             static_cast<juce::uint64> (args[seedIndex + 1].getHexValue64()));
                         mc.applyState();
                     }
+                    // --melody-lock: engage the master seed lock (reproducible
+                    // screenshots of the REGENERATE padlock indicator).
+                    if (args.contains ("--melody-lock"))
+                        mc.setLocked (true);
                     mc.generate();
                     mc.setPanelActive (true);
                     printToStdout ("Melody: key='" + mc.detectedKey()

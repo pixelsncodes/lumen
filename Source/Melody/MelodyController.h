@@ -55,6 +55,12 @@ public:
     juce::uint64 seed() const noexcept { return seedValue; }
     bool isPlaying() const;
     bool hasMelody() const noexcept { return ! currentSeq.steps.empty(); }
+    // Whether the Lens image generate()/regenerate()/mutate() would sample
+    // from currently exists (mirrors renderFresh()'s own no-op check). UI
+    // uses this to disable/dim generation controls when there's nothing to
+    // generate from, while leaving playback of an already-generated melody
+    // (PLAY/LOOP/export) unaffected.
+    bool hasImageSource() const;
     juce::String detectedKey() const { return currentSeq.keyName; }
     // Generation summary (Phase 5): what the engine detected and chose, built
     // from the KeyDetection/phrase provenance at generate() time (never

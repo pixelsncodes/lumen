@@ -2611,6 +2611,13 @@ public:
         MelodyController melody (processor.apvts, lens, player);
         expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
 
+        beginTest ("hasImageSource() reflects whether the Lens image exists");
+        expect (melody.hasImageSource(), "true once an image is loaded");
+        lens.removeImage (0);
+        expect (! melody.hasImageSource(), "false again once the image is removed");
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image reloads");
+        expect (melody.hasImageSource(), "true again after reloading");
+
         beginTest ("setSeed pins the seed and reproduces byte-identically");
         melody.setSeed (12345u);
         const auto seedA  = melody.seed();
@@ -2637,6 +2644,21 @@ public:
         const auto beforeUnlock = melody.seed();
         melody.regenerate();
         expect (melody.seed() != beforeUnlock, "unlocked REGENERATE draws a fresh seed");
+
+        beginTest ("locked REGENERATE across a mode change: same seed, new (mode-driven) sequence");
+        melody.setLocked (true);
+        if (auto* modeParam = processor.apvts.getParameter (params::melodyMode))
+            modeParam->setValueNotifyingHost (modeParam->convertTo0to1 (2.0f)); // Arp
+        melody.regenerate();
+        const auto arpSeed  = melody.seed();
+        const auto arpSteps = melody.sequence().steps;
+        if (auto* modeParam = processor.apvts.getParameter (params::melodyMode))
+            modeParam->setValueNotifyingHost (modeParam->convertTo0to1 (0.0f)); // Melody
+        melody.regenerate();
+        expectEquals (melody.seed(), arpSeed,
+                      "the master lock pins the seed across a mode change (Arp -> Melody)");
+        expect (! sameNotes (melody.sequence().steps, arpSteps),
+                "but REGENERATE is fully functional: the mode change still produces a new sequence");
 
         beginTest ("master lock + seed round-trip through saved state");
         melody.setLocked (true);
