@@ -1,6 +1,7 @@
 #include "UI/Cards.h"
 
 #include "Lens/LensController.h"
+#include "Melody/MelodyController.h"
 #include "State/PresetManager.h"
 #include "UI/Theme.h"
 
@@ -786,10 +787,12 @@ PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
       notes (keyboardState),
       waterfall (sharedContext, history),
       lensPanel (sharedContext, false),
+      readout (sharedContext),
       keyboard (keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     addAndMakeVisible (waterfall);
     addAndMakeVisible (lensPanel);
+    addChildComponent (readout); // hidden until animate() sees hasMelody()
 
     const char* macroIds[] = { "macro1", "macro2", "macro3", "macro4" };
     const char* macroNames[] = { "Tone", "Motion", "Space", "Texture" };
@@ -805,13 +808,36 @@ PlayView::PlayView (const UiShared& sharedContext, const AudioHistory& history,
 void PlayView::resized()
 {
     waterfall.setBounds (16, 12, 740, 288);
-    lensPanel.setBounds (764, 12, 260, 288);
+    layoutLensColumn();
 
     for (int m = 0; m < 4; ++m)
         macroKnobs[m]->setBounds (300 + m * 110, 316, 110, 148);
 
     keyboard.setBounds (16, 484, 1008, 116);
     keyboard.setKeyWidth ((float) keyboard.getWidth() / 15.0f); // 15 white keys
+}
+
+void PlayView::layoutLensColumn()
+{
+    // Normal dock: same rect the Lens panel has always used, readout directly
+    // beneath it (clear of the macro knob row, which ends at x=740). While the
+    // melody side panel is open, that rect sits entirely underneath it (side
+    // panel right-docks at kPanelWidth from the right edge, 316 wide) — so
+    // both the Lens image and the GENERATED readout beneath it would be
+    // hidden. The readout's row is shared with the macro knobs (x 300-740),
+    // so sliding the column only as far as clearing the side panel would land
+    // it on top of them; instead slide all the way to the left edge, clear of
+    // both the knobs and the side panel. It's allowed to overlap the
+    // waterfall/spectrogram display either way.
+    constexpr int kLensW = 260, kLensH = 288, kLensY = 12;
+    constexpr int kLensNormalX = 764, kLensOpenX = 16;
+    constexpr int kReadoutY = 304, kReadoutBottom = 476; // clears the keyboard (y 484) by 8px
+
+    const bool sidePanelOpen = shared.processor.melodyController().isPanelActive();
+    const int lensX = sidePanelOpen ? kLensOpenX : kLensNormalX;
+
+    lensPanel.setBounds (lensX, kLensY, kLensW, kLensH);
+    readout.setBounds (lensX, kReadoutY, kLensW, kReadoutBottom - kReadoutY);
 }
 
 void PlayView::paint (juce::Graphics& g)
@@ -862,6 +888,16 @@ void PlayView::animate()
 
     waterfall.animate (audioActive);
     lensPanel.animate();
+    readout.animate();
+
+    // Reposition the Lens column (image + readout) when the melody side
+    // panel opens/closes, so they stay clear of it (or restore on close).
+    const bool sidePanelOpen = shared.processor.melodyController().isPanelActive();
+    if (sidePanelOpen != sidePanelOpenCache)
+    {
+        sidePanelOpenCache = sidePanelOpen;
+        layoutLensColumn();
+    }
 
     // Keyboard follow: scan the sounding notes once per tick. If any sounding
     // note is visible the window must not move (a held key sliding under the

@@ -4,6 +4,7 @@
 
 #include "UI/LensPanel.h"
 #include "UI/LumenLookAndFeel.h"
+#include "UI/MelodyReadout.h"
 #include "UI/Visualizers.h"
 
 // SPEC section 14 Deep/Play view building blocks. The whole UI is laid out
@@ -280,11 +281,18 @@ public:
     void animate();
 
 private:
+    // Repositions lensPanel + readout along x: normal dock, or shifted left
+    // (may overlap the waterfall) while the melody side panel is open, so
+    // both stay fully visible instead of sitting underneath it.
+    void layoutLensColumn();
+
     UiShared shared;
     juce::MidiKeyboardState& notes;
     WaterfallView waterfall;
     LensPanel lensPanel; // the drop zone is the real Lens panel
+    MelodyReadout readout; // GENERATED block below the Lens image
     juce::OwnedArray<ModKnob> macroKnobs;
     FlatKeyboard keyboard;
     bool leftArrowLit = false, rightArrowLit = false;
+    bool sidePanelOpenCache = false;
 };

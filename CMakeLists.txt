@@ -120,6 +120,7 @@ set(LUMEN_PLUGIN_SOURCES
     Source/UI/LensPanel.cpp
     Source/UI/MelodyPanel.cpp
     Source/UI/MelodySidePanel.cpp
+    Source/UI/MelodyReadout.cpp
     Source/UI/Cards.cpp
     Source/UI/PluginEditor.cpp
     ${LUMEN_ENGINE_SOURCES}
@@ -148,6 +149,7 @@ target_sources(Lumen PRIVATE
     Source/UI/LensPanel.h
     Source/UI/MelodyPanel.h
     Source/UI/MelodySidePanel.h
+    Source/UI/MelodyReadout.h
     Source/UI/Cards.h
     Source/UI/PluginEditor.h
     Source/Engine/UiTap.h

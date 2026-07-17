@@ -50,10 +50,14 @@ LumenAudioProcessorEditor::LumenAudioProcessorEditor (LumenAudioProcessor& proce
     playView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     deepView->setBounds (0, 48, kBaseWidth, kBaseHeight - 48);
     // The side panel overlays the right edge of the fixed content canvas at its
-    // logical width and full content height; the whole content scales as one
-    // unit on window resize, so the panel scales with everything else.
+    // logical width, ending above the keyboard (kBaseHeight - 48 header - 116
+    // keyboard - 10 gap = 522, alongside the keyboard's fixed y=532 in
+    // PlayView) rather than running the full content height, so the keyboard
+    // stays fully visible while the panel is open. The whole content scales
+    // as one unit on window resize, so the panel scales with everything else.
+    constexpr int kSidePanelHeight = 522;
     melodySidePanel->setBounds (kBaseWidth - MelodySidePanel::kPanelWidth, 0,
-                                MelodySidePanel::kPanelWidth, kBaseHeight);
+                                MelodySidePanel::kPanelWidth, kSidePanelHeight);
     addAndMakeVisible (content);
 
     keyboardState.addListener (this);

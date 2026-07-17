@@ -537,3 +537,151 @@ untouched — the panel is a docked overlay on the fixed 1040×660 content canva
   the left of the panel; the Lens (and its master knob/meter on the header
   right) sit underneath the docked panel while it is open — the accepted
   consequence of overlay-not-resize; everything is reachable again on close.
+
+---
+
+## Phase 3 — Info readout under the image (Sonnet)
+
+Executed against the session's overriding decisions (not PLAN.md's original
+Phase 3 wording): two layout fixes were bundled in with the readout build,
+both driven by Phase 2's accepted "overlay, not resize" consequence colliding
+with things Phase 3 needed to keep visible.
+
+### Layout fix A — Lens column repositions around the open side panel
+
+`PlayView::layoutLensColumn()` (`Source/UI/Cards.cpp`) now computes the Lens
+panel's x each time the side panel's open/closed state changes (polled once
+per `PlayView::animate()` tick, edge-triggered, same "poll + diff" idiom as
+everything else in this codebase — not a new mechanism):
+- Closed: unchanged normal dock, x=764 (same rect Phase 2 always used).
+- Open: **x=16, flush against the left edge** — not merely "just clear of the
+  side panel" as the decision's wording first suggests. The GENERATED readout
+  (this phase's new component, directly below the Lens image) shares its row
+  with the four macro knobs (Tone/Motion/Space/Texture, fixed at x 300-740).
+  Sliding the column only as far as clearing the side panel (kPanelWidth=316
+  from the right edge, i.e. x≈456) would have landed the readout squarely on
+  top of those knobs — caught via an actual screenshot diff, not by
+  inspection; see Surprises below. x=16 clears both the knob row and the side
+  panel, at the cost of fully overlapping the waterfall/spectrogram on that
+  side, which the decision explicitly permits.
+- Restoring on close is automatic: the same edge-triggered poll fires the
+  other direction when `isPanelActive()` goes false.
+
+### Layout fix B — side panel ends above the keyboard
+
+`MelodySidePanel` now docks at height 522 instead of the full content height
+660 (`PluginEditor.cpp`: `kSidePanelHeight = 522`, chosen so its bottom edge
+sits 10px above the keyboard's fixed y=532 in `PlayView`). All spacing inside
+`MelodySidePanel::resized()` was tightened to fit ten sections (transport
+through EXPORT) into the smaller height — padding 14→10, close-button
+clearance 18→14, section gaps 14→9/8, FEEL knob row 62→54, action/export rows
+trimmed a few px each. Verified by screenshot, not just arithmetic: every
+section renders with no clipping, ~20px of slack remains at the bottom edge.
+
+### GENERATED readout — new component, not a port-in-place
+
+New `Source/UI/MelodyReadout.{h,cpp}`, a `juce::Component` living in
+`PlayView` (not inside `LensPanel` itself — the mockup draws it as a plain,
+unbordered text block sitting below the Lens card's frame, not inside it).
+Positioned directly under the Lens image at whatever x `layoutLensColumn()`
+currently has the Lens panel at, so the two always move together.
+
+- **KEY / MOOD / FORM**: painted directly in `paint()` from
+  `MelodyController::detectedKey()/moodText()/formText()`, same em-dash-for-
+  empty styling as the old popup's summary block.
+- **SEED**: a custom `juce::Label` subclass (`SeedLabel`) with
+  `setEditable(true, false, true)` — single click to edit, and
+  `lossOfFocusDiscardsChanges=true` so JUCE's own `Label::hideEditor` reverts
+  cleanly (built-in, no revert code needed) if the user clicks away without
+  pressing Return. `editorShown()` restricts input to 1-8 hex chars
+  (`setInputRestrictions(8, "0123456789abcdefABCDEF")`); `textWasEdited()`
+  parses via `getHexValue64()` and calls `MelodyController::setSeed()` only
+  if the committed text is non-empty (empty commit = Return on a
+  fully-deleted field — same as a discard, just routed through the "commit"
+  path instead of the "escape" path per JUCE's `Label::textEditorReturnKeyPressed`,
+  so it's handled explicitly rather than relying on the discard flag). After
+  any commit the label always resyncs to `MelodyController::seed()` reformatted
+  as 8 lowercase hex digits (`toHexString().paddedLeft('0', 8).toLowerCase()`),
+  so what's on screen is always the controller's actual value, never raw
+  user input.
+- **Lock padlock**: `LockToggle`, a small custom `juce::Component` (not
+  `ParamToggle` — the master seed lock is plain `MelodyController` state, not
+  an APVTS bool param) bound directly to `locked()`/`setLocked()`. Same
+  padlock glyph MelodySidePanel already draws over REGENERATE when locked
+  (local copy of `drawLockGlyph`, same as the existing `styleChip` duplication
+  pattern — promote both alongside the Phase 5 cleanup). Because both
+  MelodySidePanel's REGENERATE indicator and this toggle read/write the same
+  `MelodyController::lockedFlag` through the same getter/setter, toggling the
+  lock from either side is guaranteed to update the other on the next
+  `animate()` tick — single source of truth, no new synchronization code
+  needed. (Verified by code inspection, not a live click-through — the
+  `--screenshot` harness captures one static frame and has no CLI flag to
+  pre-set the lock or simulate a click; a real interactive check in a DAW/
+  standalone is still worth a quick look at the user gate.)
+- **TRANSPOSE / OCTAVE steppers**: ported byte-for-byte in behavior from the
+  old popup (`nudgeParam`/`intParam` helpers, same ±12 semitone / ±2 octave
+  clamps, same "TRANSPOSE"/value-in-the-same-rect paint idiom). Both params
+  are (re-)registered via `shared.registerAttachment()` here since the old
+  `MelodyPanel` that used to register them is dead code (Phase 2) and never
+  constructed — confirmed via `--check-params`: 115/115 attached, 0 missing.
+- **Visibility**: the whole block hides via `setVisible(false)` when
+  `hasMelody()` is false, shown otherwise — polled in `animate()`, edge-
+  triggered. Caught a real bug here (see Surprises): must be added to
+  `PlayView` with `addChildComponent`, not `addAndMakeVisible` — the latter
+  unconditionally calls `setVisible(true)` on the child, overriding the
+  constructor's initial hidden state.
+
+### Dead popup readout/stepper paths — noted for Phase 5, not deleted
+
+`Source/UI/MelodyPanel.cpp`'s summary-block paint code (`summaryArea`,
+`transposeLabelArea`/`octaveLabelArea`, the GENERATED rows, the transpose/
+octave stepper buttons and their `nudgeTranspose`/`nudgeOctave` lambdas) is
+now **fully superseded** by `MelodyReadout` and has been dead since Phase 2
+made the whole `MelodyPanel` class unconstructed. Left in place per the
+existing Phase 2 leftover-for-Phase-5 note (`melodygrid` in the same TU is
+still live, used by `LensPanel.cpp`) — Phase 5 should delete the summary/
+stepper code (and the `summaryCache`/`transposeCache`/`octaveCache` members
+that back it) in the same pass that extracts `melodygrid` into its own file.
+
+### Surprises
+
+1. **The layout-fix-A x target isn't "just clear the side panel"** — the
+   decision's own wording undersold it. The readout's row is shared with the
+   fixed macro-knob strip (x 300-740), which the side panel alone doesn't
+   overlap but a merely-side-panel-clearing Lens shift (x≈456) does. Only
+   caught by rendering an actual `--screenshot` and looking at it — the
+   knobs and the readout's "GENERATED"/"F Dorian"/etc. text were overlapping
+   in the first render. Fixed by moving the whole open-state column flush to
+   the left edge (x=16) instead.
+2. **`addAndMakeVisible` vs `addChildComponent` for a self-hiding child.**
+   `MelodyReadout`'s constructor calls `setVisible(false)` so it starts
+   hidden until a melody exists, but `PlayView`'s original
+   `addAndMakeVisible(readout)` silently re-visibled it on add (JUCE's
+   documented behavior, easy to forget) — the first closed-panel-no-melody
+   screenshot showed the whole block rendered with dashes/blank SEED instead
+   of nothing. Same fix pattern the codebase already uses for
+   `deepView`/`melodySidePanel` (`addChildComponent`, not
+   `addAndMakeVisible`) — should have matched it from the start.
+3. Both surprises were caught by the "build, screenshot, actually look"
+   verification step this repo's CLAUDE.md requires, not by code review —
+   worth remembering neither would show up in a compile or the unit-test
+   suite (no DSP touched this phase, so `lumen_tests`/`lumen_render --analyze`
+   were unaffected and stayed green throughout).
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite → `ALL TESTS PASSED` (no DSP changed
+  this phase; this just confirms nothing else regressed).
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`.
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- Screenshots (`--view play --lens-image busy.png`, with/without
+  `--melody`/`--melody-seed 1234ABCD`): (a) side panel closed, no melody —
+  readout correctly absent, Lens panel at its normal x=764; (b) side panel
+  open with a melody — Lens image + full GENERATED readout (KEY/MOOD/FORM/
+  SEED "1234abcd"/padlock/TRANSPOSE/OCTAVE) fully visible at x=16, no
+  overlap with the macro knobs, all ten side-panel sections visible with no
+  clipping, keyboard fully visible below the shortened side panel.
+- `lumen_render --preset init --analyze`: nan_count 0, metrics unchanged
+  from prior phases (no DSP touched).

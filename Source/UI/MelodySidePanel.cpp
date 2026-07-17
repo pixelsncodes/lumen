@@ -231,44 +231,48 @@ void MelodySidePanel::resized()
 {
     sectionLabels.clear();
 
-    auto area = getLocalBounds().reduced (16, 14);
+    // Tightened spacing (Phase 3 layout fix B): the panel now ends above the
+    // keyboard instead of running full content height, so every gap here is
+    // trimmed from the original popup-derived spacing to keep all ten
+    // sections on-screen without clipping.
+    auto area = getLocalBounds().reduced (16, 10);
 
-    closeButton.setBounds (getWidth() - 30, 10, 20, 20);
-    area.removeFromTop (18); // clear the close-button strip
+    closeButton.setBounds (getWidth() - 30, 8, 20, 20);
+    area.removeFromTop (14); // clear the close-button strip
 
     // Row / captioned-section helpers, mirroring the popup's layout idiom.
-    auto row = [&area] (int h, int gap = 12)
+    auto row = [&area] (int h, int gap = 8)
     {
         auto r = area.removeFromTop (h);
         area.removeFromTop (gap);
         return r;
     };
-    auto section = [&] (const juce::String& caption, int h, int gap = 14)
+    auto section = [&] (const juce::String& caption, int h, int gap = 9)
     {
-        auto cap = area.removeFromTop (13);
+        auto cap = area.removeFromTop (12);
         sectionLabels.emplace_back (caption, cap);
-        area.removeFromTop (3);
+        area.removeFromTop (2);
         return row (h, gap);
     };
 
     // Transport (no caption): PLAY with the LOOP chip beside it.
-    auto transportRow = row (34, 16);
-    loopToggle->setBounds (transportRow.removeFromRight (76));
-    transportRow.removeFromRight (10);
+    auto transportRow = row (28, 10);
+    loopToggle->setBounds (transportRow.removeFromRight (72));
+    transportRow.removeFromRight (8);
     playButton.setBounds (transportRow);
 
-    modeTabs.setBounds    (section ("MODE",   24));
-    keyModeTabs.setBounds (section ("KEY",    24));
-    lengthTabs.setBounds  (section ("LENGTH", 24));
+    modeTabs.setBounds    (section ("MODE",   22));
+    keyModeTabs.setBounds (section ("KEY",    22));
+    lengthTabs.setBounds  (section ("LENGTH", 22));
 
     // SHAPE: phrase toggle (Melody) and arp direction (Arp) share one row;
     // animate() shows whichever the current mode uses.
-    auto shapeRow = section ("SHAPE", 24);
+    auto shapeRow = section ("SHAPE", 22);
     phraseTabs.setBounds (shapeRow);
     arpPatternTabs.setBounds (shapeRow);
 
     // FEEL: five macro knobs across the column.
-    auto knobs = section ("FEEL", 62);
+    auto knobs = section ("FEEL", 54);
     const int kw = knobs.getWidth() / 5;
     energyKnob->setBounds     (knobs.removeFromLeft (kw).reduced (2, 0));
     complexityKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
@@ -276,22 +280,22 @@ void MelodySidePanel::resized()
     repetitionKnob->setBounds (knobs.removeFromLeft (kw).reduced (2, 0));
     densityKnob->setBounds    (knobs.reduced (2, 0));
 
-    loopTabs.setBounds (section ("LOOP LENGTH", 24));
+    loopTabs.setBounds (section ("LOOP LENGTH", 22));
 
     // SEED: the three regeneration locks, then the two regeneration actions.
-    auto lockRow = section ("SEED", 24, 12);
+    auto lockRow = section ("SEED", 22, 8);
     const int lw = lockRow.getWidth() / 3;
     lockRhythm->setBounds  (lockRow.removeFromLeft (lw).withTrimmedRight (4));
     lockPitch->setBounds   (lockRow.removeFromLeft (lw).withTrimmedRight (4));
     lockHarmony->setBounds (lockRow);
 
-    auto actionRow = row (34, 14);
+    auto actionRow = row (28, 10);
     regenerateButton.setBounds (actionRow.removeFromLeft (actionRow.getWidth() / 2 - 4));
     mutateButton.setBounds     (actionRow.removeFromRight (actionRow.getWidth()));
     regenerateBounds = regenerateButton.getBounds();
 
     // EXPORT: drag handle + save.
-    auto exportRow = section ("EXPORT", 34, 0);
+    auto exportRow = section ("EXPORT", 26, 0);
     dragMidi.setBounds (exportRow.removeFromLeft (exportRow.getWidth() / 2 - 4));
     saveButton.setBounds (exportRow.removeFromRight (exportRow.getWidth()));
 }
