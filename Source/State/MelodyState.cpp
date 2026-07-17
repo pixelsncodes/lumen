@@ -94,12 +94,27 @@ void storeSequence (juce::ValueTree& state, const melody::Sequence& seq)
 
     // Compact CSV: one "note,vel,start,len,col,row" record per step, ';'
     // separated. At <=32 notes this stays tiny and human-inspectable.
+    //
+    // velocity/startBeats/lengthBeats must round-trip exactly (a restored
+    // melody has to export byte-identical MIDI to the one that was saved —
+    // MelodyState.h's whole point). juce::String's operator<< for a bare
+    // double/float goes through String(number) with numberOfDecimalPlaces=0,
+    // which skips setting fixed-point precision and falls back to the
+    // default C++ iostream precision of 6 *significant digits* — enough to
+    // silently truncate a generated beat position like 12.333333333333334 to
+    // "12.3333" on every save. Passing an explicit decimal-place count forces
+    // fixed-point formatting with real precision: 9 places safely round-trips
+    // a float (~7 significant digits) in the 0..1 velocity range, and 15
+    // safely round-trips a double (~15-17 significant digits) at the beat-
+    // position magnitudes this sequence ever reaches (a handful of bars).
     juce::String csv;
-    csv.preallocateBytes (seq.steps.size() * 24);
+    csv.preallocateBytes (seq.steps.size() * 40);
     for (const auto& s : seq.steps)
     {
-        csv << s.note << ',' << s.velocity << ',' << s.startBeats << ','
-            << s.lengthBeats << ',' << s.col << ',' << s.row << ';';
+        csv << s.note << ',' << juce::String (s.velocity, 9) << ','
+            << juce::String (s.startBeats, 15) << ','
+            << juce::String (s.lengthBeats, 15) << ','
+            << s.col << ',' << s.row << ';';
     }
     node.setProperty (kSteps, csv, nullptr);
     tree.appendChild (node, nullptr);

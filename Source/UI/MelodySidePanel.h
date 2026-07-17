@@ -108,5 +108,12 @@ private:
     bool generationActiveCache = true;
     juce::Rectangle<int> hintArea;
 
+    // Export gating: DRAG MIDI and SAVE .MID both disable/dim on the same
+    // condition, MelodyController::hasMelody() — independent of the no-image
+    // gate above, so a previously generated melody stays exportable with no
+    // image loaded. Re-checked each animate() tick, same edge-triggered
+    // "poll + diff" idiom as generationActiveCache.
+    bool exportActiveCache = true;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MelodySidePanel)
 };

@@ -14,6 +14,9 @@
 //                                       showcase assets reproduce exactly)
 //              [--melody-lock]         (engage the master seed lock, for
 //                                       screenshotting the REGENERATE padlock)
+//              [--melody-remove-image] (drop the Lens image right after
+//                                       generating, for screenshotting the
+//                                       no-image-but-has-a-melody state)
 //              [--melody-export <base>](write base.mid + base.txt generation
 //                                       summary — RC showcase gallery)
 //   Lumen.exe --check-params            (JSON: APVTS params not reachable in the UI)
@@ -216,6 +219,14 @@ public:
                     if (args.contains ("--melody-lock"))
                         mc.setLocked (true);
                     mc.generate();
+                    // --melody-remove-image: drop the Lens image right after
+                    // generating, so the screenshot shows the Phase 6 no-image
+                    // state with a melody already on hand (as after a project
+                    // reload with no live image) — generation controls dim,
+                    // export controls stay enabled.
+                    if (args.contains ("--melody-remove-image"))
+                        lumenProcessor->lensController().removeImage (
+                            lumenProcessor->lensController().target());
                     mc.setPanelActive (true);
                     printToStdout ("Melody: key='" + mc.detectedKey()
                                    + "' notes=" + juce::String ((int) mc.sequence().steps.size())

@@ -1087,3 +1087,122 @@ dev-only flags; no prior way existed to reach this state without a live click.
   along the panel boundary — none found; the only yellow near the edge is
   the pre-existing DRAG MIDI drag-handle outline (unrelated, confirmed by
   crop inspection).
+
+---
+
+## Phase 7 — MIDI export gating + a real restore-fidelity bug (`ui/panel-polish`)
+
+Follow-up task: fix MIDI export gating consistency and diagnose a suspected
+restore bug (`MelodyController::hasMelody()` possibly false after a state
+reload, if restore repopulated the audio-thread player but not
+`currentSeq`).
+
+### Diagnosis: the suspected bug does not reproduce — a different, real one does
+
+Added `MelodyRestoreExportTest` (`Tools/Tests/TestsMain.cpp`) that
+generates a melody, serializes state, hands it to a **freshly-constructed**
+`MelodyController` (a second object, not a re-`applyState()` on the same
+instance — the existing `MelodySeedLockTest`/`MelodyPanelOpenNotPersistedTest`
+coverage only exercised the latter, which can't catch a `currentSeq`-not-
+restored bug because the same object's `currentSeq` is already populated
+from before the "restore"), and checks `hasMelody()` plus an exact
+byte-for-byte step comparison against the original.
+
+- **`hasMelody()` is correctly `true` immediately after restore.**
+  `MelodyController::applyState()` (`Source/Melody/MelodyController.cpp:533-552`)
+  already does `currentSeq = restored;` when `melodystate::loadSequence()`
+  succeeds — the suspected desync between "restore repopulates playback but
+  not `currentSeq`" doesn't exist in this code path. `writeTempMidiFile()`/
+  `saveMidiFile()`/`hasMelody()` all read `currentSeq` directly
+  (`MelodyController.cpp:57,481-531`), so once `currentSeq` is right,
+  everything downstream of it is right too.
+- **But the restored *step data* didn't match the original, byte-for-byte** —
+  caught by the test's `MelodySeedLockTest::sameNotes()` comparison, which
+  failed on the very first run. Root cause: `MelodyState.cpp::storeSequence()`
+  serializes each step's `velocity`/`startBeats`/`lengthBeats` via
+  `juce::String`'s `operator<<`, which — for a bare `double`/`float` with no
+  explicit decimal-place count — falls back to the **default C++ iostream
+  precision of 6 significant digits** (`juce_String.cpp:481-505`:
+  `numDecPlaces == 0` skips setting fixed-point precision entirely, so
+  `o << n` uses whatever `std::ostream`'s default is). A generated beat
+  position like `12.333333333333334` silently truncated to `"12.3333"` on
+  every save. This was invisible to every prior persistence test because
+  they all compared MIDI-exported *bytes* (480-PPQ tick-quantized, coarse
+  enough to usually mask sub-tick drift) or reused the same live controller
+  instance (never round-tripping through text at all) — never the raw stored
+  `double`s against a fresh restore.
+- **Fix**: `Source/State/MelodyState.cpp` now formats `velocity` with 9
+  explicit decimal places and `startBeats`/`lengthBeats` with 15, via
+  `juce::String (value, numberOfDecimalPlaces)` — forcing fixed-point
+  formatting with enough digits to round-trip a `float` (~7 significant
+  digits) and a `double` (~15-17 significant digits) exactly at the beat-
+  position magnitudes this sequence ever reaches. CSV format/parser
+  (`loadSequence`) is untouched — `getDoubleValue()`/`getFloatValue()` parse
+  any decimal-place count, so old saved sessions still load fine.
+- This is a genuinely different bug than the one suspected, but squarely in
+  scope of "a restored melody must be exportable identically to a fresh
+  one" — MIDI's tick quantization happened to mask it today, but nothing
+  guaranteed that for every possible beat value, and `MelodyState.h`'s own
+  documented contract ("a saved project recalls the *exact same* melody")
+  was silently violated at the sub-tick level before this fix.
+
+### MIDI export gating (`Source/UI/MelodySidePanel.{h,cpp}`)
+
+Both export controls now disable/dim consistently on
+`MelodyController::hasMelody()`, independent of the Phase 6 no-image gate
+(`hasImageSource()`) — export doesn't need a live image, only a generated
+sequence, so a restored melody with no image loaded keeps both enabled.
+
+- New `exportActiveCache` member (`MelodySidePanel.h`), polled in
+  `animate()` alongside the existing `generationActiveCache` edge-trigger:
+  on change, calls `dragMidi.setEnabled()`/`saveButton.setEnabled()` and
+  repaints.
+- **`MidiDragSource`** (the DRAG MIDI handle) previously recomputed
+  `hasMelody()` fresh in `paint()` only — the dim look was cosmetic, and
+  `mouseDrag()` had no gate at all (it relied on `writeTempMidiFile()`
+  happening to return an empty `juce::File{}` when there was nothing to
+  export, which incidentally no-op'd the drag but wasn't an explicit
+  contract). Now `paint()` reads `isEnabled()` (driven by the `animate()`
+  poll above, single source of truth) and `mouseDrag()` explicitly checks
+  `isEnabled()` first and returns before even considering starting a drag —
+  no more relying on a downstream function's return value to prevent a
+  drag gesture.
+- **`saveButton`** (SAVE .MID) previously had no gating at all — always
+  full brightness, `onClick` always opened the save dialog regardless of
+  `hasMelody()` (confirmed by inspection before this fix: no `setEnabled()`
+  call anywhere, no check inside the lambda). It now dims via the same
+  `LumenLookAndFeel::drawButtonBackground`/text-alpha mechanism every other
+  disabled button in the panel already uses (Phase 6), and — because JUCE's
+  `Button` internals gate `onClick` on `isEnabled()` themselves
+  (`juce_Button.cpp:297`) — `setEnabled(false)` alone is sufficient to stop
+  the file chooser from opening; no redundant check needed inside the
+  lambda, matching how `regenerateButton`/`mutateButton`/etc. are already
+  gated in this file.
+
+### Verification
+
+- Build: VST3 + Standalone + tests all built clean (Release, `/W4`
+  warnings-as-errors).
+- Tests: full `lumen_tests.exe` suite -> `ALL TESTS PASSED` (151 sub-tests),
+  including the new `MelodyRestoreExportTest` (hasMelody() after restore,
+  byte-for-byte step match, `writeTempMidiFile()`/`saveMidiFile()` both
+  produce non-empty output matching the original export).
+- `--check-params`: `{"total_params":115,"attached":115,"missing":[]}`
+  (unchanged).
+- `lumen_render --preset init --analyze`: nan_count 0, metrics unchanged
+  (no DSP touched).
+- `pluginval --strictness-level 10`: `SUCCESS`.
+- New Standalone CLI flag `--melody-remove-image` (drops the Lens image
+  right after generating, simulating "melody exists, no live image" without
+  needing a real saved project file) enabled three screenshots:
+  - `export_none.png` — no image, no melody: DRAG MIDI **and** SAVE .MID
+    both dim (previously SAVE .MID stayed full-brightness here regardless —
+    visually confirms the SAVE .MID gating bug this phase fixed).
+  - `export_with_image.png` — image + melody: both export controls fully
+    active.
+  - `export_no_image_has_melody.png` — melody generated, then image
+    removed: MODE/KEY/LENGTH/SHAPE/FEEL/LOOP LENGTH/SEED locks/REGENERATE/
+    MUTATE and the GENERATED readout's seed edit/lock all dim (Phase 6's
+    image gate), while DRAG MIDI and SAVE .MID stay fully enabled (this
+    phase's melody gate) — confirms the two gates are independent, exactly
+    as required.

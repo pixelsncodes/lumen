@@ -2718,6 +2718,71 @@ public:
     }
 };
 
+// Panel polish follow-up: a restored melody (a freshly-constructed controller,
+// simulating a real DAW project reload) must be exportable exactly like a
+// melody that was just generated in the current session. hasMelody(),
+// writeTempMidiFile() and saveMidiFile() all read MelodyController::currentSeq
+// directly, and applyState() populates it from the persisted SEQ node — this
+// pins that contract so a future refactor can't silently decouple restore
+// from export again.
+class MelodyRestoreExportTest final : public juce::UnitTest
+{
+public:
+    MelodyRestoreExportTest()
+        : juce::UnitTest ("A restored melody exports identically to a fresh one", "Melody") {}
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        engine.prepare (48000.0, 480);
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        beginTest ("a melody is generated and exports non-empty MIDI bytes");
+        melody.generate();
+        expect (melody.hasMelody(), "melody generated before saving");
+        const auto originalSteps = melody.sequence().steps;
+        const auto originalBytes = melody.toMidiBytes();
+        expect (! originalBytes.empty(), "the original melody exports non-empty MIDI bytes");
+
+        beginTest ("state serializes and is handed to a freshly-constructed controller "
+                  "(simulating a real plugin reload, not a re-applyState() on the same object)");
+        const auto xml = processor.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes");
+        if (xml != nullptr)
+            processor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+
+        MelodyPlayer reloadedPlayer (engine);
+        MelodyController reloaded (processor.apvts, lens, reloadedPlayer);
+        reloaded.applyState();
+
+        beginTest ("hasMelody() is true immediately after restore, with no generate() call");
+        expect (reloaded.hasMelody(),
+                "a freshly-constructed controller reports hasMelody() straight after applyState()");
+        expect (MelodySeedLockTest::sameNotes (reloaded.sequence().steps, originalSteps),
+                "the restored note sequence matches what was saved, byte-for-byte");
+
+        beginTest ("writeTempMidiFile() on the restored controller matches the original export");
+        const juce::File file = reloaded.writeTempMidiFile();
+        expect (file != juce::File(), "writeTempMidiFile() returns a valid file for a restored melody");
+        expect (file.existsAsFile() && file.getSize() > 0, "the temp MIDI file is non-empty");
+        expect (reloaded.toMidiBytes() == originalBytes,
+                "restored export bytes are identical to the original melody's export bytes");
+        file.deleteFile();
+
+        beginTest ("saveMidiFile() on the restored controller succeeds and writes matching bytes");
+        const juce::File dest = juce::File::createTempFile (".mid");
+        expect (reloaded.saveMidiFile (dest), "saveMidiFile() succeeds for a restored melody");
+        expect (dest.existsAsFile() && dest.getSize() > 0, "the saved file is non-empty");
+        dest.deleteFile();
+    }
+};
+
 // RC pass: every melody parameter — including the Phase 5 additions — must
 // survive a full APVTS state round-trip with a non-default value. This is the
 // save/load contract for the whole melody surface in one pin.
@@ -2994,6 +3059,7 @@ MelodyParamRoundtripTest melodyParamRoundtripTest;
 MelodyTortureTest melodyTortureTest;
 MelodySeedLockTest melodySeedLockTest;
 MelodyPanelOpenNotPersistedTest melodyPanelOpenNotPersistedTest;
+MelodyRestoreExportTest melodyRestoreExportTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

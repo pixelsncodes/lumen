@@ -47,7 +47,7 @@ namespace
 void MelodySidePanel::MidiDragSource::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
-    const bool enabled = shared.processor.melodyController().hasMelody();
+    const bool enabled = isEnabled(); // driven by MelodySidePanel::animate()'s hasMelody() poll
     g.setColour (theme::well);
     g.fillRoundedRectangle (bounds, theme::wellRadius);
     g.setColour (enabled ? theme::neonYellow.withAlpha (0.6f) : theme::hairline);
@@ -59,6 +59,11 @@ void MelodySidePanel::MidiDragSource::paint (juce::Graphics& g)
 
 void MelodySidePanel::MidiDragSource::mouseDrag (const juce::MouseEvent& e)
 {
+    // Not a juce::Button, so isEnabled() isn't consulted automatically —
+    // block the gesture explicitly rather than relying on writeTempMidiFile()
+    // happening to no-op with no melody (no silent no-op drags).
+    if (! isEnabled())
+        return;
     if (dragging)
         return;
     if (e.getDistanceFromDragStart() < 6)
@@ -370,6 +375,15 @@ void MelodySidePanel::animate()
         generationActiveCache = generationActive;
         setGenerationControlsEnabled (generationActive);
         resized();
+        repaint();
+    }
+
+    const bool exportActive = shared.processor.melodyController().hasMelody();
+    if (exportActive != exportActiveCache)
+    {
+        exportActiveCache = exportActive;
+        dragMidi.setEnabled (exportActive);
+        saveButton.setEnabled (exportActive);
         repaint();
     }
 
