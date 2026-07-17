@@ -2575,6 +2575,84 @@ public:
     }
 };
 
+// Side-panel redesign, Phase 1: the master seed is now settable from outside
+// (setSeed(), for the future seed-edit UI) and its lock (locked()/setLocked(),
+// previously unwired) now gates whether REGENERATE draws a fresh seed or
+// reuses the pinned one. All three must hold: setSeed() is deterministic,
+// locked REGENERATE is a no-op on the audible result, and unlocked REGENERATE
+// still rolls new material.
+class MelodySeedLockTest final : public juce::UnitTest
+{
+public:
+    MelodySeedLockTest()
+        : juce::UnitTest ("Melody master seed: setSeed + lock gate REGENERATE", "Melody") {}
+
+    static bool sameNotes (const std::vector<lumen::melody::Step>& a,
+                           const std::vector<lumen::melody::Step>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+        for (std::size_t i = 0; i < a.size(); ++i)
+            if (a[i].note != b[i].note || a[i].startBeats != b[i].startBeats
+                || a[i].lengthBeats != b[i].lengthBeats || a[i].velocity != b[i].velocity)
+                return false;
+        return true;
+    }
+
+    void runTest() override
+    {
+        using namespace lumen;
+
+        NullProcessor processor;
+        SynthEngine engine;
+        engine.prepare (48000.0, 480);
+        LensController lens (processor.apvts, engine);
+        MelodyPlayer player (engine);
+        MelodyController melody (processor.apvts, lens, player);
+        expect (lens.loadImage (lens::testimages::busy(), "busy"), "image loads");
+
+        beginTest ("setSeed pins the seed and reproduces byte-identically");
+        melody.setSeed (12345u);
+        const auto seedA  = melody.seed();
+        const auto stepsA = melody.sequence().steps;
+        expectEquals (seedA, (juce::uint64) 12345, "seed() reports back exactly what was set");
+        melody.setSeed (999u);   // move away
+        melody.setSeed (12345u); // and back: same image + params + seed => same melody
+        expectEquals (melody.seed(), seedA);
+        expect (sameNotes (melody.sequence().steps, stepsA),
+                "same seed reproduces the exact same note sequence");
+
+        beginTest ("REGENERATE reuses the seed and reproduces it when locked");
+        melody.setLocked (true);
+        const auto lockedSeed  = melody.seed();
+        const auto lockedSteps = melody.sequence().steps;
+        for (int i = 0; i < 5; ++i)
+            melody.regenerate();
+        expectEquals (melody.seed(), lockedSeed, "seed never changes while locked");
+        expect (sameNotes (melody.sequence().steps, lockedSteps),
+                "locked REGENERATE reproduces the same melody every time (same seed + params)");
+
+        beginTest ("REGENERATE rolls a new seed once unlocked");
+        melody.setLocked (false);
+        const auto beforeUnlock = melody.seed();
+        melody.regenerate();
+        expect (melody.seed() != beforeUnlock, "unlocked REGENERATE draws a fresh seed");
+
+        beginTest ("master lock + seed round-trip through saved state");
+        melody.setLocked (true);
+        const auto savedSeed = melody.seed();
+        const auto xml = processor.apvts.copyState().createXml();
+        expect (xml != nullptr, "state serializes");
+        if (xml != nullptr)
+        {
+            processor.apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            melody.applyState();
+        }
+        expectEquals (melody.seed(), savedSeed, "seed restores from saved state");
+        expect (melody.locked(), "master lock restores from saved state");
+    }
+};
+
 // RC pass: every melody parameter — including the Phase 5 additions — must
 // survive a full APVTS state round-trip with a non-default value. This is the
 // save/load contract for the whole melody surface in one pin.
@@ -2902,6 +2980,7 @@ MelodyOctaveGuardTest melodyOctaveGuardTest;
 MelodyWindowBoundsTest melodyWindowBoundsTest;
 MelodyParamRoundtripTest melodyParamRoundtripTest;
 MelodyTortureTest melodyTortureTest;
+MelodySeedLockTest melodySeedLockTest;
 MipLevelTest mipLevelTest;
 SVFStabilityTest svfStabilityTest;
 EnvelopeTimingTest envelopeTimingTest;

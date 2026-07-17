@@ -301,3 +301,141 @@ from `Source/State/Parameters.h:128-157`:
 7. The standalone `/mnt/c/Users/pixel/Projects/lumena` checkout is stale
    (missing `RegenLocks` entirely) — don't survey or prototype against it;
    use `external/lumena` inside this repo.
+
+---
+
+## Phase 1 (revised) — what was actually wired
+
+Executed against overriding decisions from the user, not PLAN.md's original
+splitmix64/sub-seed design (see discrepancy #1 above, now resolved this way):
+RHYTHM/PITCH/HARMONY stay lock toggles (no per-domain reroll buttons), no
+`external/lumena` changes, persistence stays sequence-first.
+
+### Changes (`Source/Melody/MelodyController.{h,cpp}` only; no UI, no engine)
+
+1. **`regenerate()` now honours the master lock.** Previously it unconditionally
+   called `makeSeed()` (discrepancy #3c in Phase 0's notes — the seed readout
+   changed on every click even when Lock Rhythm+Pitch made the audible result
+   identical). Now: `const juce::uint64 newSeed = lockedFlag ? seedValue :
+   makeSeed();`. Locked: byte-identical seed and — since params also unchanged
+   — byte-identical output. Unlocked: draws fresh, same as before. The
+   rhythm/pitch/harmony `RegenLocks` splice still runs afterward exactly as
+   before; this only changes which seed the fresh candidate is generated at.
+2. **`setSeed(juce::uint32 newSeed)` added.** Pins the seed and calls
+   `generate()` (which persists via the existing `installSequence()` →
+   `melodystate::setSeed()` path — same mechanism `reroll()` already used, no
+   new persistence code needed). This is the method a future seed-edit UI
+   (Phase 3) will call.
+3. **`locked()`/`setLocked()`/`reroll()` are no longer dead code conceptually**
+   — `setLocked()` was already fully implemented (Phase 0 found it, just
+   unwired from any UI); `regenerate()` now actually consults it. Still no UI
+   calls any of these yet — that's Phase 2/3's job. This phase only makes the
+   controller-layer contract correct and ready to wire up.
+
+### The 64-bit-vs-32-bit seed question (explicitly asked for in this task)
+
+**Resolved: only 32 bits of the master seed ever functionally matter, and the
+code now reflects that honestly.** Two independent reasons converge on this:
+
+- `renderFresh()` seeds a `std::mt19937` via its single-value constructor,
+  whose actual entropy ceiling is 32 bits (`std::mt19937::result_type` is a
+  32-bit-ish unsigned integer) — no matter how wide a value you hand it, only
+  32 bits of state result. This isn't a design choice in this codebase, it's
+  an inherent property of `std::mt19937`'s API being used this way (both here
+  and throughout `external/lumena`'s own tests).
+- The **old** `makeSeed()` drew two independent 32-bit values (`hi`, `lo`) and
+  packed them into a 64-bit `juce::uint64` as `(hi<<32)^lo`, but the old fold
+  at use-time, `seed ^ (seed>>32)`, collapses back down to a single 32-bit
+  value `hi^lo`. That's a many-to-one mapping: for any target 32-bit result,
+  2^32 different-looking 64-bit `(hi,lo)` pairs produce it. A hypothetical
+  64-bit hex edit box built on the old code would have been actively
+  misleading — a user could type two visually distinct 16-hex-digit seeds and
+  get byte-identical melodies with no indication why.
+
+**Fix applied**: `makeSeed()` now draws a single 32-bit value and returns it
+widened to `juce::uint64` (high 32 bits always zero). `setSeed()` takes
+`juce::uint32` directly, so it's impossible to pass in a value with meaningful
+high bits in the first place. `renderFresh()`'s fold was simplified from the
+XOR-fold to a plain truncation — mathematically a no-op now (high bits are
+always zero) but no longer implies high bits matter when they structurally
+never will again. `seed()` still *returns* `juce::uint64` (kept for
+source/binary compatibility with `MelodyState`'s existing hex64 persistence
+format, `writeTempMidiFile()`'s hex filename, the `--melody-seed` CLI flag,
+and the existing `MelodyGeneratorTests`/`TestsMain.cpp` call sites that already
+type it as `juce::uint64` — none of that needed to change) — but the *value*
+is now always ≤ `0xFFFFFFFF`, so `toHexString()` naturally renders at most 8
+significant digits.
+
+**Recommendation carried into Phase 2/3**: display and accept the seed as an
+8-hex-digit (32-bit) value in the UI, not 16. If the edit box is sized for 16
+digits "to match the mockup," either mask/clamp typed input to the low 32 bits
+before calling `setSeed()`, or — simpler and preferred — just size the field
+for 8 digits; nothing is lost since that's the entire entropy space. No UI
+code was touched this phase, so this is a note for whoever builds Phase 2/3,
+not something already handled.
+
+### Persistence — verified, not newly built
+
+Per the Phase 0 finding, master seed and master lock were **already**
+persisted and restored correctly before this phase:
+`installSequence()`/`setLocked()` call `melodystate::setSeed()`/`setLocked()`
+on every change, and `MelodyController::applyState()` restores both from the
+`MELODY` sub-tree. The three domain locks
+(`melodyLockRhythm`/`melodyLockPitch`/`melodyLockHarmony`) are ordinary
+`AudioParameterBool`s and already round-trip through `apvts.copyState()` /
+`replaceState()` like every other parameter — no custom restore code exists
+or is needed for them. **No new persistence plumbing was required for this
+task's requirement #3** — it asked to "add" these to saved state, but they
+were already there; this phase just confirmed it (and added a regression test
+for the specific seed+lock combination, since existing coverage exercised
+summary/param round-trips but not this exact pair — see below). Sequence-first
+reload behavior (Phase 0 §3d) is untouched: `applyState()` still restores
+`currentSeq` from the stored `SEQ` node, never re-derives it from the seed.
+
+### Determinism verification
+
+**Automated**: added `MelodySeedLockTest` to `Tools/Tests/TestsMain.cpp`
+(registered alongside the existing `MelodyTortureTest`), covering:
+`setSeed()` reproduces byte-identical note sequences when set to the same
+value twice; locked `regenerate()` × 5 leaves both the seed and every note
+unchanged; unlocked `regenerate()` draws a different seed; and seed + master
+lock both survive an `apvts.copyState()`/`replaceState()`/`applyState()`
+round-trip. Full suite result: `ALL TESTS PASSED` (no regressions in the
+pre-existing "rapid regenerate x20" determinism test either).
+
+**Manual, black-box**: ran the real Standalone exe twice —
+`Lumen.exe --lens-image busy.png --melody --melody-seed 1234ABCD
+--melody-export take1` / `take2` — same image, same seed, same (default)
+params. Result: `take1.mid` and `take2.mid` SHA-256-identical
+(`68c5b6f6...c3111156de7d495785889dbf1d546db2c06c3eb0`), and
+`take1.txt`/`take2.txt` (key/mood/form/seed/notes summary) byte-identical.
+Confirms the whole path — CLI seed pin → `renderFresh()`'s new truncation →
+`generateMelody()` — end to end, not just through the unit-test harness.
+
+### Surprises
+
+1. **`mutate()`'s mutation-amount RNG was already silently discarding half of
+   the old seed's entropy.** It builds its own throwaway RNG via
+   `std::mt19937 mrng (static_cast<std::uint32_t> (makeSeed()))` — a direct
+   truncation, not the `seed^(seed>>32)` fold `renderFresh()` used. Under the
+   old two-draw `makeSeed()`, that truncation kept only `lo` and silently
+   dropped `hi` entirely. The new single-draw `makeSeed()` doesn't change
+   `mutate()`'s behavior at all (same effective value distribution) — it just
+   removes a wasted second `rng.nextInt()` call that was never going anywhere.
+2. **Locking now genuinely freezes REGENERATE's output**, not just its seed
+   display. This resolves discrepancy #3c from the Phase 0 notes as a
+   side-effect of the literal "wire the lock into regenerate" instruction —
+   worth flagging to the user since it's a small behavior change beyond pure
+   plumbing: previously REGENERATE always did *something* (new seed, possibly
+   spliced against dimension locks); now, with the master lock on and no
+   param changes, clicking REGENERATE is an audible no-op. That seems like
+   the obviously-intended behavior for a "lock" control, but flagging it
+   explicitly since it's a user-facing behavior change, not just new API
+   surface.
+3. **No engine changes were needed**, confirming Phase 0 discrepancy #1's
+   smaller-diff path was sufficient: exposing the existing controller-layer
+   lock/splice machinery (plus a real `setSeed()`) covered everything this
+   task asked for without touching RNG-stream structure in
+   `external/lumena`. The "reroll one domain independently" gap noted in
+   Phase 0 §3f still exists (per the user's decision, it's explicitly out of
+   scope — RHYTHM/PITCH/HARMONY remain locks, not rerolls).

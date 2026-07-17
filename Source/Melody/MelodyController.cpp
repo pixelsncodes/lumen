@@ -204,11 +204,11 @@ MelodyController::MelodyController (juce::AudioProcessorValueTreeState& apvtsToU
 
 juce::uint64 MelodyController::makeSeed()
 {
-    // Two 32-bit draws make a full 64-bit seed; the value only needs to be
-    // fresh and reproducible once stored, not cryptographic.
-    const auto hi = static_cast<juce::uint64> (static_cast<juce::uint32> (rng.nextInt()));
-    const auto lo = static_cast<juce::uint64> (static_cast<juce::uint32> (rng.nextInt()));
-    return (hi << 32) ^ lo;
+    // One 32-bit draw, widened. renderFresh() below seeds a std::mt19937 from
+    // a single unsigned value (its constructor's actual entropy ceiling is 32
+    // bits no matter how wide the type we hand it is), so a second draw here
+    // would only ever be discarded — see MelodyController.h's makeSeed() note.
+    return static_cast<juce::uint64> (static_cast<juce::uint32> (rng.nextInt()));
 }
 
 namespace
@@ -292,7 +292,10 @@ namespace
         const int gridN = MelodyController::kGridResolution;
         const lumena::image::BrightnessGrid grid (img, gridN, gridN);
 
-        std::mt19937 gen (static_cast<std::uint32_t> (seed ^ (seed >> 32)));
+        // seed is always <= 0xFFFFFFFF by construction (makeSeed()/setSeed()),
+        // so this truncation is lossless; std::mt19937's own seed ceiling is
+        // 32 bits regardless.
+        std::mt19937 gen (static_cast<std::uint32_t> (seed));
 
         const lumena::scales::KeySelector selector;
         lumena::scales::KeyDetection detection;
@@ -366,7 +369,10 @@ void MelodyController::reroll()
 void MelodyController::regenerate()
 {
     const lumena::melody::RegenLocks locks = locksFromParams (apvts);
-    const juce::uint64 newSeed = makeSeed();
+    // Master lock (locked()/setLocked()): reuse the pinned seed instead of
+    // drawing a fresh one. The rhythm/pitch/harmony dimension locks still
+    // govern the splice below either way.
+    const juce::uint64 newSeed = lockedFlag ? seedValue : makeSeed();
 
     const juce::Image jimg = lens.displayImage (lens.target());
     lumena::melody::Melody cand;
@@ -441,6 +447,14 @@ void MelodyController::setLocked (bool shouldLock)
 {
     lockedFlag = shouldLock;
     melodystate::setLocked (apvts.state, lockedFlag);
+}
+
+void MelodyController::setSeed (juce::uint32 newSeed)
+{
+    seedValue = newSeed;
+    generate(); // regenerate() would draw a fresh seed when unlocked; this
+                // pins the exact value the caller asked for, honouring both
+                // lock states the same way (generate() never re-seeds).
 }
 
 void MelodyController::play()

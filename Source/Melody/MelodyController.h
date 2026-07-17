@@ -37,14 +37,21 @@ public:
     // --- actions (message thread) ----------------------------------------
     void generate();           // sample the current Lens image into a melody
     void reroll();             // new random seed, then generate (no-op if locked)
-    void regenerate();         // fresh melody at a new seed, honouring the locks
+    void regenerate();         // fresh melody at a seed: new if unlocked, reused if locked
     void mutate();             // small variation of the current melody (honours locks)
     void setLocked (bool shouldLock);
+    // Pin an explicit seed and regenerate with it. Takes 32 bits: the engine's
+    // std::mt19937 is single-value-seeded, so that's the actual entropy
+    // ceiling regardless of the type seed()/setSeed() are declared with — see
+    // makeSeed()'s comment.
+    void setSeed (juce::uint32 newSeed);
     void play();               // play the current melody through the engine
     void stop();
 
     // --- queries ----------------------------------------------------------
     bool locked() const noexcept { return lockedFlag; }
+    // Widened to 64 bits only to match the persisted hex format (MelodyState);
+    // the value itself never exceeds 32 bits (see makeSeed()).
     juce::uint64 seed() const noexcept { return seedValue; }
     bool isPlaying() const;
     bool hasMelody() const noexcept { return ! currentSeq.steps.empty(); }
@@ -79,6 +86,9 @@ public:
     void applyState();
 
 private:
+    // A single 32-bit draw widened to 64 bits. A second draw would add no real
+    // entropy: renderFresh() seeds a std::mt19937 (32-bit single-value seed),
+    // so anything beyond the low 32 bits is discarded downstream regardless.
     juce::uint64 makeSeed();
     void installSequence (const melody::Sequence& seq); // copy, persist, hand to player
 
